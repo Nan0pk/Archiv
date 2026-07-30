@@ -4,11 +4,11 @@ import json
 from pathlib import Path
 
 from docx import Document
+from report_support import prepare_report_archive
 
 from archiv.hashing import sha256_file
 from archiv.report_contracts import ReportManifest
 from archiv.reports import generate_report, validate_report
-from report_support import prepare_report_archive
 
 
 def _rewrite_manifest_hash(path: Path, docx_path: Path) -> None:
