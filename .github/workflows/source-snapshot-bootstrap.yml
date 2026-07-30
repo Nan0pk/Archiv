@@ -1,4 +1,5 @@
 # Temporary trusted-branch bootstrap; self-deletes after applying the overlay.
+# Triggered only after the push definition existed in the branch parent.
 name: Source snapshot bootstrap
 
 on:
