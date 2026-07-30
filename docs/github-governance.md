@@ -18,33 +18,33 @@ These controls live in the repository and are tested on every relevant pull requ
 
 `scripts/audit_ci_trust.py` and the `CI trust boundary` workflow enforce these rules. The negative regression creates a fork-style malicious workflow containing `pull_request_target`, a secret reference, write permission, a self-hosted runner, an unpinned action, and retained checkout credentials; the auditor must reject all of them.
 
-## Repository settings
+## Repository settings verification
 
-The public API currently confirms that the repository is public, `main` is the default branch, and squash merge, merge commits, and rebase merge are all enabled. The following target state requires manual owner action in GitHub settings because workflow code cannot change repository administration safely:
+The repository settings below were reviewed on 2026-07-30. Evidence is classified honestly: **API/workflow verified** means GitHub returned machine-readable proof; **owner UI** means the setting is visible only in repository administration and still requires manual owner action.
 
-| Setting | Required state |
-|---|---|
-| Pull request merge method | Keep squash merge enabled; disable merge commits and rebase merge |
-| Head branches | Delete automatically after merge |
-| `main` force pushes and deletion | Disabled |
-| Required status check | Require `Fast checks / quality` after it remains stable |
-| Required approving reviews | Use zero required approving reviews for the solo maintainer |
-| Conversation resolution | Required before merge |
-| Administrator bypass | Keep an emergency owner bypass; do not use it for routine product merges |
-| Default workflow token | Read-only; workflows request narrower or explicit permissions |
-| Fork pull-request workflows | GitHub-hosted only, no secrets, no write token |
-| Private vulnerability reporting | Enabled |
-| Dependency graph and Dependabot alerts | Enabled |
-| Secret scanning and push protection | Enabled where GitHub makes them available |
-| Code scanning | Enabled through the trusted-event CodeQL workflow |
-| Allowed actions | GitHub-owned actions only unless a separately reviewed full-SHA exception is added |
-| Merge automation | Never merge a red or incomplete product branch |
-
-The status table above is a target configuration, not a claim that owner-only switches have already been changed. Record the date and operator in this document when each manual owner action is verified.
+| Setting | Required state | Verification |
+|---|---|---|
+| Pull request merge method | Squash only | **API/workflow verified**: squash enabled; merge commits and rebase disabled |
+| Head branches | Delete automatically after merge | **API/workflow verified**: the PR #25 head branch was absent after merge |
+| Dependency graph and dependency review | Enabled | **API/workflow verified**: GitHub dependency review rerun `30569623238` succeeded after the graph was enabled |
+| Dependabot updates | Enabled | **API/workflow verified**: Dependabot opened and merged PR #27 |
+| Required status check | Require `Fast checks / quality` | Verified by a governance PR attempting merge before checks complete; record the result in issue #10 |
+| `main` force pushes and deletion | Disabled | Owner UI verification required |
+| Pull request requirement | Required before product changes reach `main` | Owner UI verification required |
+| Required approving reviews | Zero, for solo-maintainer safety | Owner UI verification required |
+| Conversation resolution | Required before merge | Owner UI verification required |
+| Administrator bypass | Emergency-only, not routine product merging | Owner UI verification required |
+| Default workflow token | Read-only | Owner UI verification required; workflow files also declare least privilege |
+| Actions approving pull requests | Disabled | Owner UI verification required |
+| Allowed actions | GitHub-owned actions only, with full-SHA pinning | Owner UI verification required; repository auditor independently enforces full SHAs |
+| Private vulnerability reporting | Enabled | Owner UI verification required |
+| Secret scanning and push protection | Enabled where GitHub makes them available | Owner UI verification required |
+| Code scanning | Trusted-event CodeQL workflow enabled | Workflow file verified; Security-tab result requires owner UI verification |
+| Labels and project view | Plain-language labels and simple workflow columns | Owner UI verification required |
 
 ## Owner verification checklist
 
-In **Settings → General**:
+In **Settings → General → Pull Requests**:
 
 1. keep squash merge enabled;
 2. disable merge commits and rebase merge;
@@ -62,9 +62,10 @@ In **Settings → Actions → General**:
 
 1. set default workflow permissions to read-only;
 2. prevent Actions from approving pull requests;
-3. allow GitHub-owned actions and only deliberately reviewed exceptions.
+3. allow GitHub-owned actions and only deliberately reviewed exceptions;
+4. require actions to be pinned to a full commit SHA where GitHub offers that policy.
 
-In **Settings → Code security and analysis**:
+In **Settings → Security → Advanced Security**:
 
 1. enable private vulnerability reporting;
 2. enable dependency graph, Dependabot alerts, and security updates;
