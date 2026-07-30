@@ -107,8 +107,10 @@ class NormalizedDocument(StrictModel):
     kind: str
     source_name: str
     metadata: dict[str, object] = Field(default_factory=dict)
-    segments: list[NormalizedSegment] = Field(default_factory=list)
-    tables: list[NormalizedTable] = Field(default_factory=list)
+    segments: list[NormalizedSegment] = Field(
+        default_factory=lambda: list[NormalizedSegment]()
+    )
+    tables: list[NormalizedTable] = Field(default_factory=lambda: list[NormalizedTable]())
 
 
 class ProcessingEvidence(StrictModel):
