@@ -41,9 +41,7 @@ class ArchiveManifest(StrictModel):
     created_at: str
     source_root: str
     entries: list[ArchiveEntry]
-    excluded_rebuildable_paths: list[str] = Field(
-        default_factory=lambda: ["indexes", "temporary"]
-    )
+    excluded_rebuildable_paths: list[str] = Field(default_factory=lambda: ["indexes", "temporary"])
 
 
 class ArchiveResult(StrictModel):
