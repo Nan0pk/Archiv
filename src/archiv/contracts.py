@@ -1,4 +1,4 @@
-"""Versioned execution and evidence contracts."""
+"""Versioned execution, ingestion, and evidence contracts."""
 
 from __future__ import annotations
 
@@ -16,6 +16,13 @@ class RunStatus(StrEnum):
     WAITING_FOR_APPROVAL = "waiting_for_approval"
     PARTIALLY_PRODUCED_BUT_INVALID = "partially_produced_but_invalid"
     BLOCKED_BY_POLICY = "blocked_by_policy"
+
+
+class IngestionStatus(StrEnum):
+    """Terminal ingestion states exposed to clients."""
+
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
 
 
 class StrictModel(BaseModel):
@@ -75,3 +82,57 @@ class RunResult(StrictModel):
     output_path: str | None
     evidence_dir: str
     validation: ValidationReport
+
+
+class NormalizedSegment(StrictModel):
+    """One text-bearing unit with a format-native source locator."""
+
+    locator: dict[str, object]
+    text: str
+
+
+class NormalizedTable(StrictModel):
+    """A portable table plus its sheet or document locator."""
+
+    locator: dict[str, object]
+    rows: list[list[object | None]]
+
+
+class NormalizedDocument(StrictModel):
+    """Portable derived representation rebuilt from a canonical original."""
+
+    schema_version: str = "1"
+    object_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    media_type: str
+    kind: str
+    source_name: str
+    metadata: dict[str, object] = Field(default_factory=dict)
+    segments: list[NormalizedSegment] = Field(default_factory=list)
+    tables: list[NormalizedTable] = Field(default_factory=list)
+
+
+class ProcessingEvidence(StrictModel):
+    """One processor outcome and its optional derived artifact."""
+
+    processor: str
+    processor_version: str
+    status: str
+    output_kind: str
+    output_path: str | None = None
+    output_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    error: str | None = None
+
+
+class IngestionResult(StrictModel):
+    """Successful ingestion result backed by durable storage and processing rows."""
+
+    schema_version: str = "1"
+    ingestion_id: str
+    status: IngestionStatus
+    object_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    duplicate: bool
+    media_type: str
+    original_path: str
+    derived_root: str
+    source_hash_unchanged: bool
+    processing: list[ProcessingEvidence]

@@ -16,15 +16,20 @@ Models propose. Validators decide whether work succeeded.
 
 ## Current implemented slice
 
-Archiv includes a deterministic environment doctor and the first exact execution contract:
+Archiv includes a deterministic environment doctor, the exact source-marker execution contract, and immutable local ingestion:
 
 ```bash
 mkdir -p /tmp/archiv-probe
 printf 'ARCHIV-DEMO-MARKER\n' > /tmp/archiv-probe/source.txt
 archiv source-marker --workspace /tmp/archiv-probe
+
+archiv ingest ./document.docx
+archiv rebuild-derived <sha256>
 ```
 
-The command must create exactly `outputs/probe.txt`, preserve `source.txt`, validate both outside the executor, and record machine-readable evidence under `runs/<run-id>/`.
+The source-marker command creates exactly `outputs/probe.txt`, preserves `source.txt`, validates both outside the executor, and records machine-readable evidence under `runs/<run-id>/`.
+
+Ingestion validates supported inputs, stores one read-only content-addressed original, records imports and processing in SQLite, and creates rebuildable normalized data outside the repository. See [immutable ingestion](docs/ingestion.md).
 
 ## Quick start
 
@@ -47,6 +52,7 @@ Do not commit private documents, personal data, credentials, model keys, product
 - [Product charter](docs/product-charter.md)
 - [Architecture](docs/architecture.md)
 - [Execution contract](docs/execution-contract.md)
+- [Immutable ingestion](docs/ingestion.md)
 - [Definition of done](docs/definition-of-done.md)
 - [Roadmap](docs/roadmap.md)
 - [Harness evidence baseline](research/baseline/harness-verdict.md)
