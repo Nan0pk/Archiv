@@ -8,14 +8,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TypeVar, cast
+from typing import cast
 from uuid import uuid4
 
 from archiv.mcp_contracts import McpFailedRun, McpRunEnvelope, McpRunStatus
 from archiv.mcp_policy import ensure_mcp_roots, mcp_runs_root, validate_run_id
 from archiv.storage.layout import ArchivLayout
-
-T = TypeVar("T")
 
 
 @dataclass(frozen=True, slots=True)

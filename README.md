@@ -16,7 +16,7 @@ Models propose. Validators decide whether work succeeded.
 
 ## Current implemented slice
 
-Archiv includes a deterministic environment doctor, the exact source-marker execution contract, immutable local ingestion, validated SQLite full-text retrieval, and independently verified cited DOCX generation:
+Archiv includes a deterministic environment doctor, the exact source-marker execution contract, immutable local ingestion, validated SQLite full-text retrieval, independently verified cited DOCX generation, and a bounded local MCP server:
 
 ```bash
 mkdir -p /tmp/archiv-probe
@@ -29,11 +29,15 @@ archiv rebuild-search-index
 archiv search "exact phrase"
 archiv generate-report "exact phrase" ./evidence-report.docx
 archiv verify-report ./evidence-report.docx ./evidence-report.docx.manifest.json
+
+ARCHIV_HOME=/absolute/path/to/archiv-home archiv-mcp
 ```
 
 The source-marker command creates exactly `outputs/probe.txt`, preserves `source.txt`, validates both outside the executor, and records machine-readable evidence under `runs/<run-id>/`.
 
 Ingestion validates supported inputs, stores one read-only content-addressed original, records imports and processing in SQLite, and creates rebuildable normalized data outside the repository. Full-text search builds a separate replaceable FTS5 database and returns citations that are revalidated against the original and normalized hashes before use. Cited DOCX reports include exact source evidence and are reopened, structurally validated, and optionally rendered through LibreOffice before success is reported.
+
+The MCP server exposes only six task-specific local tools over stdio. It has no shell, URL fetcher, arbitrary output path, or network tool. Every MCP call records append-only request and terminal result evidence under `ARCHIV_HOME/runs/mcp/`.
 
 ## Quick start
 
@@ -59,6 +63,7 @@ Do not commit private documents, personal data, credentials, model keys, product
 - [Immutable ingestion](docs/ingestion.md)
 - [Local search and citations](docs/search.md)
 - [Cited DOCX reports](docs/reporting.md)
+- [Bounded local MCP server](docs/mcp.md)
 - [Definition of done](docs/definition-of-done.md)
 - [Roadmap](docs/roadmap.md)
 - [Harness evidence baseline](research/baseline/harness-verdict.md)
