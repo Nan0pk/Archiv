@@ -92,7 +92,9 @@ def _build_document(
         document.add_heading(f"Finding {source.number}: {source.citation.source_name}", level=2)
         paragraph = document.add_paragraph()
         paragraph.add_run(source.excerpt)
-        paragraph.add_run(f" [{source.number}]", style="Archiv Citation")
+        citation_run = paragraph.add_run(f" [{source.number}]")
+        citation_run.bold = True
+        citation_run.font.size = Pt(9)
         locator = document.add_paragraph()
         locator_run = locator.add_run(f"Source location: {source.locator_text}")
         locator_run.italic = True
@@ -134,7 +136,8 @@ def _build_document(
     )
 
     for paragraph in document.paragraphs:
-        if (paragraph.style.name or "").startswith("Heading"):
+        paragraph_style = paragraph.style
+        if paragraph_style is not None and (paragraph_style.name or "").startswith("Heading"):
             paragraph.paragraph_format.keep_with_next = True
     document.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
     return document
