@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import cast
 
 import pytest
+from mcp_support import MCP_TEXT_FIXTURES
 from typer.testing import CliRunner
 
 from archiv.cli import app
@@ -19,7 +20,6 @@ from archiv.mcp_tools import (
     archiv_verify_artifact,
 )
 from archiv.search import rebuild_search_index
-from mcp_support import MCP_TEXT_FIXTURES
 
 runner = CliRunner()
 
