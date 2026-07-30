@@ -1,0 +1,101 @@
+name: Offline alpha
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "tests/fixtures/representative-corpus/**"
+      - "tests/tasks/**"
+      - "tools/setup-fedora.sh"
+      - "tools/run-offline-acceptance.sh"
+      - "tools/build-release.py"
+      - ".github/offline-alpha.Dockerfile"
+      - ".github/workflows/offline-alpha.yml"
+      - "pyproject.toml"
+  pull_request:
+    paths:
+      - "src/**"
+      - "tests/fixtures/representative-corpus/**"
+      - "tests/tasks/**"
+      - "tools/setup-fedora.sh"
+      - "tools/run-offline-acceptance.sh"
+      - "tools/build-release.py"
+      - ".github/offline-alpha.Dockerfile"
+      - ".github/workflows/offline-alpha.yml"
+      - "pyproject.toml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: archiv-offline-alpha-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository without retained credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install pinned build backend
+        run: python -m pip install --upgrade pip && python -m pip install hatchling==1.31.0
+
+      - name: Build reproducible release package and SBOM
+        run: python tools/build-release.py --output release-artifacts
+
+      - name: Verify release checksums
+        working-directory: release-artifacts
+        run: sha256sum --check SHA256SUMS
+
+      - name: Upload deliberate release evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: archiv-offline-alpha-release
+          path: release-artifacts/*
+          if-no-files-found: error
+          retention-days: 30
+
+  egress-denied:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository without retained credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Build the Fedora installation image
+        run: docker build --file .github/offline-alpha.Dockerfile --tag archiv-offline-alpha .
+
+      - name: Run the complete workflow with no network
+        run: |
+          mkdir -p offline-alpha-artifacts
+          docker run --rm \
+            --network none \
+            --cap-drop ALL \
+            --env ARCHIV_NETWORK_POLICY=denied-by-container \
+            --volume "$PWD/offline-alpha-artifacts:/evidence" \
+            archiv-offline-alpha \
+            /opt/archiv-source /evidence
+
+      - name: Upload offline acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: archiv-offline-alpha-egress-denied
+          path: offline-alpha-artifacts/*
+          if-no-files-found: error
+          retention-days: 30
