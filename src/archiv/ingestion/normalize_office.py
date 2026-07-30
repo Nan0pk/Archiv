@@ -57,7 +57,7 @@ def normalize_pptx(
     source_name: str,
     media_type: str,
 ) -> NormalizedDocument:
-    presentation = Presentation(path)
+    presentation = Presentation(str(path))
     segments: list[NormalizedSegment] = []
     for slide_number, slide in enumerate(presentation.slides, 1):
         for shape_number, shape in enumerate(slide.shapes, 1):
