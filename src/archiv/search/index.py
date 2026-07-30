@@ -70,17 +70,13 @@ def rebuild_search_index(*, home: Path | None = None) -> SearchIndexBuild:
             for row in rows:
                 digest = str(row["sha256"])
                 original = layout.original_path(digest)
-                normalized_path = (
-                    layout.derived_root(digest) / "normalized" / "document.json"
-                )
+                normalized_path = layout.derived_root(digest) / "normalized" / "document.json"
                 if not original.is_file() or sha256_file(original) != digest:
                     raise SearchIndexIntegrityError(
                         f"canonical original missing or corrupt: {digest}"
                     )
                 if not normalized_path.is_file():
-                    raise SearchIndexIntegrityError(
-                        f"normalized document missing: {digest}"
-                    )
+                    raise SearchIndexIntegrityError(f"normalized document missing: {digest}")
 
                 normalized_sha256 = sha256_file(normalized_path)
                 document = NormalizedDocument.model_validate_json(
@@ -131,9 +127,7 @@ def rebuild_search_index(*, home: Path | None = None) -> SearchIndexBuild:
                     )
                     segment_count += 1
 
-            index_connection.execute(
-                "INSERT INTO segments_fts(segments_fts) VALUES('rebuild')"
-            )
+            index_connection.execute("INSERT INTO segments_fts(segments_fts) VALUES('rebuild')")
             index_connection.executemany(
                 "INSERT INTO index_metadata(key, value) VALUES (?, ?)",
                 [
