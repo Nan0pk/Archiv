@@ -1,0 +1,33 @@
+name: Source snapshot bootstrap
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: archiv-source-snapshot-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository without retained credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Create source snapshot with Git metadata
+        run: tar --exclude='./source-snapshot.tar.gz' -czf source-snapshot.tar.gz .
+
+      - name: Upload source snapshot
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: archiv-source-snapshot
+          path: source-snapshot.tar.gz
+          if-no-files-found: error
+          retention-days: 1
