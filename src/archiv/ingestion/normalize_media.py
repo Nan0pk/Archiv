@@ -21,7 +21,7 @@ def normalize_image(
     with Image.open(path) as image:
         image.verify()
     with Image.open(path) as image:
-        metadata = {
+        metadata: dict[str, object] = {
             "width": image.width,
             "height": image.height,
             "mode": image.mode,
@@ -46,7 +46,7 @@ def normalize_wav(
     with wave.open(str(path), "rb") as audio:
         sample_rate = audio.getframerate()
         frames = audio.getnframes()
-        metadata = {
+        metadata: dict[str, object] = {
             "channels": audio.getnchannels(),
             "sample_width": audio.getsampwidth(),
             "sample_rate": sample_rate,
