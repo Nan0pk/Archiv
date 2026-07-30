@@ -83,9 +83,7 @@ def rebuild_search_index(*, home: Path | None = None) -> SearchIndexBuild:
                     normalized_path.read_text(encoding="utf-8")
                 )
                 if document.object_sha256 != digest:
-                    raise SearchIndexIntegrityError(
-                        f"normalized object digest mismatch: {digest}"
-                    )
+                    raise SearchIndexIntegrityError(f"normalized object digest mismatch: {digest}")
 
                 object_count += 1
                 for segment_index, segment in enumerate(document.segments):
