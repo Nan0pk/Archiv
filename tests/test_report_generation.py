@@ -45,8 +45,6 @@ def test_generates_structurally_valid_cited_docx_without_source_changes(
         assert source.excerpt in text
         assert source.citation.segment_id in text
 
-    validation_payload = json.loads(
-        Path(result.validation_path).read_text(encoding="utf-8")
-    )
+    validation_payload = json.loads(Path(result.validation_path).read_text(encoding="utf-8"))
     assert validation_payload["valid"] is True
     assert {path: sha256_file(path) for path in originals} == originals
