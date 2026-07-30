@@ -76,8 +76,7 @@ def doctor_report() -> DoctorReport:
 
     checks = collect_checks()
     payload: list[CheckPayload] = [
-        {"name": check.name, "passed": check.passed, "detail": check.detail}
-        for check in checks
+        {"name": check.name, "passed": check.passed, "detail": check.detail} for check in checks
     ]
     return {
         "status": "ok" if all(check.passed for check in checks) else "failed",
