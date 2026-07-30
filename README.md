@@ -55,7 +55,7 @@ A Codespaces configuration is included for a reproducible public development env
 
 ## Public-repository safety
 
-Do not commit private documents, personal data, credentials, model keys, production databases, generated user archives, or proprietary test material. Development fixtures must be synthetic or explicitly redistributable. See [the public repository policy](docs/public-repository-policy.md).
+Do not commit private documents, personal data, credentials, model keys, production databases, generated user archives, or proprietary test material. Development fixtures must be synthetic or explicitly redistributable. See the [public repository policy](docs/public-repository-policy.md) and [GitHub governance and CI trust boundary](docs/github-governance.md).
 
 ## Project documents
 
@@ -67,6 +67,7 @@ Do not commit private documents, personal data, credentials, model keys, product
 - [Cited DOCX reports](docs/reporting.md)
 - [Bounded local MCP server](docs/mcp.md)
 - [CoWork-OS integration](docs/cowork-os-integration.md)
+- [GitHub governance and CI trust boundary](docs/github-governance.md)
 - [Definition of done](docs/definition-of-done.md)
 - [Roadmap](docs/roadmap.md)
 - [Harness evidence baseline](research/baseline/harness-verdict.md)
