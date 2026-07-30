@@ -9,10 +9,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+from archiv.executor.source_marker import run_source_marker
 from archiv.hashing import sha256_file
 from archiv.ingestion import ingest_file
 from archiv.search import rebuild_search_index
-from archiv.executor.source_marker import run_source_marker
 
 FIXTURES = ("plain-text.txt", "document.docx", "report.pdf")
 MARKER = "COWORK-ARCHIV-EXACT-2026"
