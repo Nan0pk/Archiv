@@ -81,9 +81,9 @@ def test_governance_document_records_solo_maintainer_safe_settings() -> None:
 
 
 def test_security_workflows_use_trusted_events_and_pinned_actions() -> None:
-    dependency_review = ROOT.joinpath(
-        ".github", "workflows", "dependency-review.yml"
-    ).read_text(encoding="utf-8")
+    dependency_review = ROOT.joinpath(".github", "workflows", "dependency-review.yml").read_text(
+        encoding="utf-8"
+    )
     codeql = ROOT.joinpath(".github", "workflows", "codeql.yml").read_text(encoding="utf-8")
 
     assert "pull_request:" in dependency_review
