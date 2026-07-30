@@ -5,8 +5,9 @@ from __future__ import annotations
 import sqlite3
 import sys
 import tempfile
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal, TypedDict
 
 
 @dataclass(frozen=True)
@@ -16,6 +17,21 @@ class CheckResult:
     name: str
     passed: bool
     detail: str
+
+
+class CheckPayload(TypedDict):
+    """Serializable check result."""
+
+    name: str
+    passed: bool
+    detail: str
+
+
+class DoctorReport(TypedDict):
+    """Serializable environment report."""
+
+    status: Literal["ok", "failed"]
+    checks: list[CheckPayload]
 
 
 def _python_check() -> CheckResult:
@@ -55,11 +71,15 @@ def collect_checks() -> list[CheckResult]:
     return [_python_check(), _sqlite_fts5_check(), _writable_workspace_check()]
 
 
-def doctor_report() -> dict[str, object]:
+def doctor_report() -> DoctorReport:
     """Return a machine-readable doctor report."""
 
     checks = collect_checks()
+    payload: list[CheckPayload] = [
+        {"name": check.name, "passed": check.passed, "detail": check.detail}
+        for check in checks
+    ]
     return {
         "status": "ok" if all(check.passed for check in checks) else "failed",
-        "checks": [asdict(check) for check in checks],
+        "checks": payload,
     }

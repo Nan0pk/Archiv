@@ -1,7 +1,6 @@
 name: Defect report
 description: Report reproducible incorrect behaviour without private data.
 title: "Defect: "
-labels: [defect]
 body:
   - type: markdown
     attributes:

@@ -37,11 +37,10 @@ def doctor(
         table.add_column("Status")
         table.add_column("Detail")
         for check in report["checks"]:
-            assert isinstance(check, dict)
             table.add_row(
-                str(check["name"]),
+                check["name"],
                 "PASS" if check["passed"] else "FAIL",
-                str(check["detail"]),
+                check["detail"],
             )
         console.print(table)
 

@@ -1,7 +1,6 @@
 name: Capability proposal
 description: Propose one bounded, independently validated capability.
 title: "Capability: "
-labels: [capability]
 body:
   - type: textarea
     id: purpose

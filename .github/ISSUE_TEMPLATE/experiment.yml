@@ -1,7 +1,6 @@
 name: Experiment
 description: Propose a bounded benchmark before adding a major dependency or architecture layer.
 title: "Experiment: "
-labels: [research]
 body:
   - type: textarea
     id: decision
