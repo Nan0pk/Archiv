@@ -66,7 +66,7 @@ def normalize_docx(
     source_name: str,
     media_type: str,
 ) -> NormalizedDocument:
-    document = Document(path)
+    document = Document(str(path))
     segments = [
         NormalizedSegment(locator={"paragraph": index}, text=paragraph.text)
         for index, paragraph in enumerate(document.paragraphs, 1)
