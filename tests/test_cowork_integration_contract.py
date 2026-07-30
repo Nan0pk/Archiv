@@ -63,9 +63,9 @@ def test_operator_skill_requires_validator_and_run_evidence() -> None:
 
 
 def test_regression_workflow_separates_pinned_and_current_upstream() -> None:
-    workflow = ROOT.joinpath(
-        ".github", "workflows", "cowork-upstream-regression.yml"
-    ).read_text(encoding="utf-8")
+    workflow = ROOT.joinpath(".github", "workflows", "cowork-upstream-regression.yml").read_text(
+        encoding="utf-8"
+    )
 
     assert "mode: pinned" in workflow
     assert "mode: current" in workflow
