@@ -3,10 +3,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from report_support import prepare_report_archive
 from typer.testing import CliRunner
 
 from archiv.cli import app
-from report_support import prepare_report_archive
 
 runner = CliRunner()
 
