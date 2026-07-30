@@ -117,7 +117,9 @@ def execute_tool(
     return finish_success(context, result)
 
 
-def read_run_record(layout: ArchivLayout, run_id: str) -> tuple[dict[str, object], dict[str, object]]:
+def read_run_record(
+    layout: ArchivLayout, run_id: str
+) -> tuple[dict[str, object], dict[str, object]]:
     """Read only the two bounded JSON records for one MCP run."""
 
     safe_run_id = validate_run_id(run_id)
