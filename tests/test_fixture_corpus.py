@@ -33,15 +33,9 @@ def corpus(tmp_path: Path) -> Path:
 
 
 def test_generator_matches_committed_descriptors(corpus: Path) -> None:
-    assert (corpus / "manifest.json").read_bytes() == (
-        DESCRIPTORS / "manifest.json"
-    ).read_bytes()
-    assert (corpus / "expected.json").read_bytes() == (
-        DESCRIPTORS / "expected.json"
-    ).read_bytes()
-    assert (corpus / "PROVENANCE.md").read_bytes() == (
-        DESCRIPTORS / "PROVENANCE.md"
-    ).read_bytes()
+    assert (corpus / "manifest.json").read_bytes() == (DESCRIPTORS / "manifest.json").read_bytes()
+    assert (corpus / "expected.json").read_bytes() == (DESCRIPTORS / "expected.json").read_bytes()
+    assert (corpus / "PROVENANCE.md").read_bytes() == (DESCRIPTORS / "PROVENANCE.md").read_bytes()
 
 
 def test_manifest_matches_generated_bytes(corpus: Path) -> None:
@@ -93,10 +87,7 @@ def test_office_packages_are_valid_zip_containers_with_markers(corpus: Path) -> 
             assert "[Content_Types].xml" in archive.namelist()
             assert "_rels/.rels" in archive.namelist()
             assert marker in archive.read(member)
-            assert all(
-                info.date_time == (1980, 1, 1, 0, 0, 0)
-                for info in archive.infolist()
-            )
+            assert all(info.date_time == (1980, 1, 1, 0, 0, 0) for info in archive.infolist())
 
 
 def test_pdf_png_and_wav_have_expected_structure(corpus: Path) -> None:
