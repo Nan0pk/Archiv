@@ -15,10 +15,12 @@ from archiv.contracts import RunStatus
 from archiv.doctor import doctor_report
 from archiv.executor.source_marker import run_source_marker
 from archiv.ingestion import ingest_file, rebuild_derived
+from archiv.report_cli import register_report_commands
 from archiv.search import rebuild_search_index, search_documents
 
 app = typer.Typer(no_args_is_help=True, help="Archiv local-first knowledge-work core.")
 console = Console()
+register_report_commands(app)
 
 
 @app.command()
