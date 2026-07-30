@@ -16,7 +16,7 @@ Models propose. Validators decide whether work succeeded.
 
 ## Current implemented slice
 
-Archiv includes a deterministic environment doctor, the exact source-marker execution contract, immutable local ingestion, validated SQLite full-text retrieval, independently verified cited DOCX generation, and a bounded local MCP server:
+Archiv includes a deterministic environment doctor, the exact source-marker execution contract, immutable local ingestion, validated SQLite full-text retrieval, independently verified cited DOCX generation, a bounded local MCP server, and a pinned replaceable CoWork-OS workbench integration:
 
 ```bash
 mkdir -p /tmp/archiv-probe
@@ -38,6 +38,8 @@ The source-marker command creates exactly `outputs/probe.txt`, preserves `source
 Ingestion validates supported inputs, stores one read-only content-addressed original, records imports and processing in SQLite, and creates rebuildable normalized data outside the repository. Full-text search builds a separate replaceable FTS5 database and returns citations that are revalidated against the original and normalized hashes before use. Cited DOCX reports include exact source evidence and are reopened, structurally validated, and optionally rendered through LibreOffice before success is reported.
 
 The MCP server exposes only six task-specific local tools over stdio. It has no shell, URL fetcher, arbitrary output path, or network tool. Every MCP call records append-only request and terminal result evidence under `ARCHIV_HOME/runs/mcp/`.
+
+CoWork-OS is integrated only as a replaceable MCP workbench. Archiv pins one reviewed upstream revision, tests that revision with CoWork's actual stdio transport, tests current upstream separately without adopting it, and keeps canonical storage, execution status, citations, validation, and evidence outside the workbench.
 
 ## Quick start
 
@@ -64,6 +66,7 @@ Do not commit private documents, personal data, credentials, model keys, product
 - [Local search and citations](docs/search.md)
 - [Cited DOCX reports](docs/reporting.md)
 - [Bounded local MCP server](docs/mcp.md)
+- [CoWork-OS integration](docs/cowork-os-integration.md)
 - [Definition of done](docs/definition-of-done.md)
 - [Roadmap](docs/roadmap.md)
 - [Harness evidence baseline](research/baseline/harness-verdict.md)

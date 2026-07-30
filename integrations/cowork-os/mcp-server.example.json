@@ -1,0 +1,15 @@
+{
+  "id": "archiv-local",
+  "name": "Archiv",
+  "description": "Local evidence-backed Archiv tools",
+  "enabled": true,
+  "transport": "stdio",
+  "command": "archiv-mcp",
+  "args": [],
+  "env": {
+    "ARCHIV_HOME": "/absolute/path/to/archiv-home"
+  },
+  "cwd": "/absolute/path/to/operator-workspace",
+  "connectionTimeout": 30000,
+  "requestTimeout": 120000
+}

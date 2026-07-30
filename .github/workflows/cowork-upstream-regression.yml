@@ -1,0 +1,124 @@
+name: CoWork upstream regression
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * 0"
+  push:
+    branches: [main]
+    paths:
+      - "src/archiv/cowork_contracts.py"
+      - "integrations/cowork-os/**"
+      - "scripts/check_cowork_source_contract.py"
+      - "scripts/prepare_cowork_regression.py"
+      - "scripts/cowork_stdio_probe.ts"
+      - "scripts/verify_cowork_regression.py"
+      - "tests/test_cowork_integration_contract.py"
+      - ".github/workflows/cowork-upstream-regression.yml"
+      - "src/archiv/mcp_*.py"
+  pull_request:
+    paths:
+      - "src/archiv/cowork_contracts.py"
+      - "integrations/cowork-os/**"
+      - "scripts/check_cowork_source_contract.py"
+      - "scripts/prepare_cowork_regression.py"
+      - "scripts/cowork_stdio_probe.ts"
+      - "scripts/verify_cowork_regression.py"
+      - "tests/test_cowork_integration_contract.py"
+      - ".github/workflows/cowork-upstream-regression.yml"
+      - "src/archiv/mcp_*.py"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: archiv-cowork-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compatibility:
+    name: ${{ matrix.mode }} CoWork compatibility
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - mode: pinned
+            revision: 8c01f1271722a5bb5b8d68ee76b8c68353a564bd
+          - mode: current
+            revision: main
+    steps:
+      - name: Check out Archiv
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Check out CoWork source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: CoWork-OS/CoWork-OS
+          ref: ${{ matrix.revision }}
+          path: cowork-source
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Set up Node
+        uses: actions/setup-node@e51e5fe84fc33b4c73ebe40526b2694712b5b858
+        with:
+          node-version: "24"
+
+      - name: Install Archiv
+        run: python -m pip install --upgrade pip && python -m pip install -e '.[dev]'
+
+      - name: Verify pinned or current CoWork source contract
+        run: |
+          mkdir -p cowork-artifacts/${{ matrix.mode }}
+          python scripts/check_cowork_source_contract.py \
+            --cowork-root cowork-source \
+            --lock integrations/cowork-os/upstream-lock.json \
+            --mode ${{ matrix.mode }} \
+            --output cowork-artifacts/${{ matrix.mode }}/source-contract.json
+          git -C cowork-source rev-parse HEAD \
+            > cowork-artifacts/${{ matrix.mode }}/cowork-revision.txt
+
+      - name: Prepare deterministic Archiv evidence
+        run: |
+          python scripts/prepare_cowork_regression.py \
+            --mode ${{ matrix.mode }} \
+            --output-dir cowork-artifacts/${{ matrix.mode }}
+
+      - name: Exercise Archiv with CoWork's actual stdio transport
+        run: |
+          npx --yes tsx@4.20.6 scripts/cowork_stdio_probe.ts \
+            --cowork-root cowork-source \
+            --mode ${{ matrix.mode }} \
+            --output-dir cowork-artifacts/${{ matrix.mode }}
+
+      - name: Verify evidence outside CoWork
+        run: |
+          python scripts/verify_cowork_regression.py \
+            --mode ${{ matrix.mode }} \
+            --output-dir cowork-artifacts/${{ matrix.mode }} \
+            --source-report cowork-artifacts/${{ matrix.mode }}/source-contract.json \
+            --lock integrations/cowork-os/upstream-lock.json
+
+      - name: Upload compatibility evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: archiv-cowork-${{ matrix.mode }}
+          path: |
+            cowork-artifacts/${{ matrix.mode }}/*.json
+            cowork-artifacts/${{ matrix.mode }}/*.txt
+            cowork-artifacts/${{ matrix.mode }}/exact-source-marker/runs/**/*.json
+            cowork-artifacts/${{ matrix.mode }}/archiv-home/runs/mcp/**/*.json
+            cowork-artifacts/${{ matrix.mode }}/archiv-home/outputs/mcp/cowork-${{ matrix.mode }}-valid.docx
+            cowork-artifacts/${{ matrix.mode }}/archiv-home/outputs/mcp/cowork-${{ matrix.mode }}-valid.docx.*.json
+          if-no-files-found: warn
+          retention-days: 14
