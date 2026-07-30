@@ -14,18 +14,17 @@ Archiv will combine five deliberately separate layers:
 
 Models propose. Validators decide whether work succeeded.
 
-## First milestone
+## Current implemented slice
 
-The first milestone is intentionally small:
+Archiv includes a deterministic environment doctor and the first exact execution contract:
 
-- run a deterministic file task;
-- preserve source hashes;
-- create a required artifact;
-- validate it outside the executor;
-- record complete evidence;
-- expose the same bounded capability through a CLI and, later, MCP.
+```bash
+mkdir -p /tmp/archiv-probe
+printf 'ARCHIV-DEMO-MARKER\n' > /tmp/archiv-probe/source.txt
+archiv source-marker --workspace /tmp/archiv-probe
+```
 
-Archiv is **not** starting as another autonomous-agent framework, desktop Office editor, or all-in-one cloud platform.
+The command must create exactly `outputs/probe.txt`, preserve `source.txt`, validate both outside the executor, and record machine-readable evidence under `runs/<run-id>/`.
 
 ## Quick start
 
