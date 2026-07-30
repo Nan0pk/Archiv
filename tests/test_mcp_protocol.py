@@ -7,10 +7,10 @@ from typing import cast
 import pytest
 from mcp import Client, StdioServerParameters
 from mcp.client.stdio import stdio_client
+from mcp_support import prepare_mcp_archive
 
 from archiv.mcp_contracts import McpRunEnvelope
 from archiv.mcp_server import mcp
-from mcp_support import prepare_mcp_archive
 
 EXPECTED_TOOLS = {
     "archiv_ingest",
