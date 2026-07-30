@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Annotated
 
 import typer
 from rich.console import Console
@@ -53,17 +54,19 @@ def doctor(
 
 @app.command("source-marker")
 def source_marker_command(
-    workspace: Path = typer.Option(
-        Path("."),
-        "--workspace",
-        exists=True,
-        file_okay=False,
-        dir_okay=True,
-        readable=True,
-        resolve_path=True,
-        help="Clean workspace containing source.txt.",
-    ),
-    json_output: bool = typer.Option(True, "--json/--no-json"),
+    workspace: Annotated[
+        Path,
+        typer.Option(
+            "--workspace",
+            exists=True,
+            file_okay=False,
+            dir_okay=True,
+            readable=True,
+            resolve_path=True,
+            help="Clean workspace containing source.txt.",
+        ),
+    ] = Path("."),
+    json_output: Annotated[bool, typer.Option("--json/--no-json")] = True,
 ) -> None:
     """Run and independently validate the exact source-marker task."""
 
