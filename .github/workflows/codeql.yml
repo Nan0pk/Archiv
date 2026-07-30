@@ -1,0 +1,42 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**/*.py"
+      - "scripts/**/*.py"
+      - "tests/**/*.py"
+      - "pyproject.toml"
+      - ".github/workflows/codeql.yml"
+  schedule:
+    - cron: "31 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+concurrency:
+  group: archiv-codeql-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository without retained credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@5d3eb98e4a780bfe1a53f57fbdc278ea5da1274b
+        with:
+          languages: python
+
+      - name: Analyze Python
+        uses: github/codeql-action/analyze@5d3eb98e4a780bfe1a53f57fbdc278ea5da1274b
+        with:
+          category: "/language:python"

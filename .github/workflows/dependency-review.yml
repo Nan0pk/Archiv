@@ -1,0 +1,29 @@
+name: Dependency review
+
+on:
+  pull_request:
+    paths:
+      - "pyproject.toml"
+      - ".github/dependabot.yml"
+      - ".github/workflows/dependency-review.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: archiv-dependency-review-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Review dependency changes
+        uses: actions/dependency-review-action@1e966ba708e4b64bb0c9bfb7abb5a232840be16a
+        with:
+          vulnerability-check: true
+          license-check: false
+          fail-on-severity: high
+          comment-summary-in-pr: never
+          show-patched-versions: true
