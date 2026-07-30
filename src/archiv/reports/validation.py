@@ -188,17 +188,14 @@ def validate_report(
     for source in manifest.sources:
         validation = validate_citation(source.citation, home=home)
         if not validation.valid:
-            errors.append(
-                f"citation {source.number} is invalid: " + "; ".join(validation.errors)
-            )
+            errors.append(f"citation {source.number} is invalid: " + "; ".join(validation.errors))
             continue
         excerpt = read_source_excerpt(source.citation, home=home)
         if excerpt != source.excerpt:
             errors.append(f"citation {source.number} excerpt does not match source evidence")
         marker = f"[{source.number}]"
         if not any(
-            source.excerpt in paragraph and marker in paragraph
-            for paragraph in paragraph_texts
+            source.excerpt in paragraph and marker in paragraph for paragraph in paragraph_texts
         ):
             errors.append(f"inline citation {marker} missing from its finding")
         if source.citation.segment_id not in text:
