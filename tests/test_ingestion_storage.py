@@ -7,10 +7,11 @@ import stat
 from pathlib import Path
 from typing import cast
 
+from ingestion_support import VALID_INGESTION_FIXTURES
+
 from archiv.hashing import sha256_file
 from archiv.ingestion import ingest_file, rebuild_derived
 from archiv.storage.layout import ArchivLayout
-from ingestion_support import VALID_INGESTION_FIXTURES
 
 
 def _count(database: Path, table: str) -> int:
