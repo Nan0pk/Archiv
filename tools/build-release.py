@@ -44,9 +44,12 @@ def source_archive(root: Path, output: Path, version: str) -> None:
                 info.mtime = EPOCH
                 with path.open("rb") as stream:
                     archive.addfile(info, stream)
-        with tar_path.open("rb") as source, output.open("wb") as destination:
-            with gzip.GzipFile(filename="", mode="wb", fileobj=destination, mtime=0) as compressed:
-                shutil.copyfileobj(source, compressed)
+        with (
+            tar_path.open("rb") as source,
+            output.open("wb") as destination,
+            gzip.GzipFile(filename="", mode="wb", fileobj=destination, mtime=0) as compressed,
+        ):
+            shutil.copyfileobj(source, compressed)
 
 
 def requirement_name(value: str) -> str:
