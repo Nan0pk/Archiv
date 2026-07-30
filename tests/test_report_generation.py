@@ -11,6 +11,15 @@ from archiv.report_contracts import ReportManifest, ReportStatus
 from archiv.reports import generate_report
 
 
+def _document_text(path: Path) -> str:
+    document = Document(str(path))
+    blocks = [paragraph.text for paragraph in document.paragraphs]
+    for table in document.tables:
+        for row in table.rows:
+            blocks.extend(cell.text for cell in row.cells)
+    return "\n".join(blocks)
+
+
 def test_generates_structurally_valid_cited_docx_without_source_changes(
     ingestion_corpus: Path,
     tmp_path: Path,
@@ -36,8 +45,7 @@ def test_generates_structurally_valid_cited_docx_without_source_changes(
     assert len(manifest.sources) == len(REPORT_FIXTURES)
     assert manifest.docx_sha256 == sha256_file(output)
 
-    document = Document(str(output))
-    text = "\n".join(paragraph.text for paragraph in document.paragraphs)
+    text = _document_text(output)
     for section in manifest.required_sections:
         assert section in text
     for source in manifest.sources:
