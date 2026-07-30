@@ -62,9 +62,7 @@ def main() -> None:
         CoworkStageResult(
             stage="source_hashes_unchanged",
             status=(
-                CoworkStageStatus.PASSED
-                if source_hashes_unchanged
-                else CoworkStageStatus.FAILED
+                CoworkStageStatus.PASSED if source_hashes_unchanged else CoworkStageStatus.FAILED
             ),
             owner_if_failed=CoworkFaultDomain.ARCHIV,
             detail="Synthetic input files remained byte-for-byte unchanged.",
@@ -84,11 +82,7 @@ def main() -> None:
     stages.append(
         CoworkStageResult(
             stage="exact_source_marker",
-            status=(
-                CoworkStageStatus.PASSED
-                if exact_task_succeeded
-                else CoworkStageStatus.FAILED
-            ),
+            status=(CoworkStageStatus.PASSED if exact_task_succeeded else CoworkStageStatus.FAILED),
             owner_if_failed=CoworkFaultDomain.ARCHIV,
             detail="The exact two-line task retained its source hash and external validation.",
         )
@@ -106,9 +100,7 @@ def main() -> None:
         CoworkStageResult(
             stage="valid_report_outside_cowork",
             status=(
-                CoworkStageStatus.PASSED
-                if report_validation.valid
-                else CoworkStageStatus.FAILED
+                CoworkStageStatus.PASSED if report_validation.valid else CoworkStageStatus.FAILED
             ),
             owner_if_failed=CoworkFaultDomain.ARCHIV,
             detail=(
@@ -128,11 +120,7 @@ def main() -> None:
     stages.append(
         CoworkStageResult(
             stage="run_evidence_files_accessible",
-            status=(
-                CoworkStageStatus.PASSED
-                if evidence_accessible
-                else CoworkStageStatus.FAILED
-            ),
+            status=(CoworkStageStatus.PASSED if evidence_accessible else CoworkStageStatus.FAILED),
             owner_if_failed=CoworkFaultDomain.ARCHIV,
             detail="MCP request and terminal result records are readable without CoWork.",
         )
