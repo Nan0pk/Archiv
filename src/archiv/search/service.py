@@ -56,7 +56,7 @@ def search_documents(
         SELECT s.*, bm25(segments_fts) AS rank
         FROM segments_fts
         JOIN segments AS s ON s.rowid = segments_fts.rowid
-        WHERE {' AND '.join(clauses)}
+        WHERE {" AND ".join(clauses)}
         ORDER BY rank, s.segment_id
         LIMIT ?
     """
@@ -84,8 +84,7 @@ def search_documents(
         validation = validate_citation(citation, home=home)
         if not validation.valid:
             raise RuntimeError(
-                "search index contains an invalid citation: "
-                + "; ".join(validation.errors)
+                "search index contains an invalid citation: " + "; ".join(validation.errors)
             )
         results.append(
             SearchResult(
