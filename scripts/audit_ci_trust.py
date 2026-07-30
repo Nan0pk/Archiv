@@ -126,9 +126,8 @@ def audit(root: Path) -> list[Violation]:
                 )
 
         for index, line in enumerate(lines):
-            if (
-                "uses: actions/checkout@" in line
-                and not _checkout_has_disabled_credentials(lines, index)
+            if "uses: actions/checkout@" in line and not _checkout_has_disabled_credentials(
+                lines, index
             ):
                 violations.append(
                     Violation(
