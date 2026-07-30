@@ -81,9 +81,7 @@ def run_source_marker(workspace: Path) -> RunResult:
             forbidden_changes=[] if source_after == source_before else [request.source_path],
         )
         status = (
-            RunStatus.SUCCEEDED
-            if validation.passed
-            else RunStatus.PARTIALLY_PRODUCED_BUT_INVALID
+            RunStatus.SUCCEEDED if validation.passed else RunStatus.PARTIALLY_PRODUCED_BUT_INVALID
         )
         result = RunResult(
             run_id=run_id,

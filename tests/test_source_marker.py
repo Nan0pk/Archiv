@@ -66,9 +66,7 @@ def test_validator_rejects_source_mutation(tmp_path: Path) -> None:
     workspace = _workspace(tmp_path)
     source_hash = file_evidence(workspace / "source.txt").sha256
     workspace.joinpath("outputs").mkdir()
-    workspace.joinpath("outputs/probe.txt").write_bytes(
-        b"HARNESS_OK\nARCHIV-MARKER-123\n"
-    )
+    workspace.joinpath("outputs/probe.txt").write_bytes(b"HARNESS_OK\nARCHIV-MARKER-123\n")
     workspace.joinpath("source.txt").write_text("MUTATED\n", encoding="utf-8")
 
     validation = validate_source_marker(
