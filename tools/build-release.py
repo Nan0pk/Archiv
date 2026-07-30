@@ -25,9 +25,7 @@ def digest(path: Path) -> str:
 
 
 def tracked_files(root: Path) -> list[Path]:
-    completed = subprocess.run(
-        ["git", "ls-files", "-z"], cwd=root, check=True, capture_output=True
-    )
+    completed = subprocess.run(["git", "ls-files", "-z"], cwd=root, check=True, capture_output=True)
     return [root / item.decode() for item in completed.stdout.split(b"\0") if item]
 
 
@@ -128,9 +126,10 @@ def main() -> None:
     project = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))["project"]
     version = str(project["version"])
 
-    with tempfile.TemporaryDirectory(prefix="archiv-wheel-a-") as a, tempfile.TemporaryDirectory(
-        prefix="archiv-wheel-b-"
-    ) as b:
+    with (
+        tempfile.TemporaryDirectory(prefix="archiv-wheel-a-") as a,
+        tempfile.TemporaryDirectory(prefix="archiv-wheel-b-") as b,
+    ):
         first = build_wheel(root, Path(a))
         second = build_wheel(root, Path(b))
         if digest(first) != digest(second):
