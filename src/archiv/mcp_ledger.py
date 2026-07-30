@@ -8,14 +8,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TypeVar, cast
+from typing import cast
 from uuid import uuid4
 
 from archiv.mcp_contracts import McpFailedRun, McpRunEnvelope, McpRunStatus
 from archiv.mcp_policy import ensure_mcp_roots, mcp_runs_root, validate_run_id
 from archiv.storage.layout import ArchivLayout
-
-T = TypeVar("T")
 
 
 @dataclass(frozen=True, slots=True)
@@ -119,7 +117,9 @@ def execute_tool(
     return finish_success(context, result)
 
 
-def read_run_record(layout: ArchivLayout, run_id: str) -> tuple[dict[str, object], dict[str, object]]:
+def read_run_record(
+    layout: ArchivLayout, run_id: str
+) -> tuple[dict[str, object], dict[str, object]]:
     """Read only the two bounded JSON records for one MCP run."""
 
     safe_run_id = validate_run_id(run_id)

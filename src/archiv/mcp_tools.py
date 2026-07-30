@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Literal, cast
+
+from pydantic import BaseModel
 
 from archiv.contracts import Citation
 from archiv.ingestion import ingest_file
@@ -16,6 +17,7 @@ from archiv.mcp_policy import (
     validate_ingest_source,
     validate_run_id,
 )
+from archiv.report_contracts import ReportStatus
 from archiv.reports import generate_report, validate_report
 from archiv.search import read_source_excerpt, search_documents
 
@@ -27,9 +29,7 @@ def _require_schema_version(schema_version: str) -> None:
         raise ValueError(f"unsupported MCP schema_version: {schema_version}")
 
 
-def _model_payload(model: object) -> dict[str, object]:
-    if not hasattr(model, "model_dump"):
-        raise TypeError("tool result does not support structured serialization")
+def _model_payload(model: BaseModel) -> dict[str, object]:
     return cast(dict[str, object], model.model_dump(mode="json"))
 
 
@@ -158,7 +158,7 @@ def archiv_generate_docx(
             render=render,
             evidence_dir=output.parent if render else None,
         )
-        if result.status != "succeeded" or not result.validation.valid:
+        if result.status is not ReportStatus.SUCCEEDED or not result.validation.valid:
             raise RuntimeError("generated DOCX failed independent validation")
         return {"report": _model_payload(result)}
 

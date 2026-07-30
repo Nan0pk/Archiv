@@ -8,16 +8,9 @@ from mcp.server import MCPServer
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
+from archiv import mcp_tools
 from archiv.contracts import Citation
 from archiv.mcp_contracts import McpRunEnvelope
-from archiv.mcp_tools import (
-    archiv_generate_docx as run_generate_docx,
-    archiv_get_run_evidence as run_get_run_evidence,
-    archiv_ingest as run_ingest,
-    archiv_read_source as run_read_source,
-    archiv_search as run_search,
-    archiv_verify_artifact as run_verify_artifact,
-)
 
 READ_ONLY = ToolAnnotations(read_only_hint=True, open_world_hint=False)
 BOUNDED_WRITE = ToolAnnotations(
@@ -52,7 +45,7 @@ def archiv_ingest(
 ) -> McpRunEnvelope:
     """Validate and preserve one local file as immutable Archiv evidence."""
 
-    return run_ingest(source_path, schema_version)
+    return mcp_tools.archiv_ingest(source_path, schema_version)
 
 
 @mcp.tool(
@@ -71,7 +64,7 @@ def archiv_search(
 ) -> McpRunEnvelope:
     """Search the local FTS5 index and return only revalidated source citations."""
 
-    return run_search(
+    return mcp_tools.archiv_search(
         query,
         source_name,
         media_type,
@@ -93,7 +86,7 @@ def archiv_read_source(
 ) -> McpRunEnvelope:
     """Return one normalized excerpt after validating its complete citation envelope."""
 
-    return run_read_source(citation, schema_version)
+    return mcp_tools.archiv_read_source(citation, schema_version)
 
 
 @mcp.tool(
@@ -114,7 +107,7 @@ def archiv_generate_docx(
 ) -> McpRunEnvelope:
     """Generate a new cited DOCX inside the fixed MCP output root and validate it."""
 
-    return run_generate_docx(
+    return mcp_tools.archiv_generate_docx(
         query,
         output_name,
         title,
@@ -139,7 +132,7 @@ def archiv_verify_artifact(
 ) -> McpRunEnvelope:
     """Revalidate one MCP-owned DOCX and its fixed manifest sidecar."""
 
-    return run_verify_artifact(output_name, render, schema_version)
+    return mcp_tools.archiv_verify_artifact(output_name, render, schema_version)
 
 
 @mcp.tool(
@@ -153,7 +146,7 @@ def archiv_get_run_evidence(
 ) -> McpRunEnvelope:
     """Read request/result JSON for one prior MCP call without arbitrary file access."""
 
-    return run_get_run_evidence(run_id, schema_version)
+    return mcp_tools.archiv_get_run_evidence(run_id, schema_version)
 
 
 MCP_TOOL_HANDLERS = (
