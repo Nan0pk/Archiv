@@ -21,15 +21,12 @@ def test_image_and_audio_record_unrun_processors_honestly(
         (Path(image.derived_root) / "ocr" / "status.json").read_text(encoding="utf-8")
     )
     audio_transcript = json.loads(
-        (Path(audio.derived_root) / "transcripts" / "status.json").read_text(
-            encoding="utf-8"
-        )
+        (Path(audio.derived_root) / "transcripts" / "status.json").read_text(encoding="utf-8")
     )
     assert image_ocr["status"] == "not_run"
     assert audio_transcript["status"] == "not_run"
     assert any(
-        item.processor == "archiv.ocr" and item.status == "skipped"
-        for item in image.processing
+        item.processor == "archiv.ocr" and item.status == "skipped" for item in image.processing
     )
     assert any(
         item.processor == "archiv.transcription" and item.status == "skipped"
