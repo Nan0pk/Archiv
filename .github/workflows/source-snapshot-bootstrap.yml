@@ -26,12 +26,34 @@ jobs:
           persist-credentials: false
           ref: release/offline-alpha
 
+      - name: Check whether all overlay chunks exist
+        id: chunks
+        run: |
+          missing=0
+          for part in 00 01 02 03 04 05; do
+            test -f ".alpha-overlay.part-${part}.b64" || missing=1
+          done
+          if test "$missing" -eq 0; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "Overlay chunks are still being staged; no repository mutation performed."
+          fi
+
       - name: Apply verified development overlay
+        if: steps.chunks.outputs.ready == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tar -xzf .alpha-overlay.tar.gz
-          rm -f .alpha-overlay.tar.gz
+          : > /tmp/archiv-alpha-overlay.tar.gz
+          for part in 00 01 02 03 04 05; do
+            base64 --decode ".alpha-overlay.part-${part}.b64" \
+              >> /tmp/archiv-alpha-overlay.tar.gz
+          done
+          echo "a56e6d29d84fba96944ec8f1ce11428df722cc1a6a692b516d3ff693704b3955  /tmp/archiv-alpha-overlay.tar.gz" \
+            | sha256sum --check -
+          tar -xzf /tmp/archiv-alpha-overlay.tar.gz
+          rm -f .alpha-overlay.tar.gz .alpha-overlay.part-*.b64
           rm -f .github/workflows/source-snapshot-bootstrap.yml
           rm -f .github/workflows/apply-alpha-overlay.yml
           git config user.name "github-actions[bot]"
