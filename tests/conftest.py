@@ -5,7 +5,6 @@ import sys
 from pathlib import Path
 
 import pytest
-
 from ingestion_support import GENERATOR
 
 
