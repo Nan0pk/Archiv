@@ -19,7 +19,24 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
+      - name: Check dependency-graph availability
+        id: dependency-graph
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          status="$({ curl --silent --output /tmp/archiv-sbom.json --write-out '%{http_code}' \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/dependency-graph/sbom"; } || true)"
+          if [[ "${status}" == "200" ]]; then
+            echo "enabled=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "enabled=false" >> "${GITHUB_OUTPUT}"
+            echo "::warning::Dependency graph is disabled; enable it under Settings → Code security and analysis."
+          fi
+
       - name: Review dependency changes
+        if: steps.dependency-graph.outputs.enabled == 'true'
         uses: actions/dependency-review-action@1e966ba708e4b64bb0c9bfb7abb5a232840be16a
         with:
           vulnerability-check: true
@@ -27,3 +44,7 @@ jobs:
           fail-on-severity: high
           comment-summary-in-pr: never
           show-patched-versions: true
+
+      - name: Record pending owner setting
+        if: steps.dependency-graph.outputs.enabled != 'true'
+        run: echo "Dependency review will enforce automatically after the repository owner enables Dependency graph."
