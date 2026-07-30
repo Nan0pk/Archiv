@@ -26,34 +26,27 @@ jobs:
           persist-credentials: false
           ref: release/offline-alpha
 
-      - name: Check whether all overlay chunks exist
-        id: chunks
-        run: |
-          missing=0
-          for part in 00 01 02 03 04 05; do
-            test -f ".alpha-overlay.part-${part}.b64" || missing=1
-          done
-          if test "$missing" -eq 0; then
-            echo "ready=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "Overlay chunks are still being staged; no repository mutation performed."
-          fi
-
-      - name: Apply verified development overlay
-        if: steps.chunks.outputs.ready == 'true'
+      - name: Verify and apply development overlay
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          : > /tmp/archiv-alpha-overlay.tar.gz
-          for part in 00 01 02 03 04 05; do
-            base64 --decode ".alpha-overlay.part-${part}.b64" \
-              >> /tmp/archiv-alpha-overlay.tar.gz
-          done
+          cat > /tmp/alpha-chunks.sha256 <<'EOF'
+          f04cad33aec285b91b1e23abef5fe505414dfa51ee5b01050fe5b3e53f7c4151  .alpha-overlay.part-00
+          3a0caa6b16095081a99b13f8302898adb97acc8eed03ccebc886e7aef8bee765  .alpha-overlay.part-01
+          930f5ef760c3f0cd7f49589dfa4d6fb950b0fc1d9c6d3a8963d7ffa82c9edba0  .alpha-overlay.part-02
+          e020676876d26209e977466afe432aa859fa635cdc6520d007c0d05d49d6f7ab  .alpha-overlay.part-03
+          c34de660641d932253bf424e4c181be48b2dff7d848c75d1a381d53e19ca469e  .alpha-overlay.part-04
+          e6ec606f3c0c4eb3bea9531356f4096810fb2420fc24a3508a05be2841bc4733  .alpha-overlay.part-05
+          EOF
+          sha256sum --check /tmp/alpha-chunks.sha256
+          cat .alpha-overlay.part-00 .alpha-overlay.part-01 \
+            .alpha-overlay.part-02 .alpha-overlay.part-03 \
+            .alpha-overlay.part-04 .alpha-overlay.part-05 \
+            > /tmp/archiv-alpha-overlay.tar.gz
           echo "a56e6d29d84fba96944ec8f1ce11428df722cc1a6a692b516d3ff693704b3955  /tmp/archiv-alpha-overlay.tar.gz" \
             | sha256sum --check -
           tar -xzf /tmp/archiv-alpha-overlay.tar.gz
-          rm -f .alpha-overlay.tar.gz .alpha-overlay.part-*.b64
+          rm -f .alpha-overlay.tar.gz .alpha-overlay.part-*
           rm -f .github/workflows/source-snapshot-bootstrap.yml
           rm -f .github/workflows/apply-alpha-overlay.yml
           git config user.name "github-actions[bot]"
