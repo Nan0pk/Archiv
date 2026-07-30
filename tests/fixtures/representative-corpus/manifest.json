@@ -1,0 +1,103 @@
+{
+  "entries": [
+    {
+      "bytes": 807,
+      "license": "repository-default; no separate fixture licence",
+      "marker": null,
+      "media_type": "text/markdown",
+      "path": "PROVENANCE.md",
+      "sha256": "fa7dfdc139c405f7db4a9fb1cc463d2e40a913e2814ea94c48e8928a2a1b3485"
+    },
+    {
+      "bytes": 36668,
+      "license": "repository-default; no separate fixture licence",
+      "marker": "ARCHIV-DOCX-MARKER-2026",
+      "media_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "path": "document.docx",
+      "sha256": "7cc446cb6afa32aa3e51e9be19b421a559830e1aef42bece740cde37ce18e4df"
+    },
+    {
+      "bytes": 2712,
+      "license": "repository-default; no separate fixture licence",
+      "marker": null,
+      "media_type": "application/json",
+      "path": "expected.json",
+      "sha256": "4c9c01377ee6a0aad0063e13445f4a38b7fbd2e5cc02b0135ddad1d1885e1e2d"
+    },
+    {
+      "bytes": 16,
+      "license": "repository-default; no separate fixture licence",
+      "marker": null,
+      "media_type": "audio/wav",
+      "path": "malformed/corrupt.wav",
+      "sha256": "1825dcf4f69860a2c88c3bc17dafb6cafc18f797d3862cd794ad0da9e1aab4f0"
+    },
+    {
+      "bytes": 64,
+      "license": "repository-default; no separate fixture licence",
+      "marker": null,
+      "media_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "path": "malformed/not-a-docx.docx",
+      "sha256": "8179958102ae6bcba75bc41d58e04ce215e1ee0304f8b84d5e81e2680f4b4280"
+    },
+    {
+      "bytes": 45,
+      "license": "repository-default; no separate fixture licence",
+      "marker": null,
+      "media_type": "application/pdf",
+      "path": "malformed/truncated.pdf",
+      "sha256": "9cd7cf199d804501d42bdac4121fab7239452011cc3d994be69cf5078218cad1"
+    },
+    {
+      "bytes": 87,
+      "license": "repository-default; no separate fixture licence",
+      "marker": "ARCHIV-TEXT-MARKER-2026",
+      "media_type": "text/plain",
+      "path": "plain-text.txt",
+      "sha256": "a909a6322a3b4d5645144412a0315a3476dde4c45b6c0ed2e144bc0002ee96aa"
+    },
+    {
+      "bytes": 28348,
+      "license": "repository-default; no separate fixture licence",
+      "marker": "ARCHIV-PPTX-MARKER-2026",
+      "media_type": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      "path": "presentation.pptx",
+      "sha256": "472959d97d31dd6ad47c317eb97c1dfd0582e31b0e85d08af827ee2a0cfcb77e"
+    },
+    {
+      "bytes": 1447,
+      "license": "repository-default; no separate fixture licence",
+      "marker": "ARCHIV-PDF-MARKER-2026",
+      "media_type": "application/pdf",
+      "path": "report.pdf",
+      "sha256": "938fc1a56a39c5b2753e612739d8f8a05c30630c9b2b48a280f17f2ad3e9fd18"
+    },
+    {
+      "bytes": 13690,
+      "license": "repository-default; no separate fixture licence",
+      "marker": "ARCHIV-AUDIO-MARKER-2026",
+      "media_type": "audio/wav",
+      "path": "sample.wav",
+      "sha256": "faeecf6bdc2852a8f92c1ce92df98750bbdcf251d743a4b63ff2df2241082361"
+    },
+    {
+      "bytes": 960,
+      "license": "repository-default; no separate fixture licence",
+      "marker": "ARCHIV-IMAGE-MARKER-2026",
+      "media_type": "image/png",
+      "path": "scanned-page.png",
+      "sha256": "a3be4ca37e53d8c7d1e318855c86125411ac804d669f4bd684e13a22dbf25f92"
+    },
+    {
+      "bytes": 4918,
+      "license": "repository-default; no separate fixture licence",
+      "marker": "ARCHIV-XLSX-MARKER-2026",
+      "media_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "path": "workbook.xlsx",
+      "sha256": "d0bd4f39bda87c459bd2d747b3780c7aa75fd0a71c401a23ffba1a3b90c4cfe3"
+    }
+  ],
+  "generator": "scripts/generate_fixture_corpus.py",
+  "generator_version": 1,
+  "schema_version": 1
+}
