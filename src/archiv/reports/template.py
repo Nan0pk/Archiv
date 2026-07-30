@@ -7,10 +7,9 @@ from typing import cast
 from docx import Document as open_document
 from docx.document import Document
 from docx.enum.section import WD_SECTION
-from docx.enum.style import WD_STYLE_TYPE
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Inches, Pt
-from docx.styles.style import CharacterStyle
+from docx.styles.style import ParagraphStyle
 
 
 def new_report_document(*, title: str, report_id: str) -> Document:
@@ -24,25 +23,16 @@ def new_report_document(*, title: str, report_id: str) -> Document:
     section.right_margin = Inches(0.8)
 
     styles = document.styles
-    normal = styles["Normal"]
+    normal = cast(ParagraphStyle, styles["Normal"])
     normal.font.name = "Liberation Sans"
     normal.font.size = Pt(10.5)
     normal.paragraph_format.space_after = Pt(6)
 
     for name, size in (("Title", 22), ("Heading 1", 15), ("Heading 2", 12)):
-        style = styles[name]
+        style = cast(ParagraphStyle, styles[name])
         style.font.name = "Liberation Sans"
         style.font.size = Pt(size)
         style.font.bold = True
-
-    if "Archiv Citation" not in styles:
-        citation_style = cast(
-            CharacterStyle,
-            styles.add_style("Archiv Citation", WD_STYLE_TYPE.CHARACTER),
-        )
-        citation_style.font.name = "Liberation Sans"
-        citation_style.font.size = Pt(9)
-        citation_style.font.bold = True
 
     properties = document.core_properties
     properties.title = title
