@@ -18,19 +18,13 @@ def test_deleted_index_rebuilds_with_stable_segment_ids(
     ingest_file(ingestion_corpus / "plain-text.txt", home=home)
     ingest_file(ingestion_corpus / "document.docx", home=home)
     rebuild_search_index(home=home)
-    before = [
-        result.citation.segment_id
-        for result in search_documents("ARCHIV", home=home)
-    ]
+    before = [result.citation.segment_id for result in search_documents("ARCHIV", home=home)]
 
     path = search_index_path(ArchivLayout.resolve(home))
     path.unlink()
     assert not path.exists()
     rebuild_search_index(home=home)
-    after = [
-        result.citation.segment_id
-        for result in search_documents("ARCHIV", home=home)
-    ]
+    after = [result.citation.segment_id for result in search_documents("ARCHIV", home=home)]
 
     assert before == after
 
@@ -44,9 +38,7 @@ def test_stale_and_nonexistent_citations_are_rejected(
     rebuild_search_index(home=home)
     result = search_documents("ARCHIV-TEXT-MARKER-2026", home=home)[0]
 
-    nonexistent = result.citation.model_copy(
-        update={"object_sha256": "0" * 64}
-    )
+    nonexistent = result.citation.model_copy(update={"object_sha256": "0" * 64})
     invalid = validate_citation(nonexistent, home=home)
     assert invalid.valid is False
     assert "canonical original is missing" in invalid.errors
