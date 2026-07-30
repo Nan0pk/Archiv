@@ -1,0 +1,45 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "archiv-core"
+version = "0.0.1"
+description = "Local-first, evidence-backed knowledge-work core"
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [{ name = "Archiv contributors" }]
+dependencies = [
+  "pydantic>=2.8,<3",
+  "rich>=13.7,<15",
+  "typer>=0.12,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pyright>=1.1.390",
+  "pytest>=8.3",
+  "ruff>=0.9",
+]
+
+[project.scripts]
+archiv = "archiv.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/archiv"]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.pyright]
+include = ["src", "tests"]
+pythonVersion = "3.12"
+typeCheckingMode = "strict"
