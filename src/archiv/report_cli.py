@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated
 
@@ -13,7 +14,9 @@ from archiv.reports import generate_report, validate_report
 from archiv.reports.validation import write_validation
 
 
-def register_report_commands(app: typer.Typer) -> None:
+def register_report_commands(
+    app: typer.Typer,
+) -> tuple[Callable[..., None], Callable[..., None]]:
     """Attach report generation and verification commands to the root CLI."""
 
     @app.command("generate-report")
@@ -149,3 +152,5 @@ def register_report_commands(app: typer.Typer) -> None:
         typer.echo(json.dumps(validation.model_dump(mode="json"), indent=2, sort_keys=True))
         if not validation.valid:
             raise typer.Exit(code=1)
+
+    return generate_report_command, verify_report_command
