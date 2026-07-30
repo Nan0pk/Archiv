@@ -15,6 +15,7 @@ from archiv.contracts import RunStatus
 from archiv.doctor import doctor_report
 from archiv.executor.source_marker import run_source_marker
 from archiv.ingestion import ingest_file, rebuild_derived
+from archiv.search import rebuild_search_index, search_documents
 
 app = typer.Typer(no_args_is_help=True, help="Archiv local-first knowledge-work core.")
 console = Console()
@@ -143,6 +144,72 @@ def rebuild_derived_command(
     typer.echo(
         json.dumps(
             [item.model_dump(mode="json") for item in evidence],
+            indent=2,
+            sort_keys=True,
+        )
+    )
+
+
+@app.command("rebuild-search-index")
+def rebuild_search_index_command(
+    home: Annotated[
+        Path | None,
+        typer.Option(
+            "--home",
+            file_okay=False,
+            dir_okay=True,
+            resolve_path=True,
+            help="Archiv home. Defaults to ARCHIV_HOME or the user data directory.",
+        ),
+    ] = None,
+) -> None:
+    """Atomically rebuild the replaceable SQLite FTS5 index."""
+
+    try:
+        result = rebuild_search_index(home=home)
+    except (OSError, RuntimeError, ValueError) as error:
+        typer.echo(f"index rebuild failed: {type(error).__name__}: {error}", err=True)
+        raise typer.Exit(code=1) from error
+    typer.echo(json.dumps(result.model_dump(mode="json"), indent=2, sort_keys=True))
+
+
+@app.command("search")
+def search_command(
+    query: Annotated[str, typer.Argument(help="Literal text or phrase to find.")],
+    home: Annotated[
+        Path | None,
+        typer.Option(
+            "--home",
+            file_okay=False,
+            dir_okay=True,
+            resolve_path=True,
+            help="Archiv home. Defaults to ARCHIV_HOME or the user data directory.",
+        ),
+    ] = None,
+    source_name: Annotated[str | None, typer.Option("--source-name")] = None,
+    media_type: Annotated[str | None, typer.Option("--media-type")] = None,
+    kind: Annotated[str | None, typer.Option("--kind")] = None,
+    object_sha256: Annotated[str | None, typer.Option("--object-sha256")] = None,
+    limit: Annotated[int, typer.Option("--limit", min=1, max=100)] = 20,
+) -> None:
+    """Search normalized text and emit validated exact citations."""
+
+    try:
+        results = search_documents(
+            query,
+            home=home,
+            source_name=source_name,
+            media_type=media_type,
+            kind=kind,
+            object_sha256=object_sha256,
+            limit=limit,
+        )
+    except (OSError, RuntimeError, ValueError) as error:
+        typer.echo(f"search failed: {type(error).__name__}: {error}", err=True)
+        raise typer.Exit(code=1) from error
+    typer.echo(
+        json.dumps(
+            [result.model_dump(mode="json") for result in results],
             indent=2,
             sort_keys=True,
         )

@@ -1,4 +1,4 @@
-"""Versioned execution, ingestion, and evidence contracts."""
+"""Versioned execution, ingestion, retrieval, and evidence contracts."""
 
 from __future__ import annotations
 
@@ -136,3 +136,43 @@ class IngestionResult(StrictModel):
     derived_root: str
     source_hash_unchanged: bool
     processing: list[ProcessingEvidence]
+
+
+class Citation(StrictModel):
+    """Exact source and normalized-segment evidence for one retrieved passage."""
+
+    schema_version: str = "1"
+    segment_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+    segment_index: int = Field(ge=0)
+    object_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    source_name: str
+    media_type: str
+    kind: str
+    locator: dict[str, object]
+    normalized_path: str
+    normalized_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    text_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class SearchResult(StrictModel):
+    """One validated full-text result."""
+
+    text: str
+    rank: float
+    citation: Citation
+
+
+class CitationValidation(StrictModel):
+    """Independent citation integrity result."""
+
+    valid: bool
+    errors: list[str] = Field(default_factory=lambda: list[str]())
+
+
+class SearchIndexBuild(StrictModel):
+    """Evidence for one atomic search-index rebuild."""
+
+    index_path: str
+    index_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    object_count: int = Field(ge=0)
+    segment_count: int = Field(ge=0)
