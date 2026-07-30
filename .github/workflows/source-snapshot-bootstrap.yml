@@ -1,4 +1,4 @@
-# Temporary same-repository bootstrap; self-deletes after applying the overlay.
+# Temporary same-repository bootstrap; removed by the connector after source application.
 name: Source snapshot bootstrap
 
 on:
@@ -26,7 +26,7 @@ jobs:
           persist-credentials: false
           ref: release/offline-alpha
 
-      - name: Verify and apply development overlay
+      - name: Verify and apply source-only development overlay
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -46,9 +46,12 @@ jobs:
           echo "a56e6d29d84fba96944ec8f1ce11428df722cc1a6a692b516d3ff693704b3955  /tmp/archiv-alpha-overlay.tar.gz" \
             | sha256sum --check -
           tar -xzf /tmp/archiv-alpha-overlay.tar.gz
+          git checkout -- \
+            .github/workflows/cowork-upstream-regression.yml \
+            .github/workflows/source-snapshot-bootstrap.yml \
+            .github/workflows/apply-alpha-overlay.yml
+          rm -f .github/workflows/offline-alpha.yml
           rm -f .alpha-overlay.tar.gz .alpha-overlay.part-*
-          rm -f .github/workflows/source-snapshot-bootstrap.yml
-          rm -f .github/workflows/apply-alpha-overlay.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add --all
