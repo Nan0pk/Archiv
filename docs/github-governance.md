@@ -20,7 +20,7 @@ These controls live in the repository and are tested on every relevant pull requ
 
 ## Repository settings verification
 
-The repository settings below were reviewed on 2026-07-30. Evidence is classified honestly: **API/workflow verified** means GitHub returned machine-readable proof; **owner UI** means the setting is visible only in repository administration and must be checked by the owner.
+The repository settings below were reviewed on 2026-07-30. Evidence is classified honestly: **API/workflow verified** means GitHub returned machine-readable proof; **owner UI** means the setting is visible only in repository administration and still requires manual owner action.
 
 | Setting | Required state | Verification |
 |---|---|---|
