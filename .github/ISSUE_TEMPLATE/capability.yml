@@ -1,0 +1,39 @@
+name: Capability proposal
+description: Propose one bounded, independently validated capability.
+title: "Capability: "
+body:
+  - type: textarea
+    id: purpose
+    attributes:
+      label: Purpose
+      description: What concrete user outcome does this capability enable?
+    validations:
+      required: true
+  - type: textarea
+    id: inputs
+    attributes:
+      label: Inputs and reads
+      description: Define the input schema and files or state it may read.
+    validations:
+      required: true
+  - type: textarea
+    id: effects
+    attributes:
+      label: Writes and forbidden effects
+      description: Define what it may change and what it must never change.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence and validator
+      description: What machine evidence is emitted, and which independent validator decides success?
+    validations:
+      required: true
+  - type: textarea
+    id: offline
+    attributes:
+      label: Offline and network behaviour
+      description: State whether network access is forbidden, optional, or required.
+    validations:
+      required: true

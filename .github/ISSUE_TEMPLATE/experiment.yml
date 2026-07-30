@@ -1,0 +1,28 @@
+name: Experiment
+description: Propose a bounded benchmark before adding a major dependency or architecture layer.
+title: "Experiment: "
+body:
+  - type: textarea
+    id: decision
+    attributes:
+      label: Decision this experiment informs
+    validations:
+      required: true
+  - type: textarea
+    id: baseline
+    attributes:
+      label: Current simple baseline
+    validations:
+      required: true
+  - type: textarea
+    id: method
+    attributes:
+      label: Controlled method and acceptance threshold
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence to preserve
+    validations:
+      required: true

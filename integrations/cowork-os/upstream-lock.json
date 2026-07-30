@@ -1,0 +1,15 @@
+{
+  "repository": "CoWork-OS/CoWork-OS",
+  "integration_mode": "mcp-adapter",
+  "pinned_commit": null,
+  "tested_version": null,
+  "tested_at": null,
+  "status": "not-yet-tested",
+  "required_regressions": [
+    "exact-source-marker-task",
+    "archiv-search-through-mcp",
+    "docx-generation-through-mcp",
+    "failed-validation-cannot-become-success"
+  ],
+  "notes": "Pin only after Archiv's executor and MCP contracts exist. Do not auto-upgrade from upstream."
+}
