@@ -1,3 +1,4 @@
+# Temporary trusted-branch bootstrap; self-deletes after applying the overlay.
 name: Apply offline alpha overlay
 
 on:
