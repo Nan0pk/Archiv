@@ -11,6 +11,24 @@ FIXED_DATETIME: Final = datetime(2026, 1, 1, tzinfo=UTC)
 DEFAULT_OUTPUT: Final = Path("build/fixtures/representative-corpus")
 
 FIXTURES: Final[dict[str, dict[str, object]]] = {
+    "operations.txt": {
+        "media_type": "text/plain",
+        "marker": "unique fixture marker",
+        "location": {"line": 2},
+        "expected_valid": True,
+    },
+    "research.md": {
+        "media_type": "text/markdown",
+        "marker": "unique fixture marker",
+        "location": {"line": 3},
+        "expected_valid": True,
+    },
+    "decision.txt": {
+        "media_type": "text/plain",
+        "marker": "unique fixture marker",
+        "location": {"line": 2},
+        "expected_valid": True,
+    },
     "plain-text.txt": {
         "media_type": "text/plain",
         "marker": "ARCHIV-TEXT-MARKER-2026",

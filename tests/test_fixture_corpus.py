@@ -42,7 +42,7 @@ def test_manifest_matches_generated_bytes(corpus: Path) -> None:
     manifest = _json_object(DESCRIPTORS / "manifest.json")
     assert manifest["schema_version"] == 1
     entries = cast(list[dict[str, object]], manifest["entries"])
-    assert len(entries) == 12
+    assert len(entries) == 15
 
     for entry in entries:
         relative_path = cast(str, entry["path"])
@@ -66,6 +66,9 @@ def test_expected_locations_and_markers_are_declared() -> None:
         "slide": 1,
     }
     assert fixtures["sample.wav"]["marker"] == "ARCHIV-AUDIO-MARKER-2026"
+    assert fixtures["operations.txt"]["location"] == {"line": 2}
+    assert fixtures["research.md"]["location"] == {"line": 3}
+    assert fixtures["decision.txt"]["location"] == {"line": 2}
 
 
 def test_office_packages_are_valid_zip_containers_with_markers(corpus: Path) -> None:

@@ -43,6 +43,18 @@ CoWork-OS is integrated only as a replaceable MCP workbench. Archiv pins one rev
 
 ## Quick start
 
+Fedora offline-alpha installation from a source checkout:
+
+```bash
+bash tools/setup-fedora.sh
+source "$HOME/.local/share/archiv-alpha/activate"
+archiv sample-vault "$HOME/Archiv-Sample"
+archiv ingest "$HOME/Archiv-Sample"
+archiv search "unique fixture marker"
+```
+
+Development setup:
+
 ```bash
 python -m venv .venv
 source .venv/bin/activate
@@ -67,6 +79,8 @@ Do not commit private documents, personal data, credentials, model keys, product
 - [Cited DOCX reports](docs/reporting.md)
 - [Bounded local MCP server](docs/mcp.md)
 - [CoWork-OS integration](docs/cowork-os-integration.md)
+- [First offline alpha](docs/offline-alpha.md)
+- [Hardware and performance notes](docs/hardware-and-performance.md)
 - [GitHub governance and CI trust boundary](docs/github-governance.md)
 - [Definition of done](docs/definition-of-done.md)
 - [Roadmap](docs/roadmap.md)

@@ -16,6 +16,9 @@ class ArchivLayout:
     derived: Path
     indexes: Path
     temporary: Path
+    runs: Path
+    outputs: Path
+    config: Path
     database: Path
 
     @classmethod
@@ -40,13 +43,24 @@ class ArchivLayout:
             derived=root / "derived",
             indexes=root / "indexes",
             temporary=root / "temporary",
+            runs=root / "runs",
+            outputs=root / "outputs",
+            config=root / "config",
             database=root / "archiv.sqlite3",
         )
 
     def ensure(self) -> None:
         """Create only the storage roots; object-specific paths remain lazy."""
 
-        for path in (self.originals, self.derived, self.indexes, self.temporary):
+        for path in (
+            self.originals,
+            self.derived,
+            self.indexes,
+            self.temporary,
+            self.runs,
+            self.outputs,
+            self.config,
+        ):
             path.mkdir(parents=True, exist_ok=True)
 
     def original_path(self, digest: str) -> Path:

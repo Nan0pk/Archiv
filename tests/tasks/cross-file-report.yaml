@@ -1,0 +1,10 @@
+{
+  "schema_version": "1",
+  "task": "cross-file-report",
+  "query": "unique fixture marker",
+  "title": "Archiv Offline Alpha Cross-file Report",
+  "output_name": "cross-file-report.docx",
+  "max_sources": 8,
+  "render": true,
+  "model_policy": "disabled"
+}

@@ -1,0 +1,3 @@
+Archiv representative decision record.
+The unique fixture marker identifies the first offline alpha demonstration.
+Decision: independent validators determine whether the work succeeded.

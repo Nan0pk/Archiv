@@ -9,6 +9,14 @@
       "sha256": "fa7dfdc139c405f7db4a9fb1cc463d2e40a913e2814ea94c48e8928a2a1b3485"
     },
     {
+      "bytes": 186,
+      "license": "repository-default; no separate fixture licence",
+      "marker": "unique fixture marker",
+      "media_type": "text/plain",
+      "path": "decision.txt",
+      "sha256": "7b2614235eef97355b2449de229e92e663b0f49e2da519f0929dc09f48bc0548"
+    },
+    {
       "bytes": 36668,
       "license": "repository-default; no separate fixture licence",
       "marker": "ARCHIV-DOCX-MARKER-2026",
@@ -17,12 +25,12 @@
       "sha256": "7cc446cb6afa32aa3e51e9be19b421a559830e1aef42bece740cde37ce18e4df"
     },
     {
-      "bytes": 2712,
+      "bytes": 3256,
       "license": "repository-default; no separate fixture licence",
       "marker": null,
       "media_type": "application/json",
       "path": "expected.json",
-      "sha256": "4c9c01377ee6a0aad0063e13445f4a38b7fbd2e5cc02b0135ddad1d1885e1e2d"
+      "sha256": "c62a2c7042e795f9443f95640997050dc482a6af8748ad6dd80d235a2cd5b613"
     },
     {
       "bytes": 16,
@@ -49,6 +57,14 @@
       "sha256": "9cd7cf199d804501d42bdac4121fab7239452011cc3d994be69cf5078218cad1"
     },
     {
+      "bytes": 207,
+      "license": "repository-default; no separate fixture licence",
+      "marker": "unique fixture marker",
+      "media_type": "text/plain",
+      "path": "operations.txt",
+      "sha256": "9033913302b198c82e259aa1f9e8976ffa7459b76a5a6d5cf68992a6c8de960b"
+    },
+    {
       "bytes": 87,
       "license": "repository-default; no separate fixture licence",
       "marker": "ARCHIV-TEXT-MARKER-2026",
@@ -71,6 +87,14 @@
       "media_type": "application/pdf",
       "path": "report.pdf",
       "sha256": "938fc1a56a39c5b2753e612739d8f8a05c30630c9b2b48a280f17f2ad3e9fd18"
+    },
+    {
+      "bytes": 185,
+      "license": "repository-default; no separate fixture licence",
+      "marker": "unique fixture marker",
+      "media_type": "text/markdown",
+      "path": "research.md",
+      "sha256": "9ef4933bb825649ec491cdf4889778ccdd792f0db1c05ff380578d17e413490f"
     },
     {
       "bytes": 13690,
