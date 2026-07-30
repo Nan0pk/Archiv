@@ -10,6 +10,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 authors = [{ name = "Archiv contributors" }]
 dependencies = [
+  "mcp>=2,<3",
   "openpyxl==3.1.5",
   "pillow==12.2.0",
   "pydantic>=2.8,<3",
@@ -30,6 +31,7 @@ dev = [
 
 [project.scripts]
 archiv = "archiv.cli:app"
+archiv-mcp = "archiv.mcp_server:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/archiv"]
