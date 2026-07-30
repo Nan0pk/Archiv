@@ -4,11 +4,11 @@ import json
 from pathlib import Path
 
 from docx import Document
+from report_support import REPORT_FIXTURES, prepare_report_archive
 
 from archiv.hashing import sha256_file
 from archiv.report_contracts import ReportManifest, ReportStatus
 from archiv.reports import generate_report
-from report_support import REPORT_FIXTURES, prepare_report_archive
 
 
 def test_generates_structurally_valid_cited_docx_without_source_changes(
