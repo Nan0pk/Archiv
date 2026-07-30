@@ -16,7 +16,7 @@ Models propose. Validators decide whether work succeeded.
 
 ## Current implemented slice
 
-Archiv includes a deterministic environment doctor, the exact source-marker execution contract, and immutable local ingestion:
+Archiv includes a deterministic environment doctor, the exact source-marker execution contract, immutable local ingestion, and validated SQLite full-text retrieval:
 
 ```bash
 mkdir -p /tmp/archiv-probe
@@ -25,11 +25,13 @@ archiv source-marker --workspace /tmp/archiv-probe
 
 archiv ingest ./document.docx
 archiv rebuild-derived <sha256>
+archiv rebuild-search-index
+archiv search "exact phrase"
 ```
 
 The source-marker command creates exactly `outputs/probe.txt`, preserves `source.txt`, validates both outside the executor, and records machine-readable evidence under `runs/<run-id>/`.
 
-Ingestion validates supported inputs, stores one read-only content-addressed original, records imports and processing in SQLite, and creates rebuildable normalized data outside the repository. See [immutable ingestion](docs/ingestion.md).
+Ingestion validates supported inputs, stores one read-only content-addressed original, records imports and processing in SQLite, and creates rebuildable normalized data outside the repository. Full-text search builds a separate replaceable FTS5 database and returns citations that are revalidated against the original and normalized hashes before use.
 
 ## Quick start
 
@@ -53,6 +55,7 @@ Do not commit private documents, personal data, credentials, model keys, product
 - [Architecture](docs/architecture.md)
 - [Execution contract](docs/execution-contract.md)
 - [Immutable ingestion](docs/ingestion.md)
+- [Local search and citations](docs/search.md)
 - [Definition of done](docs/definition-of-done.md)
 - [Roadmap](docs/roadmap.md)
 - [Harness evidence baseline](research/baseline/harness-verdict.md)
