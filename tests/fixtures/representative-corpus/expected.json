@@ -1,0 +1,113 @@
+{
+  "audio_note": "WAV tones test deterministic timing; the marker is stored in LIST/INFO/ICMT, not spoken.",
+  "fixtures": {
+    "document.docx": {
+      "expected_valid": true,
+      "location": {
+        "paragraph": 2
+      },
+      "marker": "ARCHIV-DOCX-MARKER-2026",
+      "media_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    },
+    "malformed/corrupt.wav": {
+      "expected_valid": false,
+      "location": {
+        "expected": "reject"
+      },
+      "marker": null,
+      "media_type": "audio/wav"
+    },
+    "malformed/not-a-docx.docx": {
+      "expected_valid": false,
+      "location": {
+        "expected": "reject"
+      },
+      "marker": null,
+      "media_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    },
+    "malformed/truncated.pdf": {
+      "expected_valid": false,
+      "location": {
+        "expected": "reject"
+      },
+      "marker": null,
+      "media_type": "application/pdf"
+    },
+    "plain-text.txt": {
+      "expected_valid": true,
+      "location": {
+        "line": 3
+      },
+      "marker": "ARCHIV-TEXT-MARKER-2026",
+      "media_type": "text/plain"
+    },
+    "presentation.pptx": {
+      "expected_valid": true,
+      "location": {
+        "shape": 2,
+        "slide": 1
+      },
+      "marker": "ARCHIV-PPTX-MARKER-2026",
+      "media_type": "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+    },
+    "report.pdf": {
+      "expected_valid": true,
+      "location": {
+        "page": 1
+      },
+      "marker": "ARCHIV-PDF-MARKER-2026",
+      "media_type": "application/pdf"
+    },
+    "sample.wav": {
+      "expected_valid": true,
+      "location": {
+        "metadata_chunk": "LIST/INFO/ICMT",
+        "tone_segments_ms": [
+          [
+            0,
+            250
+          ],
+          [
+            300,
+            550
+          ],
+          [
+            600,
+            850
+          ]
+        ]
+      },
+      "marker": "ARCHIV-AUDIO-MARKER-2026",
+      "media_type": "audio/wav"
+    },
+    "scanned-page.png": {
+      "expected_valid": true,
+      "location": {
+        "bounding_box": [
+          20,
+          20,
+          246,
+          31
+        ],
+        "page": 1
+      },
+      "marker": "ARCHIV-IMAGE-MARKER-2026",
+      "media_type": "image/png"
+    },
+    "workbook.xlsx": {
+      "expected_valid": true,
+      "location": {
+        "cell": "B2",
+        "sheet": "Evidence"
+      },
+      "marker": "ARCHIV-XLSX-MARKER-2026",
+      "media_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    }
+  },
+  "schema_version": 1,
+  "spreadsheet_values": {
+    "workbook.xlsx": {
+      "Evidence!C3": 42.25
+    }
+  }
+}
