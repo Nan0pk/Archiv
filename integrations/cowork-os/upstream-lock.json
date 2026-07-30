@@ -1,15 +1,20 @@
 {
+  "schema_version": 1,
   "repository": "CoWork-OS/CoWork-OS",
-  "integration_mode": "mcp-adapter",
-  "pinned_commit": null,
-  "tested_version": null,
-  "tested_at": null,
-  "status": "not-yet-tested",
-  "required_regressions": [
-    "exact-source-marker-task",
-    "archiv-search-through-mcp",
-    "docx-generation-through-mcp",
-    "failed-validation-cannot-become-success"
-  ],
-  "notes": "Pin only after Archiv's executor and MCP contracts exist. Do not auto-upgrade from upstream."
+  "revision": "8c01f1271722a5bb5b8d68ee76b8c68353a564bd",
+  "version": "0.5.50",
+  "locked_on": "2026-07-30",
+  "protocol_version": "2024-11-05",
+  "node_engine": ">=24.0.0",
+  "adoption_policy": "manual pull request only; current upstream tests never update this lock",
+  "source_blobs": {
+    "package.json": "754e4319eae28a715154675b0d84bd5c07c451d6",
+    "docs/cli.md": "520efb00e33feddd5dd1bd8a45ae0d80e6f761fd",
+    "src/cli/direct-run.ts": "d4c7b313b501848397573561e6895d2623c12b88",
+    "src/electron/mcp/types.ts": "dbc061ccb0f819c6b2a57eab48026d90b375e0b8",
+    "src/electron/mcp/client/MCPClientManager.ts": "2e9d2fac8ef6d332134557d0d16b9fb64ab3e98c",
+    "src/electron/mcp/client/MCPServerConnection.ts": "e6de9da10f0faff3cca5fe636d37a96fffc51e83",
+    "src/electron/mcp/client/transports/StdioTransport.ts": "f31a2b0a50532711f6822b5727cdfe1cb045bbd8",
+    "src/electron/utils/logger.ts": "5ec1042af756ce86adc3356364ff4d4e0758d11e"
+  }
 }
