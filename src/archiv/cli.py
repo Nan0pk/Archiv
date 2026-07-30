@@ -124,7 +124,8 @@ def ingest_command(
             return
 
         candidates = sorted(
-            path for path in source.rglob("*")
+            path
+            for path in source.rglob("*")
             if path.is_file() and path.suffix.lower() in SUPPORTED_SUFFIXES
         )
         if not candidates:
