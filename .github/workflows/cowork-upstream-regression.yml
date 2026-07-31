@@ -16,6 +16,12 @@ on:
       - "tests/test_cowork_integration_contract.py"
       - ".github/workflows/cowork-upstream-regression.yml"
       - "src/archiv/mcp_*.py"
+      - "src/archiv/tasks.py"
+      - "src/archiv/task_contracts.py"
+      - "src/archiv/archive.py"
+      - "tests/tasks/**"
+      - "tools/run-offline-acceptance.sh"
+      - ".github/workflows/offline-alpha.yml"
   pull_request:
     paths:
       - "src/archiv/cowork_contracts.py"
@@ -27,6 +33,12 @@ on:
       - "tests/test_cowork_integration_contract.py"
       - ".github/workflows/cowork-upstream-regression.yml"
       - "src/archiv/mcp_*.py"
+      - "src/archiv/tasks.py"
+      - "src/archiv/task_contracts.py"
+      - "src/archiv/archive.py"
+      - "tests/tasks/**"
+      - "tools/run-offline-acceptance.sh"
+      - ".github/workflows/offline-alpha.yml"
 
 permissions:
   contents: read

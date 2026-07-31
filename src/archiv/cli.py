@@ -11,16 +11,19 @@ from rich.console import Console
 from rich.table import Table
 
 from archiv import __version__
+from archiv.alpha_cli import register_alpha_commands
 from archiv.contracts import RunStatus
 from archiv.doctor import doctor_report
 from archiv.executor.source_marker import run_source_marker
 from archiv.ingestion import ingest_file, rebuild_derived
+from archiv.ingestion.formats import SUPPORTED_SUFFIXES
 from archiv.report_cli import register_report_commands
 from archiv.search import rebuild_search_index, search_documents
 
 app = typer.Typer(no_args_is_help=True, help="Archiv local-first knowledge-work core.")
 console = Console()
 register_report_commands(app)
+register_alpha_commands(app)
 
 
 @app.command()
@@ -91,10 +94,10 @@ def ingest_command(
         typer.Argument(
             exists=True,
             file_okay=True,
-            dir_okay=False,
+            dir_okay=True,
             readable=True,
             resolve_path=True,
-            help="Local file to preserve and normalize.",
+            help="Local file or directory to preserve and normalize.",
         ),
     ],
     home: Annotated[
@@ -115,11 +118,39 @@ def ingest_command(
     """Validate and ingest one file into immutable local storage."""
 
     try:
-        result = ingest_file(source, home=home, rebuild_derived=rebuild)
+        if source.is_file():
+            result = ingest_file(source, home=home, rebuild_derived=rebuild)
+            typer.echo(json.dumps(result.model_dump(mode="json"), indent=2, sort_keys=True))
+            return
+
+        candidates = sorted(
+            path
+            for path in source.rglob("*")
+            if path.is_file() and path.suffix.lower() in SUPPORTED_SUFFIXES
+        )
+        if not candidates:
+            raise ValueError("directory contains no supported files")
+        results = [
+            ingest_file(path, home=home, rebuild_derived=rebuild).model_dump(mode="json")
+            for path in candidates
+        ]
+        index = rebuild_search_index(home=home).model_dump(mode="json")
     except (OSError, RuntimeError, ValueError) as error:
         typer.echo(f"ingestion failed: {type(error).__name__}: {error}", err=True)
         raise typer.Exit(code=1) from error
-    typer.echo(json.dumps(result.model_dump(mode="json"), indent=2, sort_keys=True))
+    typer.echo(
+        json.dumps(
+            {
+                "schema_version": "1",
+                "status": "succeeded",
+                "source_directory": str(source),
+                "ingested": results,
+                "search_index": index,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
 
 
 @app.command("rebuild-derived")

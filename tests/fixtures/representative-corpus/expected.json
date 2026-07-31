@@ -1,6 +1,14 @@
 {
   "audio_note": "WAV tones test deterministic timing; the marker is stored in LIST/INFO/ICMT, not spoken.",
   "fixtures": {
+    "decision.txt": {
+      "expected_valid": true,
+      "location": {
+        "line": 2
+      },
+      "marker": "unique fixture marker",
+      "media_type": "text/plain"
+    },
     "document.docx": {
       "expected_valid": true,
       "location": {
@@ -33,6 +41,14 @@
       "marker": null,
       "media_type": "application/pdf"
     },
+    "operations.txt": {
+      "expected_valid": true,
+      "location": {
+        "line": 2
+      },
+      "marker": "unique fixture marker",
+      "media_type": "text/plain"
+    },
     "plain-text.txt": {
       "expected_valid": true,
       "location": {
@@ -57,6 +73,14 @@
       },
       "marker": "ARCHIV-PDF-MARKER-2026",
       "media_type": "application/pdf"
+    },
+    "research.md": {
+      "expected_valid": true,
+      "location": {
+        "line": 3
+      },
+      "marker": "unique fixture marker",
+      "media_type": "text/markdown"
     },
     "sample.wav": {
       "expected_valid": true,

@@ -1,10 +1,10 @@
 [build-system]
-requires = ["hatchling>=1.25"]
+requires = ["hatchling==1.31.0"]
 build-backend = "hatchling.build"
 
 [project]
 name = "archiv-core"
-version = "0.0.1"
+version = "0.1.0a1"
 description = "Local-first, evidence-backed knowledge-work core"
 readme = "README.md"
 requires-python = ">=3.12"

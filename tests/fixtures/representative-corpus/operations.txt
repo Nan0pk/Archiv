@@ -1,0 +1,3 @@
+Archiv representative operations record.
+The unique fixture marker connects this file to the research and decision records.
+Operational finding: immutable originals remain unchanged throughout the workflow.

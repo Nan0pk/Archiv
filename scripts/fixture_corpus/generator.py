@@ -46,6 +46,21 @@ def build_files() -> dict[str, bytes]:
         ),
     }
     return {
+        "operations.txt": (
+            b"Archiv representative operations record.\n"
+            b"The unique fixture marker connects this file to the research and decision records.\n"
+            b"Operational finding: immutable originals remain unchanged throughout the workflow.\n"
+        ),
+        "research.md": (
+            b"# Representative research record\n\n"
+            b"The unique fixture marker is repeated here for deterministic cross-file retrieval.\n"
+            b"Research finding: citations resolve locally without network access.\n"
+        ),
+        "decision.txt": (
+            b"Archiv representative decision record.\n"
+            b"The unique fixture marker identifies the first offline alpha demonstration.\n"
+            b"Decision: independent validators determine whether the work succeeded.\n"
+        ),
         "plain-text.txt": (
             b"Archiv plain-text fixture\n"
             b"Location test follows\n"
