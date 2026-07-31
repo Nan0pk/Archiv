@@ -7,8 +7,9 @@ HOME_DIR=${ARCHIV_HOME:-/tmp/archiv-offline-alpha-home}
 RESTORE_DIR=${ARCHIV_RESTORE_HOME:-/tmp/archiv-offline-alpha-restored}
 NETWORK_POLICY=${ARCHIV_NETWORK_POLICY:-not-enforced}
 
-rm -rf "$HOME_DIR" "$RESTORE_DIR" "$EVIDENCE_DIR"
+rm -rf "$HOME_DIR" "$RESTORE_DIR"
 mkdir -p "$EVIDENCE_DIR"
+find "$EVIDENCE_DIR" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
 
 if command -v archiv >/dev/null 2>&1; then
   ARCHIV=(archiv)
