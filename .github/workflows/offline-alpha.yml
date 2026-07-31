@@ -82,7 +82,7 @@ jobs:
 
       - name: Run the complete workflow with no network
         run: |
-          mkdir -p offline-alpha-artifacts
+          install -d -m 0777 offline-alpha-artifacts
           docker run --rm \
             --network none \
             --cap-drop ALL \
