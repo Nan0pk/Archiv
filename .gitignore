@@ -30,6 +30,10 @@ temporary/
 *.sqlite3
 *.db
 
+# Local field-trial evidence (may contain private corpus details)
+.archiv-field-trial/
+field-trial-artifacts/
+
 # Secrets and local configuration
 .env
 .env.*
