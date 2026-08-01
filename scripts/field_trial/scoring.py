@@ -13,8 +13,7 @@ from pathlib import Path
 from typing import cast
 
 NAVIGATION_OBSERVED = (
-    "Citations expose source names and locators but no bounded "
-    "source-location command."
+    "Citations expose source names and locators but no bounded source-location command."
 )
 
 
