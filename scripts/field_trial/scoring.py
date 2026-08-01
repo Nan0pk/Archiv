@@ -214,15 +214,15 @@ def _aggregate(results: Sequence[Mapping[str, object]], indexing_ms: float) -> d
         for item in results
     ]
     citation_valid = [
-        bool(cast(Mapping[str, object], item["citation_integrity"])["valid"])
-        for item in results
+        bool(cast(Mapping[str, object], item["citation_integrity"])["valid"]) for item in results
     ]
     honesty = [
-        bool(cast(Mapping[str, object], item["answer_quality"])["honesty_ok"])
-        for item in results
+        bool(cast(Mapping[str, object], item["answer_quality"])["honesty_ok"]) for item in results
     ]
     durations = sorted(float(item["duration_ms"]) for item in results)
-    failures = Counter(str(item["failure_category"]) for item in results if item["failure_category"])
+    failures = Counter(
+        str(item["failure_category"]) for item in results if item["failure_category"]
+    )
     return {
         "retrieval": {
             "mean_recall_at_evidence_limit": round(sum(recalls) / len(recalls), 4),
