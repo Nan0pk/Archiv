@@ -40,15 +40,16 @@ def calculate_retrieval_metrics(
     expected = list(dict.fromkeys(expected_sources))
     retrieved = list(retrieved_sources)
     found = [item for item in expected if item in retrieved]
+    recall = 1.0 if not expected else len(found) / len(expected)
     return {
         "required_source_count": len(expected),
         "retrieved_source_count": len(retrieved),
         "required_sources_found": len(found),
-        "recall_at_evidence_limit": round(1.0 if not expected else len(found) / len(expected), 4),
+        "recall_at_evidence_limit": round(recall, 4),
         "expected_source_ranks": {
             item: retrieved.index(item) + 1 if item in retrieved else None for item in expected
         },
-        "irrelevant_source_count": len([item for item in retrieved if item not in expected]),
+        "irrelevant_source_count": sum(item not in expected for item in retrieved),
         "required_displaced": bool(
             expected and len(found) < len(expected) and len(retrieved) >= evidence_limit
         ),
@@ -102,7 +103,7 @@ def score_answer(
     question: Mapping[str, object], response: Mapping[str, object] | None
 ) -> dict[str, object]:
     text = _answer_text(response).casefold()
-    facts = []
+    facts: list[dict[str, object]] = []
     for fact in cast(Sequence[Mapping[str, object]], question["required_facts"]):
         terms = [str(item) for item in cast(Sequence[object], fact["terms"])]
         facts.append(
@@ -178,7 +179,9 @@ def _failure_category(
     return None
 
 
-def _copy_report_artifacts(payload: Mapping[str, object], home: Path, output: Path) -> list[str]:
+def _copy_report_artifacts(
+    payload: Mapping[str, object], home: Path, output: Path
+) -> list[str]:
     del payload
     copied: list[str] = []
     for suffix in (".docx", ".pdf"):
@@ -187,16 +190,10 @@ def _copy_report_artifacts(payload: Mapping[str, object], home: Path, output: Pa
             destination = output / f"public-sample-report{suffix}"
             shutil.copy2(candidate, destination)
             copied.append(destination.name)
-    if (output / "public-sample-report.pdf").is_file() and shutil.which("pdftoppm"):
+    pdf = output / "public-sample-report.pdf"
+    if pdf.is_file() and shutil.which("pdftoppm"):
         subprocess.run(
-            [
-                "pdftoppm",
-                "-png",
-                "-r",
-                "120",
-                str(output / "public-sample-report.pdf"),
-                str(output / "public-sample-report-page"),
-            ],
+            ["pdftoppm", "-png", "-r", "120", str(pdf), str(output / "public-sample-report-page")],
             check=False,
             capture_output=True,
         )
@@ -268,18 +265,28 @@ def _defects(aggregate: Mapping[str, object]) -> list[dict[str, object]]:
                     "The full natural-language question is used as one exact FTS phrase; "
                     f"{misses} questions missed required evidence."
                 ),
-                "expected": "Ordinary questions retrieve required evidence already present in normalized text.",
+                "expected": (
+                    "Ordinary questions retrieve required evidence already present in "
+                    "normalized text."
+                ),
                 "frequency": misses,
                 "severity": "high",
-                "user_impact": "Archiv reports missing evidence and produces incomplete broad answers.",
-                "smallest_corrective_layer": "deterministic query construction before existing FTS retrieval",
+                "user_impact": (
+                    "Archiv reports missing evidence and produces incomplete broad answers."
+                ),
+                "smallest_corrective_layer": (
+                    "deterministic query construction before existing FTS retrieval"
+                ),
             }
         )
     defects.append(
         {
             "category": "source navigation friction",
-            "observed": "Citations expose source names and locators but no bounded source-location command.",
-            "expected": "A normal user can move from a citation to the source and native location.",
+            "observed": (
+                "Citations expose source names and locators but no bounded "
+                "source-location command."
+            ),
+            "expected": "A user can move from a citation to its source and native location.",
             "frequency": "all cited answers",
             "severity": "medium",
             "user_impact": "Independent verification requires manual storage inspection.",
@@ -298,14 +305,17 @@ def _markdown(summary: Mapping[str, object]) -> str:
     lines = [
         "# Archiv public field-trial report",
         "",
-        "Deterministic public-safe baseline; the fixture model does not measure real-model quality.",
+        (
+            "Deterministic public-safe baseline; the fixture model does not measure "
+            "real-model quality."
+        ),
         "",
         f"- Corpus documents: {summary['corpus_document_count']}",
         f"- Benchmark questions: {summary['question_count']}",
         f"- Full-recall questions: {retrieval['questions_with_full_recall']}",
         f"- Retrieval misses: {retrieval['questions_with_retrieval_miss']}",
         f"- Mean recall: {retrieval['mean_recall_at_evidence_limit']}",
-        f"- Structurally valid citation results: {citations['structurally_valid_questions']}",
+        f"- Structurally valid citations: {citations['structurally_valid_questions']}",
         f"- Fabricated citation identifiers: {citations['fabricated_identifier_count']}",
         f"- Mean completeness: {quality['mean_completeness_score']}",
         f"- Unsupported claims: {quality['unsupported_claim_count']}",
