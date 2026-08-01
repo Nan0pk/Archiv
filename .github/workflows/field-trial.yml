@@ -8,7 +8,9 @@ on:
       - "benchmarks/field_trial/**"
       - "docs/field-trial*.md"
       - "scripts/run_field_trial.py"
+      - "scripts/field_trial/**"
       - "tests/test_field_trial.py"
+      - "tests/test_report_pagination.py"
       - "src/**"
       - "pyproject.toml"
       - ".github/workflows/field-trial.yml"
@@ -48,6 +50,9 @@ jobs:
       - name: Install Archiv
         run: python -m pip install --upgrade pip && python -m pip install -e '.[dev]'
 
+      - name: Compile Python sources
+        run: python -m compileall src tests scripts
+
       - name: Run deterministic public field trial
         run: >-
           python scripts/run_field_trial.py
@@ -75,3 +80,137 @@ jobs:
             field-trial-artifacts/*.png
           if-no-files-found: error
           retention-days: 30
+
+  mcp-validation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install Archiv
+        run: python -m pip install --upgrade pip && python -m pip install -e '.[dev]'
+
+      - name: Run MCP contract and process tests
+        run: >-
+          pytest -q
+          tests/test_mcp_contract.py
+          tests/test_mcp_integration.py
+          tests/test_mcp_real_process.py
+
+      - name: Run all MCP tools against generated fixtures
+        run: |
+          python scripts/generate_fixture_corpus.py
+          python scripts/smoke_all_tools.py --summary-json artifacts/mcp-smoke-summary.json
+
+      - name: Upload MCP evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: archiv-field-trial-mcp-validation
+          path: artifacts/mcp-smoke-summary.json
+          if-no-files-found: error
+          retention-days: 30
+
+  cowork-regression:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: pinned
+            ref: 744af9744eb648ac3c2ff4dfd8d52e1979960a1c
+          - label: current-main
+            ref: main
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out Archiv
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install Archiv
+        run: python -m pip install --upgrade pip && python -m pip install -e '.[dev]'
+
+      - name: Check out CoWork-OS reference
+        env:
+          COWORK_REF: ${{ matrix.ref }}
+        run: |
+          git init /tmp/cowork-os
+          git -C /tmp/cowork-os remote add origin https://github.com/CoWork-OS/CoWork-OS.git
+          git -C /tmp/cowork-os fetch --depth=1 origin "${COWORK_REF}"
+          git -C /tmp/cowork-os checkout --detach FETCH_HEAD
+          git -C /tmp/cowork-os rev-parse HEAD | tee cowork-resolved-sha.txt
+
+      - name: Validate CoWork compatibility surface
+        run: |
+          python scripts/validate_cowork.py \
+            --cowork-root /tmp/cowork-os \
+            --output "cowork-${{ matrix.label }}-validation.json"
+          python scripts/generate_fixture_corpus.py
+          python scripts/smoke_all_tools.py \
+            --summary-json "cowork-${{ matrix.label }}-smoke.json"
+
+      - name: Upload CoWork evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: archiv-field-trial-cowork-${{ matrix.label }}
+          path: |
+            cowork-resolved-sha.txt
+            cowork-${{ matrix.label }}-validation.json
+            cowork-${{ matrix.label }}-smoke.json
+          if-no-files-found: error
+          retention-days: 30
+
+  dependency-review:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check dependency-graph availability
+        id: dependency-graph
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          status="$({ curl --silent --output /tmp/archiv-sbom.json --write-out '%{http_code}' \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/dependency-graph/sbom"; } || true)"
+          if [[ "${status}" == "200" ]]; then
+            echo "enabled=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "enabled=false" >> "${GITHUB_OUTPUT}"
+            echo "::warning::Dependency graph is disabled; owner action remains pending."
+          fi
+
+      - name: Check out repository
+        if: steps.dependency-graph.outputs.enabled == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Review dependency changes
+        if: steps.dependency-graph.outputs.enabled == 'true'
+        uses: actions/dependency-review-action@1e966ba708e4b64bb0c9bfb7abb5a232840be16a
+        with:
+          vulnerability-check: true
+          license-check: false
+          fail-on-severity: high
+          comment-summary-in-pr: never
+          show-patched-versions: true
+
+      - name: Record pending owner setting
+        if: steps.dependency-graph.outputs.enabled != 'true'
+        run: echo "Dependency review is externally blocked until the owner enables Dependency graph."
