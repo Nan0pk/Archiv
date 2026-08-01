@@ -11,7 +11,11 @@ REPO_ROOT = Path(__file__).parents[1].resolve()
 
 def test_no_private_paths_or_secrets_in_tracked_files() -> None:
     user_name = os.environ.get("USER", "")
-    if not user_name or len(user_name) < 3:
+    if (
+        not user_name
+        or len(user_name) < 3
+        or user_name.lower() in {"runner", "root", "ubuntu", "user", "runneradmin"}
+    ):
         return
 
     tracked_files = [

@@ -56,7 +56,7 @@ while (($#)); do
   esac
 done
 
-if [[ ! -f /etc/fedora-release ]]; then
+if [[ ! -f /etc/fedora-release && ${SKIP_SYSTEM_PACKAGES} -eq 0 && -z "${ARCHIV_ALLOW_NON_FEDORA:-}" ]]; then
   echo "Archiv alpha installation currently supports Fedora only." >&2
   exit 1
 fi

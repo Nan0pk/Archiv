@@ -59,9 +59,12 @@ def get_platform_info() -> dict[str, object]:
 
 def run_cmd(args: list[str], *, cwd: Path | None = None) -> tuple[int, float, str, str]:
     start_time = time.monotonic()
+    env = dict(os.environ)
+    env["PYTHONPATH"] = f"{REPO_ROOT / 'src'}:{env.get('PYTHONPATH', '')}"
     result = subprocess.run(
         args,
         cwd=cwd or REPO_ROOT,
+        env=env,
         capture_output=True,
         text=True,
     )
