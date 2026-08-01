@@ -47,9 +47,7 @@ def test_manifest_matches_generated_bytes(corpus: Path) -> None:
     for entry in entries:
         relative_path = cast(str, entry["path"])
         content = (corpus / relative_path).read_bytes()
-        if "malformed" not in relative_path and relative_path.endswith(
-            (".docx", ".xlsx", ".pptx")
-        ):
+        if "malformed" not in relative_path and relative_path.endswith((".docx", ".xlsx", ".pptx")):
             assert is_zipfile(corpus / relative_path)
             continue
         assert len(content) == entry["bytes"]
