@@ -9,7 +9,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import cast
 
-from field_trial.common import BenchmarkError, DEFAULT_BENCHMARK
+from field_trial.common import DEFAULT_BENCHMARK, BenchmarkError
 from field_trial.runner import run_private_trial, run_public_trial
 
 
