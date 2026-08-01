@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from typing import Any, cast
+
 from docx.oxml.ns import qn
 
-from archiv.reports.generator import _build_document
+from archiv.reports.generator import _build_document  # pyright: ignore[reportPrivateUsage]
 
 
 def test_source_appendix_uses_page_break_before_without_blank_break_paragraph() -> None:
@@ -16,6 +18,8 @@ def test_source_appendix_uses_page_break_before_without_blank_break_paragraph() 
     appendix = next(
         paragraph for paragraph in document.paragraphs if paragraph.text == "Source Appendix"
     )
+    paragraph_format = cast(Any, appendix.paragraph_format)
+    document_element = cast(Any, document.element)
 
-    assert appendix.paragraph_format.page_break_before is True
-    assert list(document.element.iter(qn("w:br"))) == []
+    assert paragraph_format.page_break_before is True
+    assert list(document_element.iter(qn("w:br"))) == []
