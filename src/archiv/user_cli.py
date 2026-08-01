@@ -56,15 +56,11 @@ def _add_sources(
     active = source
     try:
         for active in candidates:
-            results.append(
-                ingest_file(active, home=home, rebuild_derived=rebuild_derived)
-            )
+            results.append(ingest_file(active, home=home, rebuild_derived=rebuild_derived))
     except (OSError, RuntimeError, ValueError) as error:
         if results:
             rebuild_search_index(home=home)
-        raise RuntimeError(
-            f"{active}: {type(error).__name__}: {error}"
-        ) from error
+        raise RuntimeError(f"{active}: {type(error).__name__}: {error}") from error
     return results, rebuild_search_index(home=home), skipped
 
 
@@ -131,9 +127,7 @@ def _status_payload(home: Path | None) -> dict[str, object]:
     if task_root.is_dir():
         for result_path in sorted(task_root.glob("*/result.json")):
             try:
-                result = TaskRunResult.model_validate_json(
-                    result_path.read_text(encoding="utf-8")
-                )
+                result = TaskRunResult.model_validate_json(result_path.read_text(encoding="utf-8"))
             except (OSError, ValueError) as error:
                 errors.append(f"task result {result_path.parent.name}: {error}")
                 continue
@@ -252,9 +246,7 @@ def register_user_commands(app: typer.Typer) -> tuple[Callable[..., None], ...]:
         typer.echo(f"Found {len(results)} verified match(es)")
         for number, result in enumerate(results, start=1):
             citation = result.citation
-            typer.echo(
-                f"{number}. {citation.source_name} — {_locator_text(citation.locator)}"
-            )
+            typer.echo(f"{number}. {citation.source_name} — {_locator_text(citation.locator)}")
             typer.echo(f"   {_excerpt(result.text)}")
 
     @app.command("report")
@@ -351,8 +343,7 @@ def register_user_commands(app: typer.Typer) -> tuple[Callable[..., None], ...]:
         )
         if index["available"]:
             typer.echo(
-                f"Search index: {index['documents']} document(s), "
-                f"{index['passages']} passage(s)"
+                f"Search index: {index['documents']} document(s), {index['passages']} passage(s)"
             )
         else:
             typer.echo("Search index: not built")
