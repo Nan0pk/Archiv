@@ -99,23 +99,26 @@ jobs:
       - name: Install Archiv
         run: python -m pip install --upgrade pip && python -m pip install -e '.[dev]'
 
-      - name: Run MCP contract and process tests
-        run: >-
-          pytest -q
-          tests/test_mcp_contract.py
-          tests/test_mcp_integration.py
-          tests/test_mcp_real_process.py
-
-      - name: Run all MCP tools against generated fixtures
+      - name: Test in-memory and real stdio MCP transports
         run: |
-          python scripts/generate_fixture_corpus.py
-          python scripts/smoke_all_tools.py --summary-json artifacts/mcp-smoke-summary.json
+          mkdir -p mcp-artifacts
+          pytest -q tests/test_mcp_tools.py tests/test_mcp_protocol.py \
+            --junitxml=mcp-artifacts/pytest.xml
+
+      - name: Build synthetic MCP run evidence
+        run: python scripts/build_mcp_validation_artifacts.py --output-dir mcp-artifacts
 
       - name: Upload MCP evidence
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: archiv-field-trial-mcp-validation
-          path: artifacts/mcp-smoke-summary.json
+          path: |
+            mcp-artifacts/pytest.xml
+            mcp-artifacts/summary.json
+            mcp-artifacts/archiv-home/runs/mcp/**/*.json
+            mcp-artifacts/archiv-home/outputs/mcp/*.docx
+            mcp-artifacts/archiv-home/outputs/mcp/*.json
           if-no-files-found: error
           retention-days: 30
 
@@ -126,8 +129,10 @@ jobs:
         include:
           - label: pinned
             ref: 744af9744eb648ac3c2ff4dfd8d52e1979960a1c
+            fixed_sha: true
           - label: current-main
-            ref: main
+            ref: refs/heads/main
+            fixed_sha: false
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -145,33 +150,64 @@ jobs:
       - name: Install Archiv
         run: python -m pip install --upgrade pip && python -m pip install -e '.[dev]'
 
-      - name: Check out CoWork-OS reference
+      - name: Resolve CoWork-OS reference
+        id: cowork
         env:
           COWORK_REF: ${{ matrix.ref }}
+          COWORK_FIXED_SHA: ${{ matrix.fixed_sha }}
         run: |
-          git init /tmp/cowork-os
-          git -C /tmp/cowork-os remote add origin https://github.com/CoWork-OS/CoWork-OS.git
-          git -C /tmp/cowork-os fetch --depth=1 origin "${COWORK_REF}"
-          git -C /tmp/cowork-os checkout --detach FETCH_HEAD
-          git -C /tmp/cowork-os rev-parse HEAD | tee cowork-resolved-sha.txt
+          COWORK_CHECKOUT="/tmp/cowork-os"
+          mkdir -p cowork-artifacts
+          git init "${COWORK_CHECKOUT}"
+          git -C "${COWORK_CHECKOUT}" remote add origin https://github.com/CoWork-OS/CoWork-OS.git
+
+          if [[ "${COWORK_FIXED_SHA}" == "true" ]]; then
+            git -C "${COWORK_CHECKOUT}" -c protocol.version=2 fetch \
+              --no-tags --filter=blob:none --no-recurse-submodules --depth=1 \
+              origin refs/heads/main:refs/remotes/origin/main
+            if ! git -C "${COWORK_CHECKOUT}" cat-file -e "${COWORK_REF}^{commit}"; then
+              echo "::warning::Pinned CoWork-OS commit ${COWORK_REF} is unavailable from the public repository."
+              echo "available=false" >> "${GITHUB_OUTPUT}"
+              printf 'requested_ref=%s\navailable=false\n' "${COWORK_REF}" \
+                > "cowork-artifacts/${{ matrix.label }}-availability.txt"
+              exit 0
+            fi
+            RESOLVED_REF="${COWORK_REF}"
+          else
+            git -C "${COWORK_CHECKOUT}" -c protocol.version=2 fetch \
+              --no-tags --filter=blob:none --no-recurse-submodules --depth=1 \
+              origin "${COWORK_REF}"
+            RESOLVED_REF="FETCH_HEAD"
+          fi
+
+          git -C "${COWORK_CHECKOUT}" checkout --detach "${RESOLVED_REF}"
+          RESOLVED_SHA="$(git -C "${COWORK_CHECKOUT}" rev-parse HEAD)"
+          echo "available=true" >> "${GITHUB_OUTPUT}"
+          echo "checkout=${COWORK_CHECKOUT}" >> "${GITHUB_OUTPUT}"
+          printf 'requested_ref=%s\nresolved_sha=%s\navailable=true\n' \
+            "${COWORK_REF}" "${RESOLVED_SHA}" \
+            > "cowork-artifacts/${{ matrix.label }}-availability.txt"
+          printf '%s\n' "${RESOLVED_SHA}" \
+            > "cowork-artifacts/${{ matrix.label }}-resolved-sha.txt"
 
       - name: Validate CoWork compatibility surface
+        if: steps.cowork.outputs.available == 'true'
+        env:
+          COWORK_CHECKOUT: ${{ steps.cowork.outputs.checkout }}
         run: |
           python scripts/validate_cowork.py \
-            --cowork-root /tmp/cowork-os \
-            --output "cowork-${{ matrix.label }}-validation.json"
+            --cowork-root "${COWORK_CHECKOUT}" \
+            --output "cowork-artifacts/${{ matrix.label }}-validation.json"
           python scripts/generate_fixture_corpus.py
           python scripts/smoke_all_tools.py \
-            --summary-json "cowork-${{ matrix.label }}-smoke.json"
+            --summary-json "cowork-artifacts/${{ matrix.label }}-smoke.json"
 
       - name: Upload CoWork evidence
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: archiv-field-trial-cowork-${{ matrix.label }}
-          path: |
-            cowork-resolved-sha.txt
-            cowork-${{ matrix.label }}-validation.json
-            cowork-${{ matrix.label }}-smoke.json
+          path: cowork-artifacts/*
           if-no-files-found: error
           retention-days: 30
 
