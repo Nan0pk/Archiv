@@ -40,9 +40,7 @@ def _emit_restore(result: RestoreResult, *, json_output: bool) -> None:
     typer.echo(f"Restored: {result.target_root}")
     typer.echo(f"Entries: {result.restored_entries}")
     message = (
-        "Search index rebuilt: yes"
-        if result.search_index_rebuilt
-        else "Search index rebuilt: no"
+        "Search index rebuilt: yes" if result.search_index_rebuilt else "Search index rebuilt: no"
     )
     typer.echo(message)
 
