@@ -14,7 +14,6 @@ from pathlib import Path
 from typing import Any, cast
 
 from archiv.search import search_documents
-
 from field_trial.common import (
     PRIVATE_KEYS,
     PRIVATE_ROOT,
@@ -28,8 +27,8 @@ from field_trial.scoring import (
     _aggregate,
     _copy_report_artifacts,
     _defects,
-    _failure_category,
     _facts_exist,
+    _failure_category,
     _json_output,
     _markdown,
     _normalized_text,
@@ -278,7 +277,10 @@ def _private_questions(path: Path | None) -> list[str]:
             "What evidence is missing for key claims?",
             "Which source is most recent?",
             "What should be independently verified?",
-            "Prepare a cited current-status report separating completed work, unresolved decisions, risks, contradictions and missing evidence.",
+            (
+                "Prepare a cited current-status report separating completed work, unresolved "
+                "decisions, risks, contradictions and missing evidence."
+            ),
         ]
     value = json.loads(path.read_text(encoding="utf-8"))
     if isinstance(value, list) and all(isinstance(item, str) and item.strip() for item in value):
@@ -385,7 +387,10 @@ def run_private_trial(args: argparse.Namespace) -> dict[str, object]:
         "external_blocker": (
             None
             if model_available
-            else "No explicit suitable local model endpoint was supplied; answer-quality testing was not attempted."
+            else (
+                "No explicit suitable local model endpoint was supplied; "
+                "answer-quality testing was not attempted."
+            )
         ),
         "privacy": {
             "filenames_included": False,
