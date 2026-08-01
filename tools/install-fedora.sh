@@ -56,7 +56,7 @@ while (($#)); do
   esac
 done
 
-if [[ ! -f /etc/fedora-release ]]; then
+if [[ ! -f /etc/fedora-release && ${SKIP_SYSTEM_PACKAGES} -eq 0 && -z "${ARCHIV_ALLOW_NON_FEDORA:-}" ]]; then
   echo "Archiv alpha installation currently supports Fedora only." >&2
   exit 1
 fi
@@ -106,10 +106,21 @@ if [[ -n "$SOURCE_DIR" ]]; then
   fi
 else
   TEMP_DIR=$(mktemp -d -t archiv-install-XXXXXX)
+  CURL_AUTH=()
+  if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+    CURL_AUTH=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
+  elif [[ -n "${GH_TOKEN:-}" ]]; then
+    CURL_AUTH=(-H "Authorization: Bearer ${GH_TOKEN}")
+  elif command -v gh >/dev/null && gh auth token >/dev/null 2>&1; then
+    CURL_AUTH=(-H "Authorization: Bearer $(gh auth token)")
+  fi
+
   API_URL="https://api.github.com/repos/${REPOSITORY}/commits/${REF}"
   SOURCE_COMMIT=$(
     curl --fail --silent --show-error --location \
+      --header "User-Agent: Archiv-Installer" \
       --header "Accept: application/vnd.github+json" \
+      "${CURL_AUTH[@]}" \
       "$API_URL" \
       | python3 -c 'import json,sys; print(json.load(sys.stdin)["sha"])'
   )
@@ -120,6 +131,8 @@ else
 
   ARCHIVE="$TEMP_DIR/archiv-source.tar.gz"
   curl --fail --show-error --location --retry 3 \
+    --header "User-Agent: Archiv-Installer" \
+    "${CURL_AUTH[@]}" \
     "https://github.com/${REPOSITORY}/archive/${SOURCE_COMMIT}.tar.gz" \
     --output "$ARCHIVE"
   SOURCE_ARCHIVE_SHA256=$(sha256sum "$ARCHIVE" | awk '{print $1}')

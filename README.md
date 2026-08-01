@@ -14,32 +14,36 @@ Archiv will combine five deliberately separate layers:
 
 Models propose. Validators decide whether work succeeded.
 
-## Current implemented slice
+## Current implemented slice (0.1.0a3)
 
-Archiv includes a human-facing Fedora command surface, a deterministic environment doctor, the exact source-marker execution contract, immutable local ingestion, validated SQLite full-text retrieval, independently verified cited DOCX generation, a bounded local MCP server, and a pinned replaceable CoWork-OS workbench integration:
+Archiv includes a human-facing Fedora command surface, a deterministic environment doctor, grounded natural-language QA over local evidence (`archiv ask`), model-assisted cited report generation (`archiv report`), loopback-only OpenAI-compatible model configuration (`archiv model`), immutable local ingestion, validated SQLite full-text retrieval, independently verified cited DOCX generation, a bounded local MCP server, and a pinned replaceable CoWork-OS workbench integration:
 
 ```bash
-mkdir -p /tmp/archiv-probe
-printf 'ARCHIV-DEMO-MARKER\n' > /tmp/archiv-probe/source.txt
-archiv source-marker --workspace /tmp/archiv-probe
-
-archiv ingest ./document.docx
-archiv rebuild-derived <sha256>
-archiv rebuild-search-index
-archiv search "exact phrase"
-archiv generate-report "exact phrase" ./evidence-report.docx
-archiv verify-report ./evidence-report.docx ./evidence-report.docx.manifest.json
-
-ARCHIV_HOME=/absolute/path/to/archiv-home archiv-mcp
+archiv add /path/to/documents
+archiv model configure --endpoint http://127.0.0.1:11434 --model llama3
+archiv ask "What decisions were made and what remains unresolved?"
+archiv report "Prepare a cited status report with risks and next actions"
+archiv status
 ```
 
-The source-marker command creates exactly `outputs/probe.txt`, preserves `source.txt`, validates both outside the executor, and records machine-readable evidence under `runs/<run-id>/`.
+The core grounded-question journey runs deterministically over locally ingested Archiv evidence:
 
-Ingestion validates supported inputs, stores one read-only content-addressed original, records imports and processing in SQLite, and creates rebuildable normalized data outside the repository. Full-text search builds a separate replaceable FTS5 database and returns citations that are revalidated against the original and normalized hashes before use. Cited DOCX reports include exact source evidence and are reopened, structurally validated, and optionally rendered through LibreOffice before success is reported.
+```text
+user question
+→ deterministic retrieval
+→ citation validation
+→ bounded evidence package
+→ configured local model
+→ proposed answer
+→ citation parsing and validation
+→ independent verification
+→ readable answer with sources
+→ durable run evidence
+```
 
-The MCP server exposes only six task-specific local tools over stdio. It has no shell, URL fetcher, arbitrary output path, or network tool. Every MCP call records append-only request and terminal result evidence under `ARCHIV_HOME/runs/mcp/`.
+Ingestion validates supported inputs, stores read-only content-addressed originals, records processing in SQLite, and builds rebuildable search indexes. Full-text search builds a separate replaceable FTS5 database and returns citations that are revalidated against the original and normalized hashes before use. Cited DOCX reports include exact source evidence and are reopened, structurally validated, and rendered through LibreOffice before success is reported.
 
-CoWork-OS is integrated only as a replaceable MCP workbench. Archiv pins one reviewed upstream revision, tests that revision with CoWork's actual stdio transport, tests current upstream separately without adopting it, and keeps canonical storage, execution status, citations, validation, and evidence outside the workbench.
+The model interface is strictly bound to explicit loopback-only HTTP endpoints (e.g., Ollama, LocalAI, vLLM). Remote hosts, cloud fallbacks, HTTPS tunnels, and credential embedding are strictly rejected.
 
 ## Quick start
 
@@ -57,12 +61,13 @@ Use the everyday interface:
 archiv sample-vault "$HOME/Archiv-Sample"
 archiv add "$HOME/Archiv-Sample"
 archiv find "unique fixture marker"
-archiv report "unique fixture marker"
+archiv ask "What decisions were made?"
+archiv report "Prepare a cited status report with risks and next actions"
 archiv status
 archiv backup "$HOME/archiv-backup.zip"
 ```
 
-`add` refreshes search automatically. `find` shows readable verified citations. `report` constructs the bounded task request internally, creates a cited DOCX, and independently verifies it before reporting success. Add `--json` when machine-readable output is required.
+`add` refreshes search automatically. `find` shows readable verified citations. `ask` runs grounded QA over local evidence. `report` creates a cited DOCX report for a user objective and independently verifies it before reporting success. Add `--json` when machine-readable output is required.
 
 Development setup:
 
@@ -73,8 +78,6 @@ python -m pip install -e '.[dev]'
 archiv doctor
 pytest
 ```
-
-A Codespaces configuration is included for a reproducible public development environment.
 
 ## Public-repository safety
 
@@ -95,7 +98,6 @@ Do not commit private documents, personal data, credentials, model keys, product
 - [GitHub governance and CI trust boundary](docs/github-governance.md)
 - [Definition of done](docs/definition-of-done.md)
 - [Roadmap](docs/roadmap.md)
-- [Harness evidence baseline](research/baseline/harness-verdict.md)
 
 ## Licensing
 

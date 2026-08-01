@@ -12,7 +12,6 @@ from pydantic import BaseModel
 
 from archiv.archive import ArchiveResult, RestoreResult, create_archive, restore_archive
 from archiv.contracts import RunStatus
-from archiv.model_adapter import ModelConfig, load_model_config, save_model_config
 from archiv.sample_vault import create_sample_vault
 from archiv.tasks import run_task, verify_task_run
 
@@ -46,48 +45,7 @@ def _emit_restore(result: RestoreResult, *, json_output: bool) -> None:
 
 
 def register_alpha_commands(app: typer.Typer) -> tuple[Callable[..., None], ...]:
-    """Attach task, model, sample-vault, and durable-state commands."""
-
-    model_app = typer.Typer(help="Configure an explicit local model adapter.")
-    app.add_typer(model_app, name="model")
-
-    @model_app.command("show")
-    def model_show(
-        home: Annotated[Path | None, typer.Option("--home", file_okay=False)] = None,
-    ) -> None:
-        """Show the exact persisted model policy; absence means disabled."""
-
-        _emit(load_model_config(home))
-
-    @model_app.command("disable")
-    def model_disable(
-        home: Annotated[Path | None, typer.Option("--home", file_okay=False)] = None,
-    ) -> None:
-        """Persist an explicit no-model policy."""
-
-        config = ModelConfig()
-        path = save_model_config(config, home)
-        _emit({"config_path": str(path), "config": config.model_dump(mode="json")})
-
-    @model_app.command("configure-loopback")
-    def model_configure_loopback(
-        endpoint: Annotated[str, typer.Option("--endpoint")],
-        model: Annotated[str, typer.Option("--model")],
-        api_key_env: Annotated[str | None, typer.Option("--api-key-env")] = None,
-        timeout_seconds: Annotated[int, typer.Option("--timeout", min=1, max=3600)] = 120,
-        home: Annotated[Path | None, typer.Option("--home", file_okay=False)] = None,
-    ) -> None:
-        """Configure a loopback-only OpenAI-compatible endpoint without fallback."""
-
-        config = ModelConfig(
-            adapter="openai-compatible-loopback",
-            endpoint=endpoint,
-            model=model,
-            api_key_env=api_key_env,
-            timeout_seconds=timeout_seconds,
-        )
-        path = save_model_config(config, home)
-        _emit({"config_path": str(path), "config": config.model_dump(mode="json")})
+    """Attach sample-vault, run, verify, backup, export, and restore commands."""
 
     @app.command("sample-vault")
     def sample_vault_command(
@@ -174,9 +132,6 @@ def register_alpha_commands(app: typer.Typer) -> tuple[Callable[..., None], ...]
         )
 
     return (
-        model_show,
-        model_disable,
-        model_configure_loopback,
         sample_vault_command,
         run_command,
         verify_command,

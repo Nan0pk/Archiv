@@ -25,7 +25,7 @@ fi
 "${ARCHIV[@]}" status --home "$HOME_DIR" | tee "$EVIDENCE_DIR/status.txt"
 "${ARCHIV[@]}" find "unique fixture marker" --home "$HOME_DIR" \
   | tee "$EVIDENCE_DIR/find.txt"
-"${ARCHIV[@]}" report "unique fixture marker" --home "$HOME_DIR" \
+"${ARCHIV[@]}" report "unique fixture marker" --deterministic --home "$HOME_DIR" \
   --title "User-ready alpha evidence report" \
   | tee "$EVIDENCE_DIR/report.txt"
 

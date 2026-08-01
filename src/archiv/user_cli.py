@@ -13,6 +13,7 @@ import typer
 from pydantic import BaseModel
 
 from archiv.contracts import IngestionResult, RunStatus, SearchIndexBuild
+from archiv.grounding import run_grounded_ask
 from archiv.ingestion import ingest_file
 from archiv.ingestion.formats import SUPPORTED_SUFFIXES
 from archiv.model_adapter import load_model_config
@@ -54,13 +55,13 @@ def _add_sources(
 
     results: list[IngestionResult] = []
     active = source
-    try:
-        for active in candidates:
+    for active in candidates:
+        try:
             results.append(ingest_file(active, home=home, rebuild_derived=rebuild_derived))
-    except (OSError, RuntimeError, ValueError) as error:
-        if results:
-            rebuild_search_index(home=home)
-        raise RuntimeError(f"{active}: {type(error).__name__}: {error}") from error
+        except (OSError, RuntimeError, ValueError):
+            skipped += 1
+    if not results:
+        raise ValueError("no supported valid files could be ingested")
     return results, rebuild_search_index(home=home), skipped
 
 
@@ -134,6 +135,17 @@ def _status_payload(home: Path | None) -> dict[str, object]:
             status = str(result.status)
             run_counts[status] = run_counts.get(status, 0) + 1
 
+    ask_counts: dict[str, int] = {}
+    ask_root = layout.runs / "ask"
+    if ask_root.is_dir():
+        for result_path in sorted(ask_root.glob("*/result.json")):
+            try:
+                ask_data = json.loads(result_path.read_text(encoding="utf-8"))
+                status = str(ask_data.get("status", "unknown"))
+                ask_counts[status] = ask_counts.get(status, 0) + 1
+            except (OSError, ValueError):
+                continue
+
     model = load_model_config(layout.root)
     return {
         "schema_version": "1",
@@ -150,6 +162,7 @@ def _status_payload(home: Path | None) -> dict[str, object]:
             "passages": index_segments,
         },
         "reports": run_counts,
+        "ask_runs": ask_counts,
         "model": model.model_dump(mode="json"),
         "errors": errors,
     }
@@ -249,9 +262,87 @@ def register_user_commands(app: typer.Typer) -> tuple[Callable[..., None], ...]:
             typer.echo(f"{number}. {citation.source_name} — {_locator_text(citation.locator)}")
             typer.echo(f"   {_excerpt(result.text)}")
 
+    @app.command("ask")
+    def ask_command(
+        query: Annotated[
+            str, typer.Argument(help="Natural-language question over ingested evidence.")
+        ],
+        home: Annotated[
+            Path | None,
+            typer.Option("--home", file_okay=False, resolve_path=True),
+        ] = None,
+        max_sources: Annotated[int, typer.Option("--max-sources", min=1, max=50)] = 8,
+        json_output: Annotated[bool, typer.Option("--json")] = False,
+    ) -> None:
+        """Ask a grounded question over ingested evidence and receive a citation-verified answer."""
+
+        try:
+            run_result = run_grounded_ask(query, home=home, max_sources=max_sources)
+        except (OSError, RuntimeError, ValueError) as error:
+            typer.echo(f"ask failed: {type(error).__name__}: {error}", err=True)
+            raise typer.Exit(code=1) from error
+
+        if json_output:
+            _emit_json(run_result)
+            if run_result.status is not RunStatus.SUCCEEDED:
+                raise typer.Exit(code=1)
+            return
+
+        if run_result.status is not RunStatus.SUCCEEDED:
+            err_msg = "; ".join(run_result.errors) or str(run_result.status)
+            typer.echo(f"ask failed: {err_msg}", err=True)
+            raise typer.Exit(code=1)
+
+        typer.echo(f"Question: {query}")
+        typer.echo("")
+        grounded = run_result.grounded_response
+        if grounded:
+            paragraphs = cast(list[dict[str, object]], grounded.get("paragraphs", []))
+            claims = cast(list[dict[str, object]], grounded.get("claims", []))
+            if paragraphs:
+                typer.echo("Answer:")
+                for p in paragraphs:
+                    cids_raw = cast(list[str], p.get("citation_ids", []))
+                    cids = ", ".join(cids_raw)
+                    cid_str = f" [{cids}]" if cids else ""
+                    typer.echo(f"  {p.get('text', '')}{cid_str}")
+                typer.echo("")
+
+            if claims:
+                typer.echo("Key Claims:")
+                for c in claims:
+                    cids_raw = cast(list[str], c.get("citation_ids", []))
+                    cids = ", ".join(cids_raw)
+                    cid_str = f" [{cids}]" if cids else ""
+                    typer.echo(f"  - {c.get('statement', '')}{cid_str}")
+                typer.echo("")
+
+            insufficient = cast(list[str], grounded.get("insufficient_evidence", []))
+            if insufficient:
+                typer.echo("Missing / Insufficient Evidence:")
+                for item in insufficient:
+                    typer.echo(f"  - {item}")
+                typer.echo("")
+
+            contradictions = cast(list[str], grounded.get("contradictions", []))
+            if contradictions:
+                typer.echo("Contradictions Between Sources:")
+                for item in contradictions:
+                    typer.echo(f"  - {item}")
+                typer.echo("")
+
+        typer.echo("Verified Sources:")
+        for idx, citation in enumerate(run_result.retrieved_citations, start=1):
+            typer.echo(f" [{idx}] {citation.source_name} — {_locator_text(citation.locator)}")
+
+        typer.echo("")
+        model_name = run_result.model.model or run_result.model.adapter
+        typer.echo(f"Model: {run_result.model.adapter} ({model_name})")
+        typer.echo(f"Run ID: {run_result.run_id}")
+
     @app.command("report")
     def report_command(
-        query: Annotated[str, typer.Argument(help="Question or exact evidence phrase.")],
+        query: Annotated[str, typer.Argument(help="Question or real user objective.")],
         home: Annotated[
             Path | None,
             typer.Option("--home", file_okay=False, resolve_path=True),
@@ -259,12 +350,21 @@ def register_user_commands(app: typer.Typer) -> tuple[Callable[..., None], ...]:
         title: Annotated[str, typer.Option("--title")] = "Archiv Evidence Report",
         max_sources: Annotated[int, typer.Option("--max-sources", min=1, max=50)] = 8,
         render: Annotated[bool, typer.Option("--render/--no-render")] = True,
+        deterministic: Annotated[
+            bool,
+            typer.Option(
+                "--deterministic", help="Bypass model synthesis and generate excerpt report."
+            ),
+        ] = False,
         json_output: Annotated[bool, typer.Option("--json")] = False,
     ) -> None:
-        """Create and independently verify a cited DOCX without a task file."""
+        """Create and independently verify a cited DOCX report for a user objective."""
 
         layout = ArchivLayout.resolve(home)
         layout.ensure()
+
+        model_policy = "disabled" if deterministic else "configured-local"
+
         task_path = layout.temporary / f"user-report-{uuid4().hex}.json"
         task_path.write_text(
             json.dumps(
@@ -276,7 +376,7 @@ def register_user_commands(app: typer.Typer) -> tuple[Callable[..., None], ...]:
                     "output_name": "archiv-report.docx",
                     "max_sources": max_sources,
                     "render": render,
-                    "model_policy": "disabled",
+                    "model_policy": model_policy,
                 },
                 indent=2,
                 sort_keys=True,
@@ -295,7 +395,7 @@ def register_user_commands(app: typer.Typer) -> tuple[Callable[..., None], ...]:
             if result.output_path is None:
                 raise RuntimeError("successful report run did not record an output path")
         except (OSError, RuntimeError, ValueError) as error:
-            typer.echo(f"report failed: {type(error).__name__}: {error}", err=True)
+            typer.echo(f"report failed: {error}", err=True)
             raise typer.Exit(code=1) from error
         finally:
             task_path.unlink(missing_ok=True)
@@ -332,6 +432,7 @@ def register_user_commands(app: typer.Typer) -> tuple[Callable[..., None], ...]:
         ingestions = cast(dict[str, object], payload["ingestions"])
         index = cast(dict[str, object], payload["search_index"])
         reports = cast(dict[str, int], payload["reports"])
+        ask_runs = cast(dict[str, int], payload["ask_runs"])
         model = cast(dict[str, object], payload["model"])
         typer.echo(f"Archiv home: {payload['home']}")
         typer.echo(f"Documents: {payload['documents']}")
@@ -351,8 +452,12 @@ def register_user_commands(app: typer.Typer) -> tuple[Callable[..., None], ...]:
             f"Reports: {reports.get('succeeded', 0)} succeeded, "
             f"{sum(reports.values()) - reports.get('succeeded', 0)} other"
         )
+        typer.echo(
+            f"Ask runs: {ask_runs.get('succeeded', 0)} succeeded, "
+            f"{sum(ask_runs.values()) - ask_runs.get('succeeded', 0)} other"
+        )
         typer.echo(f"Model: {model['adapter']}")
         for error in cast(list[str], payload["errors"]):
             typer.echo(f"Warning: {error}", err=True)
 
-    return add_command, find_command, report_command, status_command
+    return add_command, find_command, ask_command, report_command, status_command

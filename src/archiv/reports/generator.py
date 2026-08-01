@@ -14,6 +14,7 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Pt
 
 from archiv.contracts import SearchResult
+from archiv.grounding_contracts import GroundedModelResponse
 from archiv.hashing import sha256_file
 from archiv.report_contracts import (
     REQUIRED_REPORT_SECTIONS,
@@ -35,7 +36,7 @@ def _write_manifest(path: Path, manifest: ReportManifest) -> None:
     )
 
 
-def _distinct_sources(results: list[SearchResult], *, limit: int) -> list[SearchResult]:
+def distinct_sources(results: list[SearchResult], *, limit: int) -> list[SearchResult]:
     selected: list[SearchResult] = []
     seen: set[str] = set()
     for result in results:
@@ -73,6 +74,8 @@ def _build_document(
     query: str,
     report_id: str,
     sources: list[ReportSource],
+    grounded_response: GroundedModelResponse | None = None,
+    model_identity: str = "disabled",
 ) -> Document:
     document = new_report_document(title=title, report_id=report_id)
 
@@ -88,17 +91,50 @@ def _build_document(
     _add_source_overview(document, sources)
 
     document.add_heading("Findings", level=1)
-    for source in sources:
-        document.add_heading(f"Finding {source.number}: {source.citation.source_name}", level=2)
-        paragraph = document.add_paragraph()
-        paragraph.add_run(source.excerpt)
-        citation_run = paragraph.add_run(f" [{source.number}]")
-        citation_run.bold = True
-        citation_run.font.size = Pt(9)
-        locator = document.add_paragraph()
-        locator_run = locator.add_run(f"Source location: {source.locator_text}")
-        locator_run.italic = True
-        locator_run.font.size = Pt(9)
+
+    cit_map = {f"CIT-{source.number}": f"[{source.number}]" for source in sources}
+
+    if grounded_response:
+        for g_para in grounded_response.paragraphs:
+            p = document.add_paragraph()
+            p.add_run(g_para.text)
+            for cid in g_para.citation_ids:
+                if cid in cit_map:
+                    run = p.add_run(f" {cit_map[cid]}")
+                    run.bold = True
+                    run.font.size = Pt(9)
+        for claim in grounded_response.claims:
+            p = document.add_paragraph()
+            p.add_run(claim.statement)
+            for cid in claim.citation_ids:
+                if cid in cit_map:
+                    run = p.add_run(f" {cit_map[cid]}")
+                    run.bold = True
+                    run.font.size = Pt(9)
+
+        if grounded_response.insufficient_evidence:
+            document.add_heading("Insufficient Evidence & Unresolved Aspects", level=2)
+            for item in grounded_response.insufficient_evidence:
+                p = document.add_paragraph(style="List Bullet")
+                p.add_run(item)
+
+        if grounded_response.contradictions:
+            document.add_heading("Contradictions Between Sources", level=2)
+            for item in grounded_response.contradictions:
+                p = document.add_paragraph(style="List Bullet")
+                p.add_run(item)
+    else:
+        for source in sources:
+            document.add_heading(f"Finding {source.number}: {source.citation.source_name}", level=2)
+            doc_paragraph = document.add_paragraph()
+            doc_paragraph.add_run(source.excerpt)
+            citation_run = doc_paragraph.add_run(f" [{source.number}]")
+            citation_run.bold = True
+            citation_run.font.size = Pt(9)
+            locator = document.add_paragraph()
+            locator_run = locator.add_run(f"Source location: {source.locator_text}")
+            locator_run.italic = True
+            locator_run.font.size = Pt(9)
 
     document.add_page_break()
     document.add_heading("Source Appendix", level=1)
@@ -129,6 +165,8 @@ def _build_document(
     provenance.add_run(report_id)
     provenance.add_run("\nQuery: ").bold = True
     provenance.add_run(query)
+    provenance.add_run("\nModel identity: ").bold = True
+    provenance.add_run(model_identity)
     provenance.add_run("\nGeneration policy: ").bold = True
     provenance.add_run(
         "validated citations only; no source mutation; DOCX success requires "
@@ -153,6 +191,8 @@ def generate_report(
     max_sources: int = 8,
     render: bool = False,
     evidence_dir: Path | None = None,
+    grounded_response: GroundedModelResponse | None = None,
+    model_identity: str = "disabled",
 ) -> ReportGenerationResult:
     """Search Archiv and generate a report from independently validated results."""
 
@@ -166,6 +206,8 @@ def generate_report(
         max_sources=max_sources,
         render=render,
         evidence_dir=evidence_dir,
+        grounded_response=grounded_response,
+        model_identity=model_identity,
     )
 
 
@@ -179,12 +221,14 @@ def generate_report_from_results(
     max_sources: int = 8,
     render: bool = False,
     evidence_dir: Path | None = None,
+    grounded_response: GroundedModelResponse | None = None,
+    model_identity: str = "disabled",
 ) -> ReportGenerationResult:
     """Generate a report from validated results and return only evidence-backed status."""
 
     if max_sources < 1 or max_sources > 50:
         raise ValueError("max_sources must be between 1 and 50")
-    selected = _distinct_sources(results, limit=max_sources)
+    selected = distinct_sources(results, limit=max_sources)
     if not selected:
         raise ValueError("report generation requires at least one search result")
 
@@ -221,6 +265,8 @@ def generate_report_from_results(
         query=query,
         report_id=report_id,
         sources=sources,
+        grounded_response=grounded_response,
+        model_identity=model_identity,
     )
     document.save(str(temporary))
     os.replace(temporary, output)
@@ -236,20 +282,20 @@ def generate_report_from_results(
         sources=sources,
     )
     _write_manifest(manifest_path, manifest)
-    validation = validate_report(
+    report_validation = validate_report(
         output,
         manifest_path,
         home=home,
         render=render,
         evidence_dir=evidence_dir,
     )
-    write_validation(validation_path, validation)
-    status = ReportStatus.SUCCEEDED if validation.valid else ReportStatus.FAILED
+    write_validation(validation_path, report_validation)
+    status = ReportStatus.SUCCEEDED if report_validation.valid else ReportStatus.FAILED
     return ReportGenerationResult(
         status=status,
         report_id=report_id,
         docx_path=str(output),
         manifest_path=str(manifest_path),
         validation_path=str(validation_path),
-        validation=validation,
+        validation=report_validation,
     )

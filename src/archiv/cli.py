@@ -17,12 +17,14 @@ from archiv.doctor import doctor_report
 from archiv.executor.source_marker import run_source_marker
 from archiv.ingestion import ingest_file, rebuild_derived
 from archiv.ingestion.formats import SUPPORTED_SUFFIXES
+from archiv.model_cli import model_app
 from archiv.report_cli import register_report_commands
 from archiv.search import rebuild_search_index, search_documents
 from archiv.user_cli import register_user_commands
 
 app = typer.Typer(no_args_is_help=True, help="Archiv local-first knowledge-work core.")
 console = Console()
+app.add_typer(model_app, name="model")
 register_report_commands(app)
 register_alpha_commands(app)
 register_user_commands(app)
