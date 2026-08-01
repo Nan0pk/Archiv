@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
