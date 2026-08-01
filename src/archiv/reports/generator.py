@@ -136,8 +136,8 @@ def _build_document(
             locator_run.italic = True
             locator_run.font.size = Pt(9)
 
-    document.add_page_break()
-    document.add_heading("Source Appendix", level=1)
+    appendix_heading = document.add_heading("Source Appendix", level=1)
+    appendix_heading.paragraph_format.page_break_before = True
     for source in sources:
         document.add_heading(f"[{source.number}] {source.citation.source_name}", level=2)
         details = (

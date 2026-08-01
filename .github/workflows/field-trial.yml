@@ -1,0 +1,250 @@
+name: Field trial
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "benchmarks/field_trial/**"
+      - "docs/field-trial*.md"
+      - "scripts/run_field_trial.py"
+      - "scripts/field_trial/**"
+      - "tests/test_field_trial.py"
+      - "tests/test_report_pagination.py"
+      - "src/**"
+      - "pyproject.toml"
+      - ".github/workflows/field-trial.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: archiv-field-trial-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  public-benchmark:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install document renderers
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            fonts-liberation \
+            libreoffice-writer \
+            poppler-utils
+
+      - name: Install Archiv
+        run: python -m pip install --upgrade pip && python -m pip install -e '.[dev]'
+
+      - name: Compile Python sources
+        run: python -m compileall src tests scripts
+
+      - name: Run deterministic public field trial
+        run: >-
+          python scripts/run_field_trial.py
+          --public
+          --output field-trial-artifacts
+          --render-report
+
+      - name: Publish measured summary
+        if: always()
+        run: |
+          if test -f field-trial-artifacts/public-report.md; then
+            cat field-trial-artifacts/public-report.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload public-safe field-trial evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: archiv-public-field-trial
+          path: |
+            field-trial-artifacts/*.json
+            field-trial-artifacts/*.md
+            field-trial-artifacts/*.docx
+            field-trial-artifacts/*.pdf
+            field-trial-artifacts/*.png
+          if-no-files-found: error
+          retention-days: 30
+
+  mcp-validation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install Archiv
+        run: python -m pip install --upgrade pip && python -m pip install -e '.[dev]'
+
+      - name: Test in-memory and real stdio MCP transports
+        run: |
+          mkdir -p mcp-artifacts
+          pytest -q tests/test_mcp_tools.py tests/test_mcp_protocol.py \
+            --junitxml=mcp-artifacts/pytest.xml
+
+      - name: Build synthetic MCP run evidence
+        run: python scripts/build_mcp_validation_artifacts.py --output-dir mcp-artifacts
+
+      - name: Upload MCP evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: archiv-field-trial-mcp-validation
+          path: |
+            mcp-artifacts/pytest.xml
+            mcp-artifacts/summary.json
+            mcp-artifacts/archiv-home/runs/mcp/**/*.json
+            mcp-artifacts/archiv-home/outputs/mcp/*.docx
+            mcp-artifacts/archiv-home/outputs/mcp/*.json
+          if-no-files-found: error
+          retention-days: 30
+
+  cowork-regression:
+    name: ${{ matrix.mode }} CoWork compatibility
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - mode: pinned
+            revision: 8c01f1271722a5bb5b8d68ee76b8c68353a564bd
+          - mode: current
+            revision: main
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out Archiv
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Check out CoWork source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: CoWork-OS/CoWork-OS
+          ref: ${{ matrix.revision }}
+          path: cowork-source
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Set up Node
+        uses: actions/setup-node@e51e5fe84fc33b4c73ebe40526b2694712b5b858
+        with:
+          node-version: "24"
+
+      - name: Install Archiv
+        run: python -m pip install --upgrade pip && python -m pip install -e '.[dev]'
+
+      - name: Verify pinned or current CoWork source contract
+        run: |
+          mkdir -p cowork-artifacts/${{ matrix.mode }}
+          python scripts/check_cowork_source_contract.py \
+            --cowork-root cowork-source \
+            --lock integrations/cowork-os/upstream-lock.json \
+            --mode ${{ matrix.mode }} \
+            --output cowork-artifacts/${{ matrix.mode }}/source-contract.json
+          git -C cowork-source rev-parse HEAD \
+            > cowork-artifacts/${{ matrix.mode }}/cowork-revision.txt
+
+      - name: Prepare deterministic Archiv evidence
+        run: |
+          python scripts/prepare_cowork_regression.py \
+            --mode ${{ matrix.mode }} \
+            --output-dir cowork-artifacts/${{ matrix.mode }}
+
+      - name: Exercise Archiv with CoWork's actual stdio transport
+        run: |
+          npx --yes tsx@4.20.6 scripts/cowork_stdio_probe.ts \
+            --cowork-root cowork-source \
+            --mode ${{ matrix.mode }} \
+            --output-dir cowork-artifacts/${{ matrix.mode }}
+
+      - name: Verify evidence outside CoWork
+        run: |
+          python scripts/verify_cowork_regression.py \
+            --mode ${{ matrix.mode }} \
+            --output-dir cowork-artifacts/${{ matrix.mode }} \
+            --source-report cowork-artifacts/${{ matrix.mode }}/source-contract.json \
+            --lock integrations/cowork-os/upstream-lock.json
+
+      - name: Upload CoWork evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: archiv-field-trial-cowork-${{ matrix.mode }}
+          path: |
+            cowork-artifacts/${{ matrix.mode }}/*.json
+            cowork-artifacts/${{ matrix.mode }}/*.txt
+            cowork-artifacts/${{ matrix.mode }}/exact-source-marker/runs/**/*.json
+            cowork-artifacts/${{ matrix.mode }}/archiv-home/runs/mcp/**/*.json
+            cowork-artifacts/${{ matrix.mode }}/archiv-home/outputs/mcp/cowork-${{ matrix.mode }}-valid.docx
+            cowork-artifacts/${{ matrix.mode }}/archiv-home/outputs/mcp/cowork-${{ matrix.mode }}-valid.docx.*.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  dependency-review:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check dependency-graph availability
+        id: dependency-graph
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          status="$({ curl --silent --output /tmp/archiv-sbom.json --write-out '%{http_code}' \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/dependency-graph/sbom"; } || true)"
+          if [[ "${status}" == "200" ]]; then
+            echo "enabled=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "enabled=false" >> "${GITHUB_OUTPUT}"
+            echo "::warning::Dependency graph is disabled; owner action remains pending."
+          fi
+
+      - name: Check out repository
+        if: steps.dependency-graph.outputs.enabled == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Review dependency changes
+        if: steps.dependency-graph.outputs.enabled == 'true'
+        uses: actions/dependency-review-action@1e966ba708e4b64bb0c9bfb7abb5a232840be16a
+        with:
+          vulnerability-check: true
+          license-check: false
+          fail-on-severity: high
+          comment-summary-in-pr: never
+          show-patched-versions: true
+
+      - name: Record pending owner setting
+        if: steps.dependency-graph.outputs.enabled != 'true'
+        run: echo "Dependency review is externally blocked until the owner enables Dependency graph."

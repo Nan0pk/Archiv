@@ -41,7 +41,7 @@ archiv status
 
 `archiv ask` performs grounded natural-language QA over local evidence. It sends bounded evidence passages to the configured local model, strictly validates citation identifiers, detects missing evidence and contradictions, and stores durable run evidence under `ARCHIV_HOME/runs/ask/`.
 
-`archiv report` creates a cited DOCX report for a real user objective. When a model is configured, it uses citation-constrained synthesis; when model is disabled or `--deterministic` is passed, it uses deterministic excerpt report generation. Every report is reopened, structurally validated, and rendered before reporting success.
+Normal `archiv report "objective"` requires the explicitly configured local model. Model-disabled, unreachable, timeout, and invalid-response conditions fail closed without a hidden fallback. Deterministic excerpt reporting occurs only when `--deterministic` is explicitly passed. Every successful report is reopened, structurally validated, and rendered before success is reported.
 
 `archiv status` shows the Archiv home, document and ingestion counts, index state, ask and report run outcomes, and explicit model configuration without changing state.
 

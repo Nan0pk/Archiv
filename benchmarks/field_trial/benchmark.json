@@ -1,0 +1,709 @@
+{
+  "benchmark_id": "archiv-real-work-field-trial-v1",
+  "corpus": [
+    {
+      "content": "# Approved architecture\n\nStatus: approved and current.\n\nProject status evidence.\n\nArchitecture approval date: 2026-07-18.\n\nThe approved search backend is SQLite FTS5.\n\nA vector database is explicitly deferred until after the field trial.\n\nAll model endpoints must be explicit loopback-only endpoints.\n",
+      "filename": "architecture-approved.md",
+      "format": "markdown",
+      "id": "ARCH-CURRENT"
+    },
+    {
+      "content": "Architecture draft\nStatus: superseded on 2026-07-18 by the approved architecture.\nProject status evidence.\nDraft review date: 2026-07-10.\nThe draft proposes a hosted vector database.\nThis draft is not the approved position.\n",
+      "filename": "architecture-draft.txt",
+      "format": "text",
+      "id": "ARCH-DRAFT"
+    },
+    {
+      "filename": "decision-log.docx",
+      "format": "docx",
+      "id": "DECISIONS",
+      "paragraphs": [
+        "Decision log",
+        "Project status evidence.",
+        "The team decided that source files remain unchanged and canonical originals are content-addressed.",
+        "The backup retention period remains unresolved.",
+        "Maya owns the retention decision due 2026-08-15."
+      ]
+    },
+    {
+      "content": "# Release policy\n\nStatus: approved and current.\n\nRelease approval requires two reviewers.\n\nThe policy was approved on 2026-07-20.\n",
+      "filename": "release-policy.md",
+      "format": "markdown",
+      "id": "POLICY"
+    },
+    {
+      "content": "# Meeting notes\n\nRelease approval requires one reviewer for an alpha release, according to a participant.\n\nThis statement was discussed but was not approved.\n\nThe meeting occurred on 2026-07-19.\n",
+      "filename": "meeting-notes.md",
+      "format": "markdown",
+      "id": "MEETING"
+    },
+    {
+      "filename": "risk-register.xlsx",
+      "format": "xlsx",
+      "id": "RISKS",
+      "rows": [
+        [
+          "Risk",
+          "Likelihood",
+          "Impact",
+          "Mitigation"
+        ],
+        [
+          "stale version confusion",
+          4,
+          5,
+          "show current and superseded status"
+        ],
+        [
+          "unsupported model claims",
+          3,
+          5,
+          "validate claims against expected facts"
+        ],
+        [
+          "source navigation friction",
+          5,
+          3,
+          "provide a safe source-opening path"
+        ],
+        [
+          "retrieval risks",
+          4,
+          5,
+          "measure recall and ranks before tuning"
+        ]
+      ]
+    },
+    {
+      "filename": "trial-schedule.pdf",
+      "format": "pdf",
+      "id": "SCHEDULE",
+      "paragraphs": [
+        "Archiv field-trial schedule",
+        "Project status evidence.",
+        "Pilot start date: August 5, 2026.",
+        "Evidence review date: August 12, 2026.",
+        "Trial budget: USD 4,800.",
+        "Target corpus size: 80 files."
+      ]
+    },
+    {
+      "filename": "status-deck.pptx",
+      "format": "pptx",
+      "id": "STATUS",
+      "slides": [
+        {
+          "bullets": [
+            "Completed work: ingestion, full-text search, and citation hash validation.",
+            "Unfinished work: safe source opening and incremental folder synchronization.",
+            "The alpha validation suite reports 69 passing tests."
+          ],
+          "title": "Project status evidence"
+        },
+        {
+          "bullets": [
+            "Natural-language retrieval has not yet been field tested.",
+            "Source navigation remains manual."
+          ],
+          "title": "Current limitations"
+        }
+      ]
+    },
+    {
+      "content": "# Backup summary\n\nDaily backup verification is required.\n",
+      "filename": "backup-summary.md",
+      "format": "markdown",
+      "id": "DUP-A"
+    },
+    {
+      "content": "Backup summary copy\nDaily backup verification is required.\n",
+      "filename": "backup-summary-copy.txt",
+      "format": "text",
+      "id": "DUP-B"
+    },
+    {
+      "content": "# Library retrieval notes\n\nThe phrase retrieval risks refers here to delayed retrieval of borrowed library books.\n\nThe index is a shelf-location index, and the source is a printed catalogue.\n\nThis document is unrelated to Archiv software.\n",
+      "filename": "library-retrieval-notes.md",
+      "format": "markdown",
+      "id": "IRRELEVANT"
+    },
+    {
+      "content": "# Orchid reference\n\nOrchid code: OX-17.\n\nThe code is only used for the synthetic field-trial fixture.\n",
+      "filename": "orchid-reference.md",
+      "format": "markdown",
+      "id": "SOURCE-SPECIFIC"
+    }
+  ],
+  "description": "Synthetic public-safe evidence corpus for Archiv 0.1.0a3 baseline measurement.",
+  "evidence_limit": 8,
+  "questions": [
+    {
+      "acceptable_insufficient_evidence": false,
+      "category": "single-document fact retrieval",
+      "complete_requires_multiple_sources": false,
+      "expected_contradiction": false,
+      "expected_sources": [
+        "SCHEDULE"
+      ],
+      "forbidden_claims": [],
+      "id": "Q01",
+      "question": "Pilot start date",
+      "required_facts": [
+        {
+          "id": "pilot-date",
+          "terms": [
+            "August 5, 2026"
+          ]
+        }
+      ]
+    },
+    {
+      "acceptable_insufficient_evidence": false,
+      "category": "cross-document synthesis",
+      "complete_requires_multiple_sources": true,
+      "expected_contradiction": false,
+      "expected_sources": [
+        "ARCH-CURRENT",
+        "DECISIONS"
+      ],
+      "forbidden_claims": [
+        "hosted vector database is approved"
+      ],
+      "id": "Q02",
+      "question": "What decisions have been made about the project architecture?",
+      "required_facts": [
+        {
+          "id": "backend",
+          "terms": [
+            "SQLite FTS5"
+          ]
+        },
+        {
+          "id": "immutability",
+          "terms": [
+            "source files remain unchanged",
+            "content-addressed"
+          ]
+        }
+      ]
+    },
+    {
+      "acceptable_insufficient_evidence": false,
+      "category": "current-versus-superseded version selection",
+      "complete_requires_multiple_sources": true,
+      "expected_contradiction": true,
+      "expected_sources": [
+        "ARCH-CURRENT",
+        "ARCH-DRAFT"
+      ],
+      "forbidden_claims": [
+        "hosted vector database is the approved architecture"
+      ],
+      "id": "Q03",
+      "question": "vector database",
+      "required_facts": [
+        {
+          "id": "deferred",
+          "terms": [
+            "deferred",
+            "after the field trial"
+          ]
+        },
+        {
+          "id": "superseded",
+          "terms": [
+            "superseded"
+          ]
+        }
+      ]
+    },
+    {
+      "acceptable_insufficient_evidence": false,
+      "category": "single-document fact retrieval",
+      "complete_requires_multiple_sources": false,
+      "expected_contradiction": false,
+      "expected_sources": [
+        "ARCH-CURRENT"
+      ],
+      "forbidden_claims": [],
+      "id": "Q04",
+      "question": "approved search backend",
+      "required_facts": [
+        {
+          "id": "backend",
+          "terms": [
+            "SQLite FTS5"
+          ]
+        }
+      ]
+    },
+    {
+      "acceptable_insufficient_evidence": false,
+      "category": "contradictory evidence",
+      "complete_requires_multiple_sources": true,
+      "expected_contradiction": true,
+      "expected_sources": [
+        "POLICY",
+        "MEETING"
+      ],
+      "forbidden_claims": [],
+      "id": "Q05",
+      "question": "Release approval requires",
+      "required_facts": [
+        {
+          "id": "policy",
+          "terms": [
+            "two reviewers"
+          ]
+        },
+        {
+          "id": "meeting",
+          "terms": [
+            "one reviewer"
+          ]
+        }
+      ]
+    },
+    {
+      "acceptable_insufficient_evidence": false,
+      "category": "unresolved actions",
+      "complete_requires_multiple_sources": false,
+      "expected_contradiction": false,
+      "expected_sources": [
+        "DECISIONS"
+      ],
+      "forbidden_claims": [
+        "retention is 30 days"
+      ],
+      "id": "Q06",
+      "question": "backup retention period",
+      "required_facts": [
+        {
+          "id": "unresolved",
+          "terms": [
+            "remains unresolved"
+          ]
+        },
+        {
+          "id": "owner",
+          "terms": [
+            "Maya",
+            "2026-08-15"
+          ]
+        }
+      ]
+    },
+    {
+      "acceptable_insufficient_evidence": false,
+      "category": "dates",
+      "complete_requires_multiple_sources": false,
+      "expected_contradiction": false,
+      "expected_sources": [
+        "SCHEDULE"
+      ],
+      "forbidden_claims": [],
+      "id": "Q07",
+      "question": "Evidence review date",
+      "required_facts": [
+        {
+          "id": "review-date",
+          "terms": [
+            "August 12, 2026"
+          ]
+        }
+      ]
+    },
+    {
+      "acceptable_insufficient_evidence": false,
+      "category": "numeric values",
+      "complete_requires_multiple_sources": false,
+      "expected_contradiction": false,
+      "expected_sources": [
+        "SCHEDULE"
+      ],
+      "forbidden_claims": [],
+      "id": "Q08",
+      "question": "Trial budget",
+      "required_facts": [
+        {
+          "id": "budget",
+          "terms": [
+            "USD 4,800"
+          ]
+        }
+      ]
+    },
+    {
+      "acceptable_insufficient_evidence": false,
+      "category": "duplicate evidence",
+      "complete_requires_multiple_sources": false,
+      "expected_contradiction": false,
+      "expected_sources": [
+        "DUP-A",
+        "DUP-B"
+      ],
+      "forbidden_claims": [],
+      "id": "Q09",
+      "question": "Daily backup verification",
+      "required_facts": [
+        {
+          "id": "daily-backup",
+          "terms": [
+            "Daily backup verification is required"
+          ]
+        }
+      ]
+    },
+    {
+      "acceptable_insufficient_evidence": false,
+      "category": "irrelevant lexical overlap",
+      "complete_requires_multiple_sources": false,
+      "expected_contradiction": false,
+      "expected_sources": [
+        "RISKS"
+      ],
+      "forbidden_claims": [
+        "borrowed library books"
+      ],
+      "id": "Q10",
+      "question": "retrieval risks",
+      "required_facts": [
+        {
+          "id": "retrieval-risk",
+          "terms": [
+            "measure recall",
+            "ranks"
+          ]
+        }
+      ]
+    },
+    {
+      "acceptable_insufficient_evidence": true,
+      "category": "missing evidence",
+      "complete_requires_multiple_sources": false,
+      "expected_contradiction": false,
+      "expected_sources": [],
+      "forbidden_claims": [
+        "rotated every 90 days"
+      ],
+      "id": "Q11",
+      "question": "encryption key rotation policy",
+      "required_facts": []
+    },
+    {
+      "acceptable_insufficient_evidence": false,
+      "category": "broad project-status synthesis",
+      "complete_requires_multiple_sources": true,
+      "expected_contradiction": true,
+      "expected_sources": [
+        "STATUS",
+        "DECISIONS",
+        "RISKS",
+        "POLICY",
+        "MEETING"
+      ],
+      "forbidden_claims": [],
+      "id": "Q12",
+      "question": "Prepare a current project status separating completed work, unresolved decisions, risks, contradictions and missing evidence.",
+      "required_facts": [
+        {
+          "id": "complete",
+          "terms": [
+            "ingestion",
+            "citation hash validation"
+          ]
+        },
+        {
+          "id": "unresolved",
+          "terms": [
+            "backup retention"
+          ]
+        },
+        {
+          "id": "risk",
+          "terms": [
+            "source navigation friction"
+          ]
+        },
+        {
+          "id": "contradiction",
+          "terms": [
+            "two reviewers",
+            "one reviewer"
+          ]
+        }
+      ]
+    },
+    {
+      "acceptable_insufficient_evidence": false,
+      "category": "risk identification",
+      "complete_requires_multiple_sources": false,
+      "expected_contradiction": false,
+      "expected_sources": [
+        "RISKS"
+      ],
+      "forbidden_claims": [],
+      "id": "Q13",
+      "question": "source navigation friction",
+      "required_facts": [
+        {
+          "id": "navigation-risk",
+          "terms": [
+            "provide a safe source-opening path"
+          ]
+        }
+      ]
+    },
+    {
+      "acceptable_insufficient_evidence": true,
+      "category": "unsupported-assumption detection",
+      "complete_requires_multiple_sources": false,
+      "expected_contradiction": false,
+      "expected_sources": [],
+      "forbidden_claims": [
+        "Maya approved the budget"
+      ],
+      "id": "Q14",
+      "question": "Who approved the trial budget?",
+      "required_facts": []
+    },
+    {
+      "acceptable_insufficient_evidence": false,
+      "category": "source-specific request",
+      "complete_requires_multiple_sources": false,
+      "expected_contradiction": false,
+      "expected_sources": [
+        "SOURCE-SPECIFIC"
+      ],
+      "forbidden_claims": [],
+      "id": "Q15",
+      "question": "Orchid code",
+      "required_facts": [
+        {
+          "id": "orchid",
+          "terms": [
+            "OX-17"
+          ]
+        }
+      ]
+    },
+    {
+      "acceptable_insufficient_evidence": false,
+      "category": "question requiring several citations",
+      "complete_requires_multiple_sources": true,
+      "expected_contradiction": true,
+      "expected_sources": [
+        "ARCH-CURRENT",
+        "ARCH-DRAFT",
+        "DECISIONS",
+        "SCHEDULE",
+        "STATUS"
+      ],
+      "forbidden_claims": [],
+      "id": "Q16",
+      "question": "Project status evidence",
+      "required_facts": [
+        {
+          "id": "backend",
+          "terms": [
+            "SQLite FTS5"
+          ]
+        },
+        {
+          "id": "retention",
+          "terms": [
+            "backup retention"
+          ]
+        },
+        {
+          "id": "pilot",
+          "terms": [
+            "August 5, 2026"
+          ]
+        },
+        {
+          "id": "unfinished",
+          "terms": [
+            "source opening",
+            "incremental folder synchronization"
+          ]
+        }
+      ]
+    },
+    {
+      "acceptable_insufficient_evidence": false,
+      "category": "completed-work synthesis",
+      "complete_requires_multiple_sources": false,
+      "expected_contradiction": false,
+      "expected_sources": [
+        "STATUS"
+      ],
+      "forbidden_claims": [],
+      "id": "Q17",
+      "question": "What work is described as complete?",
+      "required_facts": [
+        {
+          "id": "complete",
+          "terms": [
+            "ingestion",
+            "full-text search",
+            "citation hash validation"
+          ]
+        }
+      ]
+    },
+    {
+      "acceptable_insufficient_evidence": false,
+      "category": "unfinished-work synthesis",
+      "complete_requires_multiple_sources": true,
+      "expected_contradiction": false,
+      "expected_sources": [
+        "STATUS",
+        "DECISIONS"
+      ],
+      "forbidden_claims": [],
+      "id": "Q18",
+      "question": "What remains unfinished?",
+      "required_facts": [
+        {
+          "id": "features",
+          "terms": [
+            "source opening",
+            "incremental folder synchronization"
+          ]
+        },
+        {
+          "id": "decision",
+          "terms": [
+            "backup retention"
+          ]
+        }
+      ]
+    },
+    {
+      "acceptable_insufficient_evidence": false,
+      "category": "latest approved position",
+      "complete_requires_multiple_sources": true,
+      "expected_contradiction": false,
+      "expected_sources": [
+        "ARCH-CURRENT",
+        "POLICY"
+      ],
+      "forbidden_claims": [],
+      "id": "Q19",
+      "question": "Status: approved and current",
+      "required_facts": [
+        {
+          "id": "architecture-current",
+          "terms": [
+            "approved architecture"
+          ]
+        },
+        {
+          "id": "policy-current",
+          "terms": [
+            "two reviewers"
+          ]
+        }
+      ]
+    },
+    {
+      "acceptable_insufficient_evidence": false,
+      "category": "dates and deadlines",
+      "complete_requires_multiple_sources": true,
+      "expected_contradiction": false,
+      "expected_sources": [
+        "SCHEDULE",
+        "DECISIONS",
+        "ARCH-CURRENT",
+        "POLICY"
+      ],
+      "forbidden_claims": [],
+      "id": "Q20",
+      "question": "What dates or deadlines are established?",
+      "required_facts": [
+        {
+          "id": "pilot",
+          "terms": [
+            "August 5, 2026"
+          ]
+        },
+        {
+          "id": "review",
+          "terms": [
+            "August 12, 2026"
+          ]
+        },
+        {
+          "id": "retention-due",
+          "terms": [
+            "2026-08-15"
+          ]
+        },
+        {
+          "id": "architecture-date",
+          "terms": [
+            "2026-07-18"
+          ]
+        }
+      ]
+    },
+    {
+      "acceptable_insufficient_evidence": false,
+      "category": "numerical claims",
+      "complete_requires_multiple_sources": true,
+      "expected_contradiction": false,
+      "expected_sources": [
+        "SCHEDULE",
+        "RISKS",
+        "STATUS"
+      ],
+      "forbidden_claims": [],
+      "id": "Q21",
+      "question": "Which numerical claims appear, and where?",
+      "required_facts": [
+        {
+          "id": "budget",
+          "terms": [
+            "4,800"
+          ]
+        },
+        {
+          "id": "files",
+          "terms": [
+            "80 files"
+          ]
+        },
+        {
+          "id": "tests",
+          "terms": [
+            "69 passing tests"
+          ]
+        }
+      ]
+    },
+    {
+      "acceptable_insufficient_evidence": false,
+      "category": "model and endpoint policy",
+      "complete_requires_multiple_sources": false,
+      "expected_contradiction": false,
+      "expected_sources": [
+        "ARCH-CURRENT"
+      ],
+      "forbidden_claims": [
+        "cloud endpoint is allowed"
+      ],
+      "id": "Q22",
+      "question": "loopback-only endpoints",
+      "required_facts": [
+        {
+          "id": "loopback",
+          "terms": [
+            "explicit loopback-only endpoints"
+          ]
+        }
+      ]
+    }
+  ],
+  "schema_version": "1"
+}
