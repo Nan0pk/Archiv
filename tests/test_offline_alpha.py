@@ -61,7 +61,7 @@ def test_directory_ingest_run_verify_backup_restore(tmp_path: Path) -> None:
     assert json.loads(verified.output)["valid"] is True
 
     backup_path = tmp_path / "archiv-backup.zip"
-    backed_up = runner.invoke(app, ["backup", str(backup_path), "--home", str(home)])
+    backed_up = runner.invoke(app, ["backup", str(backup_path), "--home", str(home), "--json"])
     assert backed_up.exit_code == 0, backed_up.output
     with ZipFile(backup_path) as archive:
         names = set(archive.namelist())
@@ -70,7 +70,7 @@ def test_directory_ingest_run_verify_backup_restore(tmp_path: Path) -> None:
         assert not any(name.startswith("temporary/") for name in names)
 
     restored_home = tmp_path / "restored"
-    restored = runner.invoke(app, ["restore", str(backup_path), "--home", str(restored_home)])
+    restored = runner.invoke(app, ["restore", str(backup_path), "--home", str(restored_home), "--json"])
     assert restored.exit_code == 0, restored.output
     assert json.loads(restored.output)["search_index_rebuilt"] is True
 
