@@ -335,6 +335,9 @@ def main() -> int:
         report["system_time_seconds"] = round(usage.ru_stime, 4)
         report["steps"] = steps
 
+        if any(s.get("status") == "failed" for s in steps):
+            report["overall_status"] = "failed"
+
     formatted = json.dumps(report, indent=2, sort_keys=True)
     if arguments.output:
         arguments.output.write_text(formatted + "\n", encoding="utf-8")
