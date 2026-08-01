@@ -8,6 +8,8 @@ on:
       - "tests/fixtures/representative-corpus/**"
       - "tests/tasks/**"
       - "tools/setup-fedora.sh"
+      - "tools/install-fedora.sh"
+      - "tools/run-user-acceptance.sh"
       - "tools/run-offline-acceptance.sh"
       - "tools/build-release.py"
       - ".github/offline-alpha.Dockerfile"
@@ -19,6 +21,8 @@ on:
       - "tests/fixtures/representative-corpus/**"
       - "tests/tasks/**"
       - "tools/setup-fedora.sh"
+      - "tools/install-fedora.sh"
+      - "tools/run-user-acceptance.sh"
       - "tools/run-offline-acceptance.sh"
       - "tools/build-release.py"
       - ".github/offline-alpha.Dockerfile"
@@ -80,7 +84,7 @@ jobs:
       - name: Build the Fedora installation image
         run: docker build --file .github/offline-alpha.Dockerfile --tag archiv-offline-alpha .
 
-      - name: Run the complete workflow with no network
+      - name: Run the machine and human workflows with no network
         run: |
           install -d -m 0777 offline-alpha-artifacts
           docker run --rm \
@@ -90,6 +94,14 @@ jobs:
             --volume "$PWD/offline-alpha-artifacts:/evidence" \
             archiv-offline-alpha \
             /opt/archiv-source /evidence
+          docker run --rm \
+            --network none \
+            --cap-drop ALL \
+            --entrypoint /bin/bash \
+            --volume "$PWD/offline-alpha-artifacts:/evidence" \
+            archiv-offline-alpha \
+            /opt/archiv-source/tools/run-user-acceptance.sh \
+            /opt/archiv-source /evidence/user-journey
 
       - name: Upload offline acceptance evidence
         if: always()
