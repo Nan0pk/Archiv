@@ -168,10 +168,13 @@ def _fake_response(benchmark: Mapping[str, object], prompt: str) -> str:
         }
         return json.dumps(payload)
     facts = cast(Sequence[Mapping[str, object]], question["required_facts"])
-    text = "; ".join(
-        " ".join(str(term) for term in cast(Sequence[object], fact["terms"]))
-        for fact in facts
-    ) or "The requested information is supported."
+    text = (
+        "; ".join(
+            " ".join(str(term) for term in cast(Sequence[object], fact["terms"]))
+            for fact in facts
+        )
+        or "The requested information is supported."
+    )
     payload = {
         "schema_version": SCHEMA_VERSION,
         "paragraphs": [
@@ -217,9 +220,9 @@ class FakeModelServer:
                     self.send_error(503, "synthetic failure")
                     return
                 content = "not-json" if mode == "invalid" else _fake_response(benchmark, prompt)
-                encoded = json.dumps(
-                    {"choices": [{"message": {"content": content}}]}
-                ).encode("utf-8")
+                encoded = json.dumps({"choices": [{"message": {"content": content}}]}).encode(
+                    "utf-8"
+                )
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(encoded)))
