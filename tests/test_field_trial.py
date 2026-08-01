@@ -157,9 +157,7 @@ def test_contradiction_scoring_requires_acknowledgement() -> None:
 
 
 def test_retrieval_recall_calculation() -> None:
-    metrics = FIELD_TRIAL.calculate_retrieval_metrics(
-        ["A", "B"], ["B", "X", "A"], evidence_limit=3
-    )
+    metrics = FIELD_TRIAL.calculate_retrieval_metrics(["A", "B"], ["B", "X", "A"], evidence_limit=3)
     assert metrics["recall_at_evidence_limit"] == 1.0
     assert metrics["expected_source_ranks"] == {"A": 3, "B": 1}
     assert metrics["irrelevant_source_count"] == 1
