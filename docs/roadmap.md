@@ -63,3 +63,12 @@
 - strict grounding protocol schema and validation;
 - host acceptance script (`scripts/accept_host.py`);
 - atomic versioned upgrade preserving durable home data and older versions.
+
+## First real-work field trial
+
+- deterministic public-safe multi-format benchmark;
+- at least 20 evidence-grounding questions;
+- retrieval, citation, completeness, honesty, latency, and usability measurements;
+- explicitly opted-in private local mode with sanitized aggregate output;
+- one evidence-derived `0.1.0a4` issue after the measured dominant failure is known;
+- no speculative `0.1.0a4` implementation during baseline collection.
