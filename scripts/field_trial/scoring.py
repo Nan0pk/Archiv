@@ -12,6 +12,11 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import cast
 
+NAVIGATION_OBSERVED = (
+    "Citations expose source names and locators but no bounded "
+    "source-location command."
+)
+
 
 def run_command(command: Sequence[str]) -> dict[str, object]:
     started = time.monotonic()
@@ -179,9 +184,7 @@ def _failure_category(
     return None
 
 
-def _copy_report_artifacts(
-    payload: Mapping[str, object], home: Path, output: Path
-) -> list[str]:
+def _copy_report_artifacts(payload: Mapping[str, object], home: Path, output: Path) -> list[str]:
     del payload
     copied: list[str] = []
     for suffix in (".docx", ".pdf"):
@@ -282,10 +285,7 @@ def _defects(aggregate: Mapping[str, object]) -> list[dict[str, object]]:
     defects.append(
         {
             "category": "source navigation friction",
-            "observed": (
-                "Citations expose source names and locators but no bounded "
-                "source-location command."
-            ),
+            "observed": NAVIGATION_OBSERVED,
             "expected": "A user can move from a citation to its source and native location.",
             "frequency": "all cited answers",
             "severity": "medium",
