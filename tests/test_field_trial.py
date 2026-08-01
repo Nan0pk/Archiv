@@ -5,7 +5,7 @@ import json
 import sys
 from argparse import Namespace
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
@@ -23,11 +23,9 @@ SPEC.loader.exec_module(FIELD_TRIAL)
 
 
 def test_benchmark_definition_is_valid_and_broad() -> None:
-    benchmark = FIELD_TRIAL.load_benchmark(BENCHMARK)
-    questions = benchmark["questions"]
-    corpus = benchmark["corpus"]
-    assert isinstance(questions, list)
-    assert isinstance(corpus, list)
+    benchmark: dict[str, object] = FIELD_TRIAL.load_benchmark(BENCHMARK)
+    questions = cast(list[dict[str, object]], benchmark["questions"])
+    corpus = cast(list[dict[str, object]], benchmark["corpus"])
     assert len(questions) >= 20
     assert {item["format"] for item in corpus} >= {
         "text",
@@ -45,11 +43,12 @@ def test_benchmark_definition_is_valid_and_broad() -> None:
 
 
 def test_public_corpus_generation_is_deterministic(tmp_path: Path) -> None:
-    benchmark = FIELD_TRIAL.load_benchmark(BENCHMARK)
+    benchmark: dict[str, object] = FIELD_TRIAL.load_benchmark(BENCHMARK)
     first = FIELD_TRIAL.generate_public_corpus(benchmark, tmp_path / "first")
     second = FIELD_TRIAL.generate_public_corpus(benchmark, tmp_path / "second")
+    corpus = cast(list[object], benchmark["corpus"])
     assert first == second
-    assert len(first) == len(benchmark["corpus"])
+    assert len(first) == len(corpus)
 
 
 def test_malformed_benchmark_rejects_unknown_source(tmp_path: Path) -> None:
@@ -114,7 +113,7 @@ def test_structural_citation_validation_rejects_malformed_and_unknown_ids() -> N
 
 
 def test_missing_evidence_scoring_rewards_honesty() -> None:
-    question = {
+    question: dict[str, object] = {
         "required_facts": [],
         "forbidden_claims": ["rotated every 90 days"],
         "acceptable_insufficient_evidence": True,
@@ -133,7 +132,7 @@ def test_missing_evidence_scoring_rewards_honesty() -> None:
 
 
 def test_contradiction_scoring_requires_acknowledgement() -> None:
-    question = {
+    question: dict[str, object] = {
         "required_facts": [],
         "forbidden_claims": [],
         "acceptable_insufficient_evidence": False,
