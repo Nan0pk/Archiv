@@ -1,0 +1,77 @@
+name: Field trial
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "benchmarks/field_trial/**"
+      - "docs/field-trial*.md"
+      - "scripts/run_field_trial.py"
+      - "tests/test_field_trial.py"
+      - "src/**"
+      - "pyproject.toml"
+      - ".github/workflows/field-trial.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: archiv-field-trial-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  public-benchmark:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install document renderers
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            fonts-liberation \
+            libreoffice-writer \
+            poppler-utils
+
+      - name: Install Archiv
+        run: python -m pip install --upgrade pip && python -m pip install -e '.[dev]'
+
+      - name: Run deterministic public field trial
+        run: >-
+          python scripts/run_field_trial.py
+          --public
+          --output field-trial-artifacts
+          --render-report
+
+      - name: Publish measured summary
+        if: always()
+        run: |
+          if test -f field-trial-artifacts/public-report.md; then
+            cat field-trial-artifacts/public-report.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload public-safe field-trial evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: archiv-public-field-trial
+          path: |
+            field-trial-artifacts/*.json
+            field-trial-artifacts/*.md
+            field-trial-artifacts/*.docx
+            field-trial-artifacts/*.pdf
+            field-trial-artifacts/*.png
+          if-no-files-found: error
+          retention-days: 30
