@@ -13,7 +13,9 @@ def test_source_appendix_uses_page_break_before_without_blank_break_paragraph() 
         sources=[],
     )
 
-    appendix = next(paragraph for paragraph in document.paragraphs if paragraph.text == "Source Appendix")
+    appendix = next(
+        paragraph for paragraph in document.paragraphs if paragraph.text == "Source Appendix"
+    )
 
     assert appendix.paragraph_format.page_break_before is True
     assert list(document.element.iter(qn("w:br"))) == []
