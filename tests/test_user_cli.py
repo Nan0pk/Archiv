@@ -90,9 +90,7 @@ def test_everyday_commands_cover_add_find_report_status_and_restore(tmp_path: Pa
     assert restored_find.exit_code == 0, restored_find.output
     assert "Found 3 verified match(es)" in restored_find.output
 
-    assert source_hashes == {
-        path.name: _sha256(path) for path in vault.iterdir() if path.is_file()
-    }
+    assert source_hashes == {path.name: _sha256(path) for path in vault.iterdir() if path.is_file()}
 
 
 def test_human_defaults_need_no_task_file_or_run_id(tmp_path: Path) -> None:
