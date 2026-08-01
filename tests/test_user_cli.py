@@ -51,6 +51,7 @@ def test_everyday_commands_cover_add_find_report_status_and_restore(tmp_path: Pa
             "--home",
             str(home),
             "--no-render",
+            "--deterministic",
             "--json",
         ],
     )
@@ -111,6 +112,7 @@ def test_human_defaults_need_no_task_file_or_run_id(tmp_path: Path) -> None:
             "--home",
             str(home),
             "--no-render",
+            "--deterministic",
         ],
     )
     assert report.exit_code == 0, report.output
@@ -118,3 +120,24 @@ def test_human_defaults_need_no_task_file_or_run_id(tmp_path: Path) -> None:
     assert "Citations: 3" in report.output
     assert "Verified: yes" in report.output
     assert not any((home / "temporary").glob("user-report-*.json"))
+
+
+def test_report_fails_closed_without_model_or_deterministic_flag(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    runner.invoke(app, ["sample-vault", str(vault)])
+    home = tmp_path / "home"
+    runner.invoke(app, ["add", str(vault), "--home", str(home)])
+
+    # Without model and without --deterministic: must fail closed and forbid hidden fallback
+    res = runner.invoke(
+        app,
+        [
+            "report",
+            "unique fixture marker",
+            "--home",
+            str(home),
+            "--no-render",
+        ],
+    )
+    assert res.exit_code != 0
+    assert "hidden fallback is forbidden" in res.output

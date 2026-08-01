@@ -218,6 +218,7 @@ def main() -> int:
                 "archiv.cli",
                 "report",
                 "unique fixture marker",
+                "--deterministic",
                 "--home",
                 str(archiv_home),
                 "--json",

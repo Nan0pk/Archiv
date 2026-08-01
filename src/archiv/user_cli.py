@@ -359,7 +359,7 @@ def register_user_commands(app: typer.Typer) -> tuple[Callable[..., None], ...]:
         layout.ensure()
         model_config = load_model_config(layout.root)
 
-        model_policy = "disabled" if (deterministic or model_config.adapter == "disabled") else "configured-local"
+        model_policy = "disabled" if deterministic else "configured-local"
 
         task_path = layout.temporary / f"user-report-{uuid4().hex}.json"
         task_path.write_text(
@@ -391,7 +391,7 @@ def register_user_commands(app: typer.Typer) -> tuple[Callable[..., None], ...]:
             if result.output_path is None:
                 raise RuntimeError("successful report run did not record an output path")
         except (OSError, RuntimeError, ValueError) as error:
-            typer.echo(f"report failed: {type(error).__name__}: {error}", err=True)
+            typer.echo(f"report failed: {error}", err=True)
             raise typer.Exit(code=1) from error
         finally:
             task_path.unlink(missing_ok=True)
