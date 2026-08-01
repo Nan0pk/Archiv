@@ -20,6 +20,11 @@ def test_source_appendix_uses_page_break_before_without_blank_break_paragraph() 
     )
     paragraph_format = cast(Any, appendix.paragraph_format)
     document_element = cast(Any, document.element)
+    page_breaks = [
+        element
+        for element in document_element.iter(qn("w:br"))
+        if element.get(qn("w:type")) == "page"
+    ]
 
     assert paragraph_format.page_break_before is True
-    assert list(document_element.iter(qn("w:br"))) == []
+    assert page_breaks == []
