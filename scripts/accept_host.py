@@ -199,6 +199,8 @@ def main() -> int:
                 "match_count": match_count,
             }
         )
+        if code != 0:
+            report["overall_status"] = "failed"
 
         # 6. Ask test (disabled model failure closed check)
         code, dur, out, err = run_cmd(
@@ -213,13 +215,16 @@ def main() -> int:
                 "--json",
             ]
         )
+        passed_ask = "disabled" in (out + err)
         steps.append(
             {
                 "step": "ask_disabled_model",
-                "status": "passed" if "disabled" in (out + err) else "failed",
+                "status": "passed" if passed_ask else "failed",
                 "duration_seconds": dur,
             }
         )
+        if not passed_ask:
+            report["overall_status"] = "failed"
 
         # 7. Deterministic Report Generation
         code, dur, out, err = run_cmd(
