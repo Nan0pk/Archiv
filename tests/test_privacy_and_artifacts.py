@@ -58,8 +58,11 @@ def test_acceptance_report_has_no_private_host_data(tmp_path: Path) -> None:
         capture_output=True,
         text=True,
     )
+    report_detail = ""
+    if report_file.is_file():
+        report_detail = f"\nREPORT:\n{report_file.read_text(encoding='utf-8')}"
     assert proc.returncode == 0, (
-        f"accept_host.py failed:\nSTDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}"
+        f"accept_host.py failed:{report_detail}\nSTDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}"
     )
 
     assert report_file.is_file()
