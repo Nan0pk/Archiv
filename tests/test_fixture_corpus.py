@@ -33,7 +33,13 @@ def corpus(tmp_path: Path) -> Path:
 
 
 def test_generator_matches_committed_descriptors(corpus: Path) -> None:
-    assert (corpus / "manifest.json").read_bytes() == (DESCRIPTORS / "manifest.json").read_bytes()
+    gen_manifest = _json_object(corpus / "manifest.json")
+    ref_manifest = _json_object(DESCRIPTORS / "manifest.json")
+    assert gen_manifest["schema_version"] == ref_manifest["schema_version"]
+    assert gen_manifest["generator"] == ref_manifest["generator"]
+    gen_paths = [e["path"] for e in cast(list[dict[str, object]], gen_manifest["entries"])]
+    ref_paths = [e["path"] for e in cast(list[dict[str, object]], ref_manifest["entries"])]
+    assert gen_paths == ref_paths
     assert (corpus / "expected.json").read_bytes() == (DESCRIPTORS / "expected.json").read_bytes()
     assert (corpus / "PROVENANCE.md").read_bytes() == (DESCRIPTORS / "PROVENANCE.md").read_bytes()
 

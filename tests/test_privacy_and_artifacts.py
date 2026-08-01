@@ -48,10 +48,13 @@ def test_no_private_paths_or_secrets_in_tracked_files() -> None:
 def test_acceptance_report_has_no_private_host_data(tmp_path: Path) -> None:
     accept_script = REPO_ROOT / "scripts" / "accept_host.py"
     report_file = tmp_path / "acceptance-report.json"
+    env = dict(os.environ)
+    env["PYTHONPATH"] = f"{REPO_ROOT / 'src'}:{env.get('PYTHONPATH', '')}"
 
     subprocess.run(
         [sys.executable, str(accept_script), "--output", str(report_file)],
         cwd=REPO_ROOT,
+        env=env,
         check=True,
     )
 
