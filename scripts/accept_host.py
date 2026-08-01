@@ -235,16 +235,21 @@ def main() -> int:
                 "report",
                 "unique fixture marker",
                 "--deterministic",
+                "--no-render",
                 "--home",
                 str(archiv_home),
                 "--json",
             ]
         )
+        report_error: str | None = None
+        if code != 0:
+            report_error = (out + err).strip()[:500]
         steps.append(
             {
                 "step": "report_generation",
                 "status": "passed" if code == 0 else "failed",
                 "duration_seconds": dur,
+                **({"error_output": report_error} if report_error else {}),
             }
         )
         if code != 0:
