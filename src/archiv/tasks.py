@@ -119,10 +119,14 @@ def run_task(task_path: Path, *, home: Path | None = None) -> TaskRunResult:
         output = output_dir / task.output_name
 
         grounded_response = None
-        model_identity = model.adapter if model.adapter == "disabled" else f"{model.adapter} ({model.model})"
+        model_identity = (
+            model.adapter if model.adapter == "disabled" else f"{model.adapter} ({model.model})"
+        )
 
         if task.model_policy == "configured-local" and model.adapter != "disabled":
-            search_results = search_documents(task.query, home=layout.root, limit=task.max_sources * 2)
+            search_results = search_documents(
+                task.query, home=layout.root, limit=task.max_sources * 2
+            )
             distinct_results = _distinct_sources(search_results, limit=task.max_sources)
             citations_map: dict[str, SearchResult] = {}
             for idx, res in enumerate(distinct_results, 1):

@@ -10,7 +10,7 @@ from uuid import uuid4
 
 from archiv.ask_contracts import AskRunResult
 from archiv.contracts import Citation, RunStatus, SearchResult
-from archiv.grounding_contracts import GroundedClaim, GroundedModelResponse, GroundedParagraph
+from archiv.grounding_contracts import GroundedModelResponse
 from archiv.model_adapter import build_model_adapter, load_model_config
 from archiv.reports.formatting import format_locator
 from archiv.search import read_source_excerpt, search_documents, validate_citation
@@ -44,11 +44,12 @@ EVIDENCE PACKAGE:
 {evidence_text}
 
 STRICT INSTRUCTIONS:
-1. Respond ONLY with a valid JSON object matching the schema below. Do not wrap in extra prose outside JSON.
-2. Use ONLY the citation identifiers listed under ALLOWED CITATION IDENTIFIERS ({allowed_list}).
-3. Do NOT invent document identifiers, hashes, locators, page numbers, timestamps, or unsupported citations.
-4. Every paragraph or claim MUST list the exact citation_ids (e.g. ["CIT-1"]) that directly support it.
-5. If evidence is missing, incomplete, or insufficient for any part of the question, put a clear statement in "insufficient_evidence".
+1. Respond ONLY with a valid JSON object matching the schema below.
+   Do not wrap in extra prose outside JSON.
+2. Use ONLY citation identifiers listed under ALLOWED CITATION IDENTIFIERS ({allowed_list}).
+3. Do NOT invent document identifiers, locators, page numbers, or unsupported citations.
+4. Every paragraph or claim MUST list exact citation_ids (e.g. ["CIT-1"]) supporting it.
+5. If evidence is missing or insufficient, state this in "insufficient_evidence".
 6. If evidence sources contradict each other, put an explanation in "contradictions".
 
 EXPECTED JSON SCHEMA:

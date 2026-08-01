@@ -6,8 +6,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
-
 REPO_ROOT = Path(__file__).parents[1].resolve()
 
 
@@ -23,6 +21,9 @@ def test_no_private_paths_or_secrets_in_tracked_files() -> None:
         and ".git" not in path.parts
         and ".venv" not in path.parts
         and "__pycache__" not in path.parts
+        and ".mypy_cache" not in path.parts
+        and ".pytest_cache" not in path.parts
+        and ".ruff_cache" not in path.parts
         and not path.name.endswith(".pyc")
         and path.name != "test_privacy_and_artifacts.py"
     ]
@@ -35,9 +36,9 @@ def test_no_private_paths_or_secrets_in_tracked_files() -> None:
         except Exception:
             continue
 
-        assert (
-            user_name not in content
-        ), f"File {file_path.relative_to(REPO_ROOT)} contains username: {user_name}"
+        assert user_name not in content, (
+            f"File {file_path.relative_to(REPO_ROOT)} contains username: {user_name}"
+        )
 
 
 def test_acceptance_report_has_no_private_host_data(tmp_path: Path) -> None:

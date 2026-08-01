@@ -8,6 +8,7 @@ recording only safe operational metadata.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
 import os
@@ -98,8 +99,6 @@ def main() -> int:
         archiv_home = tmp_dir / "archiv-home"
         backup_zip = tmp_dir / "backup.zip"
         restored_home = tmp_dir / "restored-home"
-        report_docx = tmp_dir / "status-report.docx"
-
         # 1. Version check
         code, dur, out, err = run_cmd([sys.executable, "-m", "archiv.cli", "version"])
         steps.append(
@@ -128,7 +127,9 @@ def main() -> int:
 
         # 3. Generate public safe fixtures
         gen_script = REPO_ROOT / "scripts" / "generate_fixture_corpus.py"
-        code, dur, out, err = run_cmd([sys.executable, str(gen_script), "--output", str(corpus_dir)])
+        code, dur, out, err = run_cmd(
+            [sys.executable, str(gen_script), "--output", str(corpus_dir)]
+        )
         steps.append(
             {
                 "step": "generate_fixtures",
@@ -141,7 +142,16 @@ def main() -> int:
 
         # 4. Add public fixtures
         code, dur, out, err = run_cmd(
-            [sys.executable, "-m", "archiv.cli", "add", str(corpus_dir), "--home", str(archiv_home), "--json"]
+            [
+                sys.executable,
+                "-m",
+                "archiv.cli",
+                "add",
+                str(corpus_dir),
+                "--home",
+                str(archiv_home),
+                "--json",
+            ]
         )
         added_count = 0
         if code == 0 and out.strip():
@@ -176,10 +186,8 @@ def main() -> int:
         )
         match_count = 0
         if code == 0 and out.strip():
-            try:
+            with contextlib.suppress(Exception):
                 match_count = len(json.loads(out))
-            except Exception:
-                pass
         steps.append(
             {
                 "step": "find",

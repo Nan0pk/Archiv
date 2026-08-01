@@ -161,7 +161,9 @@ def model_test_command(
         payload = {
             "schema_version": "1",
             "status": "disabled",
-            "message": "Model adapter is disabled; configure a loopback endpoint to test connectivity.",
+            "message": (
+                "Model adapter is disabled; configure a loopback endpoint to test connectivity."
+            ),
         }
         if json_output:
             _emit_json(payload)
@@ -174,7 +176,7 @@ def model_test_command(
     try:
         response = adapter.complete("Respond with the single word PONG.")
         duration_ms = round((time.monotonic() - start_time) * 1000, 2)
-        payload = {
+        success_payload: dict[str, object] = {
             "schema_version": "1",
             "status": "succeeded",
             "latency_ms": duration_ms,
@@ -183,14 +185,14 @@ def model_test_command(
             "response": response.strip(),
         }
         if json_output:
-            _emit_json(payload)
+            _emit_json(success_payload)
             return
         typer.echo(f"Connectivity test succeeded ({duration_ms} ms)")
         typer.echo(f"Endpoint: {config.endpoint}")
         typer.echo(f"Model: {config.model}")
     except Exception as error:
         duration_ms = round((time.monotonic() - start_time) * 1000, 2)
-        payload = {
+        failed_payload: dict[str, object] = {
             "schema_version": "1",
             "status": "failed",
             "latency_ms": duration_ms,
@@ -199,7 +201,7 @@ def model_test_command(
             "error": str(error),
         }
         if json_output:
-            _emit_json(payload)
+            _emit_json(failed_payload)
         else:
             typer.echo(f"Connectivity test failed ({duration_ms} ms): {error}", err=True)
         raise typer.Exit(code=1) from error

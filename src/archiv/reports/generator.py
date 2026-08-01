@@ -95,10 +95,10 @@ def _build_document(
     cit_map = {f"CIT-{source.number}": f"[{source.number}]" for source in sources}
 
     if grounded_response:
-        for paragraph in grounded_response.paragraphs:
+        for g_para in grounded_response.paragraphs:
             p = document.add_paragraph()
-            p.add_run(paragraph.text)
-            for cid in paragraph.citation_ids:
+            p.add_run(g_para.text)
+            for cid in g_para.citation_ids:
                 if cid in cit_map:
                     run = p.add_run(f" {cit_map[cid]}")
                     run.bold = True
@@ -126,9 +126,9 @@ def _build_document(
     else:
         for source in sources:
             document.add_heading(f"Finding {source.number}: {source.citation.source_name}", level=2)
-            paragraph = document.add_paragraph()
-            paragraph.add_run(source.excerpt)
-            citation_run = paragraph.add_run(f" [{source.number}]")
+            doc_paragraph = document.add_paragraph()
+            doc_paragraph.add_run(source.excerpt)
+            citation_run = doc_paragraph.add_run(f" [{source.number}]")
             citation_run.bold = True
             citation_run.font.size = Pt(9)
             locator = document.add_paragraph()
@@ -282,20 +282,20 @@ def generate_report_from_results(
         sources=sources,
     )
     _write_manifest(manifest_path, manifest)
-    validation = validate_report(
+    report_validation = validate_report(
         output,
         manifest_path,
         home=home,
         render=render,
         evidence_dir=evidence_dir,
     )
-    write_validation(validation_path, validation)
-    status = ReportStatus.SUCCEEDED if validation.valid else ReportStatus.FAILED
+    write_validation(validation_path, report_validation)
+    status = ReportStatus.SUCCEEDED if report_validation.valid else ReportStatus.FAILED
     return ReportGenerationResult(
         status=status,
         report_id=report_id,
         docx_path=str(output),
         manifest_path=str(manifest_path),
         validation_path=str(validation_path),
-        validation=validation,
+        validation=report_validation,
     )

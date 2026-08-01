@@ -5,8 +5,6 @@ import os
 import subprocess
 from pathlib import Path
 
-import pytest
-
 REPO_ROOT = Path(__file__).parents[1].resolve()
 INSTALLER = REPO_ROOT / "tools" / "install-fedora.sh"
 
@@ -24,8 +22,7 @@ def test_fedora_installer_local_source_and_upgrade(tmp_path: Path) -> None:
     old_version_dir.mkdir(parents=True, exist_ok=True)
     (old_version_dir / "marker.txt").write_text("old-version-marker", encoding="utf-8")
 
-    # Ingest sample vault into home before upgrade
-    corpus = tmp_path / "corpus"
+    # Run installer script
     subprocess.run(
         [
             "bash",
@@ -47,11 +44,15 @@ def test_fedora_installer_local_source_and_upgrade(tmp_path: Path) -> None:
     assert archiv_bin.is_file()
 
     # Verify archiv --version works without shell activation
-    ver_res = subprocess.run([str(archiv_bin), "version"], capture_output=True, text=True, check=True)
+    ver_res = subprocess.run(
+        [str(archiv_bin), "version"], capture_output=True, text=True, check=True
+    )
     assert ver_res.stdout.strip() == "0.1.0a3"
 
     # Verify doctor works
-    doc_res = subprocess.run([str(archiv_bin), "doctor", "--json"], capture_output=True, text=True, check=True)
+    doc_res = subprocess.run(
+        [str(archiv_bin), "doctor", "--json"], capture_output=True, text=True, check=True
+    )
     assert json.loads(doc_res.stdout)["status"] == "ok"
 
     # Verify install.json metadata

@@ -12,9 +12,8 @@ from uuid import uuid4
 import typer
 from pydantic import BaseModel
 
-from archiv.ask_contracts import AskRunResult
 from archiv.contracts import IngestionResult, RunStatus, SearchIndexBuild
-from archiv.grounding import GroundedModelResponse, run_grounded_ask
+from archiv.grounding import run_grounded_ask
 from archiv.ingestion import ingest_file
 from archiv.ingestion.formats import SUPPORTED_SUFFIXES
 from archiv.model_adapter import load_model_config
@@ -265,7 +264,9 @@ def register_user_commands(app: typer.Typer) -> tuple[Callable[..., None], ...]:
 
     @app.command("ask")
     def ask_command(
-        query: Annotated[str, typer.Argument(help="Natural-language question over ingested evidence.")],
+        query: Annotated[
+            str, typer.Argument(help="Natural-language question over ingested evidence.")
+        ],
         home: Annotated[
             Path | None,
             typer.Option("--home", file_okay=False, resolve_path=True),
@@ -296,12 +297,13 @@ def register_user_commands(app: typer.Typer) -> tuple[Callable[..., None], ...]:
         typer.echo("")
         grounded = run_result.grounded_response
         if grounded:
-            paragraphs = grounded.get("paragraphs", [])
-            claims = grounded.get("claims", [])
+            paragraphs = cast(list[dict[str, object]], grounded.get("paragraphs", []))
+            claims = cast(list[dict[str, object]], grounded.get("claims", []))
             if paragraphs:
                 typer.echo("Answer:")
                 for p in paragraphs:
-                    cids = ", ".join(p.get("citation_ids", []))
+                    cids_raw = cast(list[str], p.get("citation_ids", []))
+                    cids = ", ".join(cids_raw)
                     cid_str = f" [{cids}]" if cids else ""
                     typer.echo(f"  {p.get('text', '')}{cid_str}")
                 typer.echo("")
@@ -309,19 +311,20 @@ def register_user_commands(app: typer.Typer) -> tuple[Callable[..., None], ...]:
             if claims:
                 typer.echo("Key Claims:")
                 for c in claims:
-                    cids = ", ".join(c.get("citation_ids", []))
+                    cids_raw = cast(list[str], c.get("citation_ids", []))
+                    cids = ", ".join(cids_raw)
                     cid_str = f" [{cids}]" if cids else ""
                     typer.echo(f"  - {c.get('statement', '')}{cid_str}")
                 typer.echo("")
 
-            insufficient = grounded.get("insufficient_evidence", [])
+            insufficient = cast(list[str], grounded.get("insufficient_evidence", []))
             if insufficient:
                 typer.echo("Missing / Insufficient Evidence:")
                 for item in insufficient:
                     typer.echo(f"  - {item}")
                 typer.echo("")
 
-            contradictions = grounded.get("contradictions", [])
+            contradictions = cast(list[str], grounded.get("contradictions", []))
             if contradictions:
                 typer.echo("Contradictions Between Sources:")
                 for item in contradictions:
@@ -349,7 +352,9 @@ def register_user_commands(app: typer.Typer) -> tuple[Callable[..., None], ...]:
         render: Annotated[bool, typer.Option("--render/--no-render")] = True,
         deterministic: Annotated[
             bool,
-            typer.Option("--deterministic", help="Bypass model synthesis and generate excerpt report."),
+            typer.Option(
+                "--deterministic", help="Bypass model synthesis and generate excerpt report."
+            ),
         ] = False,
         json_output: Annotated[bool, typer.Option("--json")] = False,
     ) -> None:
@@ -357,7 +362,6 @@ def register_user_commands(app: typer.Typer) -> tuple[Callable[..., None], ...]:
 
         layout = ArchivLayout.resolve(home)
         layout.ensure()
-        model_config = load_model_config(layout.root)
 
         model_policy = "disabled" if deterministic else "configured-local"
 

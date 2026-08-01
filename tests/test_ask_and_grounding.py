@@ -12,7 +12,7 @@ from typer.testing import CliRunner
 
 from archiv.cli import app
 from archiv.contracts import RunStatus
-from archiv.grounding import parse_and_validate_grounded_response, run_grounded_ask
+from archiv.grounding import run_grounded_ask
 from archiv.model_adapter import ModelConfig, save_model_config
 from archiv.sample_vault import create_sample_vault
 
@@ -93,14 +93,19 @@ def test_ask_successful_grounded_answer(tmp_path: Path, mock_model_server) -> No
                             "paragraphs": [
                                 {
                                     "paragraph_id": "PAR-1",
-                                    "text": "The operational finding indicates immutable originals remain unchanged.",
+                                    "text": (
+                                        "The operational finding indicates "
+                                        "immutable originals remain unchanged."
+                                    ),
                                     "citation_ids": ["CIT-1"],
                                 }
                             ],
                             "claims": [
                                 {
                                     "claim_id": "CLM-1",
-                                    "statement": "Independent validators determine whether work succeeded.",
+                                    "statement": (
+                                        "Independent validators determine whether work succeeded."
+                                    ),
                                     "citation_ids": ["CIT-1", "CIT-2"],
                                 }
                             ],
@@ -165,9 +170,7 @@ def test_ask_malformed_json_response(tmp_path: Path, mock_model_server) -> None:
     runner.invoke(app, ["add", str(corpus), "--home", str(home)])
     _set_model(home, endpoint)
 
-    handler.response_body = {
-        "choices": [{"message": {"content": "This is plain text, not JSON."}}]
-    }
+    handler.response_body = {"choices": [{"message": {"content": "This is plain text, not JSON."}}]}
 
     run_res = run_grounded_ask("unique fixture marker", home=home)
     assert run_res.status == RunStatus.PARTIALLY_PRODUCED_BUT_INVALID
@@ -209,9 +212,7 @@ def test_ask_insufficient_evidence_and_contradictions(tmp_path: Path, mock_model
                             "schema_version": "1",
                             "paragraphs": [],
                             "claims": [],
-                            "insufficient_evidence": [
-                                "No budget information present in evidence."
-                            ],
+                            "insufficient_evidence": ["No budget information present in evidence."],
                             "contradictions": ["Operations text conflicts with decision text."],
                         }
                     )
@@ -267,9 +268,7 @@ def test_ask_cli_readable_and_json_output(tmp_path: Path, mock_model_server) -> 
     assert "All findings verified." in res_cli.output
     assert "Verified Sources:" in res_cli.output
 
-    res_json = runner.invoke(
-        app, ["ask", "unique fixture marker", "--home", str(home), "--json"]
-    )
+    res_json = runner.invoke(app, ["ask", "unique fixture marker", "--home", str(home), "--json"])
     assert res_json.exit_code == 0
     parsed = json.loads(res_json.output)
     assert parsed["status"] == "succeeded"

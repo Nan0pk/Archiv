@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import socket
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from threading import Thread
@@ -10,7 +9,7 @@ import pytest
 from typer.testing import CliRunner
 
 from archiv.cli import app
-from archiv.model_adapter import ModelConfig, load_model_config
+from archiv.model_adapter import load_model_config
 
 runner = CliRunner()
 
@@ -24,9 +23,7 @@ class MockPongHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.end_headers()
-        payload = json.dumps(
-            {"choices": [{"message": {"content": "PONG"}}]}
-        ).encode("utf-8")
+        payload = json.dumps({"choices": [{"message": {"content": "PONG"}}]}).encode("utf-8")
         self.wfile.write(payload)
 
     def log_message(self, format: str, *args: object) -> None:
