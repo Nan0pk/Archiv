@@ -1,6 +1,6 @@
-# User-ready Fedora alpha
+# User-ready Fedora alpha (0.1.0a3)
 
-Archiv `0.1.0a2` packages the verified local evidence workflow behind a small everyday command surface. Installation may download Fedora and Python packages. After installation, adding, searching, reporting, verification, backup, and restore require no GitHub access, cloud login, telemetry endpoint, or online model.
+Archiv `0.1.0a3` packages the grounded-question and cited-report local evidence workflow behind a simple everyday command surface. Installation may download Fedora and Python packages. After installation, adding, searching, asking, reporting, model configuration, verification, backup, and restore require no external network access, cloud login, telemetry endpoint, or online provider model.
 
 ## One-command Fedora installation
 
@@ -14,18 +14,12 @@ The installer:
 - installs Python, LibreOffice Writer, Poppler, and required transfer tools;
 - resolves the requested Git ref to an immutable commit SHA;
 - downloads and validates the source archive structure;
-- records the exact commit and downloaded archive SHA-256;
-- installs into a versioned virtual environment under `~/.local/share/archiv-alpha`;
+- records the exact commit and downloaded archive SHA-256 in `install.json`;
+- installs into a versioned virtual environment under `~/.local/share/archiv-alpha/versions/`;
 - exposes `archiv` and `archiv-mcp` through `~/.local/bin`;
 - runs `archiv doctor` before reporting success.
 
-No shell activation is required. Use `--ref`, `--prefix`, or `--bin-dir` to override defaults. For an auditable two-step installation, download `tools/install-fedora.sh`, inspect it, and run it locally.
-
-The compatibility command from a source checkout remains available:
-
-```bash
-bash tools/setup-fedora.sh
-```
+No shell activation is required. Upgrading installs the new version, updates symlinks atomically, and preserves existing Archiv data and older versions.
 
 ## Everyday workflow
 
@@ -35,49 +29,46 @@ Create a small public-safe vault and exercise the complete interface:
 archiv sample-vault "$HOME/Archiv-Sample"
 archiv add "$HOME/Archiv-Sample"
 archiv find "unique fixture marker"
-archiv report "unique fixture marker"
+archiv model configure --endpoint http://127.0.0.1:11434 --model llama3
+archiv ask "What decisions were made and what remains unresolved?"
+archiv report "Prepare a cited status report with risks and next actions"
 archiv status
 ```
 
-`archiv add` accepts one supported file or a directory, preserves each canonical original, creates normalized evidence, and refreshes the FTS5 search index automatically. It reports new originals, duplicates, unsupported files skipped from a directory, and indexed document and passage counts.
+`archiv add` accepts one supported file or a directory, preserves each canonical original, creates normalized evidence, and refreshes the FTS5 search index automatically.
 
 `archiv find` performs literal local full-text retrieval and prints readable source names, native locators, and excerpts. Every result is revalidated against the canonical original and normalized evidence before display.
 
-`archiv report` creates the bounded `cross-file-report` request internally. It generates a cited DOCX under the Archiv home, then independently reopens the archived request, source hashes, report, manifest, and citations. The command reports success only after verification. No YAML task file or remembered run ID is required for normal use.
+`archiv ask` performs grounded natural-language QA over local evidence. It sends bounded evidence passages to the configured local model, strictly validates citation identifiers, detects missing evidence and contradictions, and stores durable run evidence under `ARCHIV_HOME/runs/ask/`.
 
-`archiv status` shows the Archiv home, document and ingestion counts, index state, report outcomes, and explicit model policy without changing state.
+`archiv report` creates a cited DOCX report for a real user objective. When a model is configured, it uses citation-constrained synthesis; when model is disabled or `--deterministic` is passed, it uses deterministic excerpt report generation. Every report is reopened, structurally validated, and rendered before reporting success.
+
+`archiv status` shows the Archiv home, document and ingestion counts, index state, ask and report run outcomes, and explicit model configuration without changing state.
 
 All everyday commands use readable output by default. Add `--json` for automation.
 
-## Advanced and compatibility commands
+## Model configuration and safety
 
-The lower-level evidence interfaces remain available for tests, integrations, and diagnosis:
-
-```bash
-archiv doctor
-archiv ingest ./document.docx
-archiv rebuild-derived <sha256>
-archiv rebuild-search-index
-archiv search "exact phrase"
-archiv run tests/tasks/cross-file-report.yaml
-archiv verify <run-id>
-```
-
-`archiv run` still accepts the JSON subset of YAML. A run receives a unique directory under `ARCHIV_HOME/runs/tasks/`; generated files remain under `ARCHIV_HOME/outputs/tasks/<run-id>/`.
-
-## Model policy
-
-The alpha report path is deterministic and defaults to no model. Absence of a model configuration means `adapter: disabled`; Archiv never selects a provider automatically.
+Model access is strictly loopback-only (HTTP on 127.0.0.1, localhost, ::1):
 
 ```bash
-archiv model show
+archiv model status
+archiv model configure --endpoint http://127.0.0.1:11434 --model local-model-name
+archiv model test
 archiv model disable
-archiv model configure-loopback \
-  --endpoint http://127.0.0.1:11434 \
-  --model local-model-name
 ```
 
-The only initial model adapter is OpenAI-compatible HTTP on explicit loopback addresses. HTTPS or non-loopback hosts are rejected. A failed local request is an error; there is no cloud or alternate-model fallback. The model adapter is optional and does not determine report validation.
+Remote hosts, HTTPS tunnels, embedded credentials, query parameters, fragments, and unexpected paths are rejected. API keys are never stored in plain text configuration files (environment variables are supported). There is no cloud fallback.
+
+## Host acceptance script
+
+`scripts/accept_host.py` runs end-to-end acceptance checks over generated public-safe fixtures or an optional local folder, recording only safe operational metadata:
+
+```bash
+python scripts/accept_host.py --output acceptance-report.json
+```
+
+No private filenames or document contents are stored in acceptance reports.
 
 ## Backup, export, and restore
 
@@ -87,36 +78,8 @@ archiv export "$HOME/archiv-portable.zip"
 archiv restore "$HOME/archiv-backup.zip" --home "$HOME/Restored-Archiv"
 ```
 
-These commands use readable summaries by default and accept `--json`. Archives include durable SQLite metadata, immutable originals, normalized evidence, task and MCP run evidence, outputs, and configuration. They exclude `indexes/` and `temporary/` because those are rebuildable. Every member is size- and SHA-256-validated before restore. Restore requires an empty destination, relocates recorded paths, reapplies read-only original permissions, and rebuilds the search index.
+Archives include durable SQLite metadata, immutable originals, normalized evidence, ask and report run evidence, outputs, and configuration.
 
-## Acceptance evidence
+## Release evidence and limitations
 
-`tools/run-user-acceptance.sh` proves the human-facing journey without parsing JSON:
-
-```text
-sample-vault -> add -> status -> find -> report -> backup -> restore -> find
-```
-
-The `Offline alpha` workflow installs Archiv into a Fedora image, then runs both the machine-readable lifecycle acceptance and the human-facing acceptance with:
-
-```text
-docker run --network none --cap-drop ALL ...
-```
-
-The resulting logs, DOCX, backup, hashes, platform details, and duration are retained as deliberate release evidence for 30 days. This proves the application workflow does not need network access after installation; it does not claim Fedora or Python packages can be installed without package media.
-
-## CoWork-OS equivalence
-
-The pinned CoWork regression remains a separate boundary test. It launches `archiv-mcp` through CoWork's actual stdio transport, discovers the six bounded tools, searches, reads exact sources, generates and verifies a cited DOCX, retrieves run evidence, checks source immutability, and proves invalid or tampered paths cannot become structured success. Alpha changes retrigger both the pinned and current-upstream lanes; current upstream never changes the accepted lock.
-
-## Release evidence
-
-`python tools/build-release.py --output release-artifacts` creates:
-
-- a reproducible wheel, built twice and compared byte-for-byte;
-- a normalized tracked-source archive;
-- `SHA256SUMS`;
-- a CycloneDX 1.5 dependency SBOM;
-- a release manifest containing the source commit and fixed source-date epoch.
-
-The release remains an alpha. Back up important source material independently and do not expose Archiv to untrusted networks.
+Archiv is an alpha software release. Answer quality depends on document extraction, FTS5 retrieval, and the capabilities of the configured local model. Validated citations prevent fabricated source references, but independent verification remains necessary for critical decisions. Private local documents remain the user's responsibility.

@@ -17,12 +17,12 @@
       "sha256": "7b2614235eef97355b2449de229e92e663b0f49e2da519f0929dc09f48bc0548"
     },
     {
-      "bytes": 36668,
+      "bytes": 36462,
       "license": "repository-default; no separate fixture licence",
       "marker": "ARCHIV-DOCX-MARKER-2026",
       "media_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       "path": "document.docx",
-      "sha256": "7cc446cb6afa32aa3e51e9be19b421a559830e1aef42bece740cde37ce18e4df"
+      "sha256": "73e916c309d824df1d6f0f540bb86cb7ccc67c2bb36dec48c7d3e40b37e3c711"
     },
     {
       "bytes": 3256,
@@ -73,12 +73,12 @@
       "sha256": "a909a6322a3b4d5645144412a0315a3476dde4c45b6c0ed2e144bc0002ee96aa"
     },
     {
-      "bytes": 28348,
+      "bytes": 28437,
       "license": "repository-default; no separate fixture licence",
       "marker": "ARCHIV-PPTX-MARKER-2026",
       "media_type": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
       "path": "presentation.pptx",
-      "sha256": "472959d97d31dd6ad47c317eb97c1dfd0582e31b0e85d08af827ee2a0cfcb77e"
+      "sha256": "51d688e7cd708c906c737c098d138331a6e14490c4ac5a4028b068be42ba1df0"
     },
     {
       "bytes": 1447,
@@ -113,12 +113,12 @@
       "sha256": "a3be4ca37e53d8c7d1e318855c86125411ac804d669f4bd684e13a22dbf25f92"
     },
     {
-      "bytes": 4918,
+      "bytes": 4931,
       "license": "repository-default; no separate fixture licence",
       "marker": "ARCHIV-XLSX-MARKER-2026",
       "media_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       "path": "workbook.xlsx",
-      "sha256": "d0bd4f39bda87c459bd2d747b3780c7aa75fd0a71c401a23ffba1a3b90c4cfe3"
+      "sha256": "878fd65535ced80b09cec452daa8e639a2cf80cc6105ecfca22358d2bddf7988"
     }
   ],
   "generator": "scripts/generate_fixture_corpus.py",

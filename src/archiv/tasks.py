@@ -8,13 +8,15 @@ import re
 from pathlib import Path
 from uuid import uuid4
 
-from archiv.contracts import RunStatus
+from archiv.contracts import RunStatus, SearchResult
+from archiv.grounding import build_grounding_prompt, parse_and_validate_grounded_response
 from archiv.hashing import sha256_file
-from archiv.model_adapter import load_model_config
+from archiv.model_adapter import build_model_adapter, load_model_config
 from archiv.report_contracts import ReportManifest, ReportStatus
 from archiv.reports import generate_report, validate_report
+from archiv.reports.generator import _distinct_sources
 from archiv.reports.validation import write_validation
-from archiv.search import rebuild_search_index
+from archiv.search import rebuild_search_index, search_documents
 from archiv.storage.database import ArchivDatabase
 from archiv.storage.layout import ArchivLayout
 from archiv.task_contracts import CrossFileReportTask, TaskRunResult, TaskVerification
@@ -115,6 +117,29 @@ def run_task(task_path: Path, *, home: Path | None = None) -> TaskRunResult:
             raise ValueError("task requires at least one ingested source")
         rebuild_search_index(home=layout.root)
         output = output_dir / task.output_name
+
+        grounded_response = None
+        model_identity = model.adapter if model.adapter == "disabled" else f"{model.adapter} ({model.model})"
+
+        if task.model_policy == "configured-local" and model.adapter != "disabled":
+            search_results = search_documents(task.query, home=layout.root, limit=task.max_sources * 2)
+            distinct_results = _distinct_sources(search_results, limit=task.max_sources)
+            citations_map: dict[str, SearchResult] = {}
+            for idx, res in enumerate(distinct_results, 1):
+                cid = f"CIT-{idx}"
+                citations_map[cid] = res
+
+            if citations_map:
+                prompt = build_grounding_prompt(task.query, citations_map)
+                adapter = build_model_adapter(model)
+                raw_response = adapter.complete(prompt)
+                parsed, p_errors = parse_and_validate_grounded_response(
+                    raw_response, set(citations_map.keys())
+                )
+                if p_errors or parsed is None:
+                    raise ValueError("model response validation failed: " + "; ".join(p_errors))
+                grounded_response = parsed
+
         report = generate_report(
             task.query,
             output,
@@ -123,6 +148,8 @@ def run_task(task_path: Path, *, home: Path | None = None) -> TaskRunResult:
             max_sources=task.max_sources,
             render=task.render,
             evidence_dir=output_dir / "rendered",
+            grounded_response=grounded_response,
+            model_identity=model_identity,
         )
         after = _source_hashes(layout)
         manifest = ReportManifest.model_validate_json(

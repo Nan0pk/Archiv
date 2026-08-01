@@ -47,10 +47,19 @@
 - backup and evidence export;
 - application egress-denied acceptance run.
 
-## User-ready Fedora alpha
+## User-ready Fedora alpha (0.1.0a2)
 
 - no-checkout versioned Fedora installer;
 - readable add, find, report, and status commands;
 - automatic report task construction and independent verification;
 - human-facing backup and restore lifecycle;
 - no-network clean-user acceptance evidence.
+
+## Real-work grounded-question alpha (0.1.0a3)
+
+- `archiv ask` natural-language QA over local evidence with citation validation;
+- generalized `archiv report` for real user objectives with model-assisted synthesis;
+- `archiv model` surface (`status`, `configure`, `test`, `disable`);
+- strict grounding protocol schema and validation;
+- host acceptance script (`scripts/accept_host.py`);
+- atomic versioned upgrade preserving durable home data and older versions.
