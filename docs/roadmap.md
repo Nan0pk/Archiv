@@ -46,3 +46,11 @@
 - local model adapter;
 - backup and evidence export;
 - application egress-denied acceptance run.
+
+## User-ready Fedora alpha
+
+- no-checkout versioned Fedora installer;
+- readable add, find, report, and status commands;
+- automatic report task construction and independent verification;
+- human-facing backup and restore lifecycle;
+- no-network clean-user acceptance evidence.
