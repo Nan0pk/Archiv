@@ -19,11 +19,13 @@ from archiv.ingestion import ingest_file, rebuild_derived
 from archiv.ingestion.formats import SUPPORTED_SUFFIXES
 from archiv.report_cli import register_report_commands
 from archiv.search import rebuild_search_index, search_documents
+from archiv.user_cli import register_user_commands
 
 app = typer.Typer(no_args_is_help=True, help="Archiv local-first knowledge-work core.")
 console = Console()
 register_report_commands(app)
 register_alpha_commands(app)
+register_user_commands(app)
 
 
 @app.command()

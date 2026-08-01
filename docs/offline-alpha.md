@@ -1,51 +1,69 @@
-# First offline alpha
+# User-ready Fedora alpha
 
-Archiv `0.1.0a1` packages the implemented local evidence workflow into a Fedora-first alpha. Installation may download Fedora and Python packages. After installation, the demonstrated workflow requires no GitHub access, cloud login, telemetry endpoint, or online model.
+Archiv `0.1.0a2` packages the verified local evidence workflow behind a small everyday command surface. Installation may download Fedora and Python packages. After installation, adding, searching, reporting, verification, backup, and restore require no GitHub access, cloud login, telemetry endpoint, or online model.
 
-## Fedora setup
+## One-command Fedora installation
 
-From an Archiv source checkout:
+```bash
+curl -fsSL https://raw.githubusercontent.com/Nan0pk/Archiv/main/tools/install-fedora.sh | bash
+```
+
+The installer:
+
+- checks that the host is Fedora;
+- installs Python, LibreOffice Writer, Poppler, and required transfer tools;
+- resolves the requested Git ref to an immutable commit SHA;
+- downloads and validates the source archive structure;
+- records the exact commit and downloaded archive SHA-256;
+- installs into a versioned virtual environment under `~/.local/share/archiv-alpha`;
+- exposes `archiv` and `archiv-mcp` through `~/.local/bin`;
+- runs `archiv doctor` before reporting success.
+
+No shell activation is required. Use `--ref`, `--prefix`, or `--bin-dir` to override defaults. For an auditable two-step installation, download `tools/install-fedora.sh`, inspect it, and run it locally.
+
+The compatibility command from a source checkout remains available:
 
 ```bash
 bash tools/setup-fedora.sh
-source "$HOME/.local/share/archiv-alpha/activate"
 ```
 
-The setup installs Python, LibreOffice Writer, and Poppler, creates an isolated virtual environment, installs Archiv, and exposes `archiv` and `archiv-mcp`. Use `--prefix /absolute/path` to choose a different installation root.
+## Everyday workflow
 
-## Packaged sample
-
-Create a small public-safe vault without downloading anything:
+Create a small public-safe vault and exercise the complete interface:
 
 ```bash
 archiv sample-vault "$HOME/Archiv-Sample"
-archiv ingest "$HOME/Archiv-Sample"
-archiv search "unique fixture marker"
+archiv add "$HOME/Archiv-Sample"
+archiv find "unique fixture marker"
+archiv report "unique fixture marker"
+archiv status
 ```
 
-Directory ingestion walks supported files in deterministic path order, preserves each canonical original, and rebuilds the local FTS5 index after the batch.
+`archiv add` accepts one supported file or a directory, preserves each canonical original, creates normalized evidence, and refreshes the FTS5 search index automatically. It reports new originals, duplicates, unsupported files skipped from a directory, and indexed document and passage counts.
 
-## Required end-to-end demonstration
+`archiv find` performs literal local full-text retrieval and prints readable source names, native locators, and excerpts. Every result is revalidated against the canonical original and normalized evidence before display.
 
-From the source checkout:
+`archiv report` creates the bounded `cross-file-report` request internally. It generates a cited DOCX under the Archiv home, then independently reopens the archived request, source hashes, report, manifest, and citations. The command reports success only after verification. No YAML task file or remembered run ID is required for normal use.
+
+`archiv status` shows the Archiv home, document and ingestion counts, index state, report outcomes, and explicit model policy without changing state.
+
+All everyday commands use readable output by default. Add `--json` for automation.
+
+## Advanced and compatibility commands
+
+The lower-level evidence interfaces remain available for tests, integrations, and diagnosis:
 
 ```bash
 archiv doctor
-archiv ingest tests/fixtures/representative-corpus
-archiv search "unique fixture marker"
+archiv ingest ./document.docx
+archiv rebuild-derived <sha256>
+archiv rebuild-search-index
+archiv search "exact phrase"
 archiv run tests/tasks/cross-file-report.yaml
 archiv verify <run-id>
 ```
 
-`archiv run` accepts the JSON subset of YAML. The first task type is deliberately narrow: `cross-file-report`. A run receives a unique directory under `ARCHIV_HOME/runs/tasks/`; generated files remain under `ARCHIV_HOME/outputs/tasks/<run-id>/`. Terminal success requires:
-
-- validated search citations;
-- a generated DOCX and manifest;
-- independent package, citation, source-hash, PDF, and page-image validation when rendering is requested;
-- unchanged canonical originals;
-- request and terminal result evidence.
-
-`archiv verify` does not trust the original process or task file. It reopens the archived request evidence, source hashes, DOCX, manifest, and citations.
+`archiv run` still accepts the JSON subset of YAML. A run receives a unique directory under `ARCHIV_HOME/runs/tasks/`; generated files remain under `ARCHIV_HOME/outputs/tasks/<run-id>/`.
 
 ## Model policy
 
@@ -69,21 +87,27 @@ archiv export "$HOME/archiv-portable.zip"
 archiv restore "$HOME/archiv-backup.zip" --home "$HOME/Restored-Archiv"
 ```
 
-The archive includes durable SQLite metadata, immutable originals, normalized evidence, task/MCP run evidence, outputs, and configuration. It excludes `indexes/` and `temporary/` because they are rebuildable. Every member is size- and SHA-256-validated before restore. Restore requires an empty destination, relocates recorded paths, reapplies read-only original permissions, and rebuilds the search index.
+These commands use readable summaries by default and accept `--json`. Archives include durable SQLite metadata, immutable originals, normalized evidence, task and MCP run evidence, outputs, and configuration. They exclude `indexes/` and `temporary/` because those are rebuildable. Every member is size- and SHA-256-validated before restore. Restore requires an empty destination, relocates recorded paths, reapplies read-only original permissions, and rebuilds the search index.
 
-## Egress-denied acceptance
+## Acceptance evidence
 
-`tools/run-offline-acceptance.sh` executes doctor, directory ingestion, search, task run, verification, backup, restore, restored search, and restored verification. The `Offline alpha` workflow builds a Fedora image with dependencies while network is available, then runs this script with:
+`tools/run-user-acceptance.sh` proves the human-facing journey without parsing JSON:
+
+```text
+sample-vault -> add -> status -> find -> report -> backup -> restore -> find
+```
+
+The `Offline alpha` workflow installs Archiv into a Fedora image, then runs both the machine-readable lifecycle acceptance and the human-facing acceptance with:
 
 ```text
 docker run --network none --cap-drop ALL ...
 ```
 
-The resulting JSON, DOCX backup, hashes, platform details, and duration are retained as deliberate release evidence for 30 days. This proves the application workflow does not need network access after installation; it does not claim the operating system itself can be installed without package media.
+The resulting logs, DOCX, backup, hashes, platform details, and duration are retained as deliberate release evidence for 30 days. This proves the application workflow does not need network access after installation; it does not claim Fedora or Python packages can be installed without package media.
 
 ## CoWork-OS equivalence
 
-The pinned CoWork regression remains a separate boundary test. It launches `archiv-mcp` through CoWork's actual stdio transport, discovers the six bounded tools, searches, reads exact sources, generates and verifies a cited DOCX, retrieves run evidence, checks source immutability, and proves invalid/tampered paths cannot become structured success. Alpha changes retrigger both the pinned and current-upstream lanes; current upstream never changes the accepted lock.
+The pinned CoWork regression remains a separate boundary test. It launches `archiv-mcp` through CoWork's actual stdio transport, discovers the six bounded tools, searches, reads exact sources, generates and verifies a cited DOCX, retrieves run evidence, checks source immutability, and proves invalid or tampered paths cannot become structured success. Alpha changes retrigger both the pinned and current-upstream lanes; current upstream never changes the accepted lock.
 
 ## Release evidence
 
@@ -95,4 +119,4 @@ The pinned CoWork regression remains a separate boundary test. It launches `arch
 - a CycloneDX 1.5 dependency SBOM;
 - a release manifest containing the source commit and fixed source-date epoch.
 
-The release remains pre-alpha. Back up important source material independently and do not expose Archiv to untrusted networks.
+The release remains an alpha. Back up important source material independently and do not expose Archiv to untrusted networks.

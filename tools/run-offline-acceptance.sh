@@ -32,9 +32,9 @@ started=$(date +%s)
 run_id=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["run_id"])' \
   "$EVIDENCE_DIR/run.json")
 "${ARCHIV[@]}" verify "$run_id" --home "$HOME_DIR" | tee "$EVIDENCE_DIR/verify.json"
-"${ARCHIV[@]}" backup "$EVIDENCE_DIR/archiv-backup.zip" --home "$HOME_DIR" \
+"${ARCHIV[@]}" backup "$EVIDENCE_DIR/archiv-backup.zip" --home "$HOME_DIR" --json \
   | tee "$EVIDENCE_DIR/backup.json"
-"${ARCHIV[@]}" restore "$EVIDENCE_DIR/archiv-backup.zip" --home "$RESTORE_DIR" \
+"${ARCHIV[@]}" restore "$EVIDENCE_DIR/archiv-backup.zip" --home "$RESTORE_DIR" --json \
   | tee "$EVIDENCE_DIR/restore.json"
 "${ARCHIV[@]}" search "unique fixture marker" --home "$RESTORE_DIR" \
   | tee "$EVIDENCE_DIR/restored-search.json"

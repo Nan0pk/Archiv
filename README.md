@@ -16,7 +16,7 @@ Models propose. Validators decide whether work succeeded.
 
 ## Current implemented slice
 
-Archiv includes a deterministic environment doctor, the exact source-marker execution contract, immutable local ingestion, validated SQLite full-text retrieval, independently verified cited DOCX generation, a bounded local MCP server, and a pinned replaceable CoWork-OS workbench integration:
+Archiv includes a human-facing Fedora command surface, a deterministic environment doctor, the exact source-marker execution contract, immutable local ingestion, validated SQLite full-text retrieval, independently verified cited DOCX generation, a bounded local MCP server, and a pinned replaceable CoWork-OS workbench integration:
 
 ```bash
 mkdir -p /tmp/archiv-probe
@@ -43,15 +43,26 @@ CoWork-OS is integrated only as a replaceable MCP workbench. Archiv pins one rev
 
 ## Quick start
 
-Fedora offline-alpha installation from a source checkout:
+Install on Fedora without cloning the repository or activating a virtual environment:
 
 ```bash
-bash tools/setup-fedora.sh
-source "$HOME/.local/share/archiv-alpha/activate"
-archiv sample-vault "$HOME/Archiv-Sample"
-archiv ingest "$HOME/Archiv-Sample"
-archiv search "unique fixture marker"
+curl -fsSL https://raw.githubusercontent.com/Nan0pk/Archiv/main/tools/install-fedora.sh | bash
 ```
+
+The installer resolves `main` to one immutable commit, installs that exact source under `~/.local/share/archiv-alpha/versions/`, records the commit and downloaded archive hash in `install.json`, and exposes `archiv` through `~/.local/bin`.
+
+Use the everyday interface:
+
+```bash
+archiv sample-vault "$HOME/Archiv-Sample"
+archiv add "$HOME/Archiv-Sample"
+archiv find "unique fixture marker"
+archiv report "unique fixture marker"
+archiv status
+archiv backup "$HOME/archiv-backup.zip"
+```
+
+`add` refreshes search automatically. `find` shows readable verified citations. `report` constructs the bounded task request internally, creates a cited DOCX, and independently verifies it before reporting success. Add `--json` when machine-readable output is required.
 
 Development setup:
 
@@ -79,7 +90,7 @@ Do not commit private documents, personal data, credentials, model keys, product
 - [Cited DOCX reports](docs/reporting.md)
 - [Bounded local MCP server](docs/mcp.md)
 - [CoWork-OS integration](docs/cowork-os-integration.md)
-- [First offline alpha](docs/offline-alpha.md)
+- [User-ready Fedora alpha](docs/offline-alpha.md)
 - [Hardware and performance notes](docs/hardware-and-performance.md)
 - [GitHub governance and CI trust boundary](docs/github-governance.md)
 - [Definition of done](docs/definition-of-done.md)
