@@ -8,6 +8,14 @@ from archiv.contracts import Citation, RunStatus, StrictModel
 from archiv.model_adapter import ModelConfig
 
 
+def _default_citations() -> list[Citation]:
+    return []
+
+
+def _default_errors() -> list[str]:
+    return []
+
+
 class AskRunResult(StrictModel):
     """Terminal evidence for one grounded ask run."""
 
@@ -17,7 +25,7 @@ class AskRunResult(StrictModel):
     query: str
     evidence_dir: str
     model: ModelConfig
-    retrieved_citations: list[Citation] = Field(default_factory=list)
+    retrieved_citations: list[Citation] = Field(default_factory=_default_citations)
     raw_model_response: str | None = None
     grounded_response: dict[str, object] | None = None
-    errors: list[str] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=_default_errors)
