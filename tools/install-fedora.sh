@@ -105,6 +105,7 @@ if [[ -n "$SOURCE_DIR" ]]; then
     SOURCE_COMMIT=$(git -C "$SOURCE_DIR" rev-parse HEAD)
   fi
 else
+  TEMP_DIR=$(mktemp -d -t archiv-install-XXXXXX)
   CURL_AUTH=()
   if [[ -n "${GITHUB_TOKEN:-}" ]]; then
     CURL_AUTH=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
