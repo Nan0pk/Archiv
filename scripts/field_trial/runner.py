@@ -92,7 +92,9 @@ def run_public_trial(args: argparse.Namespace) -> dict[str, object]:
                     seen.add(item.citation.object_sha256)
                 if len(selected) == limit:
                     break
-            source_ids = [by_filename.get(item.citation.source_name, "UNKNOWN") for item in selected]
+            source_ids = [
+                by_filename.get(item.citation.source_name, "UNKNOWN") for item in selected
+            ]
             retrieval = calculate_retrieval_metrics(
                 cast(Sequence[str], question["expected_sources"]), source_ids, limit
             )
@@ -237,7 +239,9 @@ def validate_private_request(corpus: Path | None, local_only: bool) -> None:
 def _copy_private_corpus(source: Path, destination: Path) -> tuple[list[Path], dict[str, str]]:
     candidates = [source] if source.is_file() else sorted(source.rglob("*"))
     files = [
-        path for path in candidates if path.is_file() and path.suffix.casefold() in SUPPORTED_SUFFIXES
+        path
+        for path in candidates
+        if path.is_file() and path.suffix.casefold() in SUPPORTED_SUFFIXES
     ]
     if not files:
         raise ValueError("no supported files found in selected private corpus")
