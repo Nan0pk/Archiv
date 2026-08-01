@@ -17,9 +17,9 @@ from pptx import Presentation
 from reportlab.pdfgen.canvas import Canvas
 
 from field_trial.common import (
-    BenchmarkError,
     FIXED_DATETIME,
     SCHEMA_VERSION,
+    BenchmarkError,
     _normalize_zip,
     sha256_file,
 )
@@ -203,7 +203,7 @@ class FakeModelServer:
         self.server: ThreadingHTTPServer | None = None
         self.thread: threading.Thread | None = None
 
-    def __enter__(self) -> "FakeModelServer":
+    def __enter__(self) -> FakeModelServer:
         benchmark = self.benchmark
         mode = self.mode
 
