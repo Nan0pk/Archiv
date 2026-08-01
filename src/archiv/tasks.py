@@ -14,7 +14,7 @@ from archiv.hashing import sha256_file
 from archiv.model_adapter import build_model_adapter, load_model_config
 from archiv.report_contracts import ReportManifest, ReportStatus
 from archiv.reports import generate_report, validate_report
-from archiv.reports.generator import _distinct_sources
+from archiv.reports.generator import distinct_sources
 from archiv.reports.validation import write_validation
 from archiv.search import rebuild_search_index, search_documents
 from archiv.storage.database import ArchivDatabase
@@ -127,7 +127,7 @@ def run_task(task_path: Path, *, home: Path | None = None) -> TaskRunResult:
             search_results = search_documents(
                 task.query, home=layout.root, limit=task.max_sources * 2
             )
-            distinct_results = _distinct_sources(search_results, limit=task.max_sources)
+            distinct_results = distinct_sources(search_results, limit=task.max_sources)
             citations_map: dict[str, SearchResult] = {}
             for idx, res in enumerate(distinct_results, 1):
                 cid = f"CIT-{idx}"

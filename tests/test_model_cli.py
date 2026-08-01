@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Generator
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from threading import Thread
@@ -31,7 +32,7 @@ class MockPongHandler(BaseHTTPRequestHandler):
 
 
 @pytest.fixture
-def mock_pong_server():
+def mock_pong_server() -> Generator[str, None, None]:
     server = HTTPServer(("127.0.0.1", 0), MockPongHandler)
     thread = Thread(target=server.serve_forever)
     thread.daemon = True
@@ -75,7 +76,7 @@ def test_model_cli_status_and_disable(tmp_path: Path) -> None:
     assert load_model_config(home).adapter == "disabled"
 
 
-def test_model_cli_test_command(tmp_path: Path, mock_pong_server) -> None:
+def test_model_cli_test_command(tmp_path: Path, mock_pong_server: str) -> None:
     home = tmp_path / "home"
     endpoint = mock_pong_server
 

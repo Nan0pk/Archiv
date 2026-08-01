@@ -36,7 +36,7 @@ def _write_manifest(path: Path, manifest: ReportManifest) -> None:
     )
 
 
-def _distinct_sources(results: list[SearchResult], *, limit: int) -> list[SearchResult]:
+def distinct_sources(results: list[SearchResult], *, limit: int) -> list[SearchResult]:
     selected: list[SearchResult] = []
     seen: set[str] = set()
     for result in results:
@@ -228,7 +228,7 @@ def generate_report_from_results(
 
     if max_sources < 1 or max_sources > 50:
         raise ValueError("max_sources must be between 1 and 50")
-    selected = _distinct_sources(results, limit=max_sources)
+    selected = distinct_sources(results, limit=max_sources)
     if not selected:
         raise ValueError("report generation requires at least one search result")
 

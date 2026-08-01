@@ -12,7 +12,7 @@ class GroundedClaim(StrictModel):
 
     claim_id: str
     statement: str
-    citation_ids: list[str] = Field(default_factory=list)
+    citation_ids: list[str] = Field(default_factory=list[str])
 
 
 class GroundedParagraph(StrictModel):
@@ -20,14 +20,14 @@ class GroundedParagraph(StrictModel):
 
     paragraph_id: str
     text: str
-    citation_ids: list[str] = Field(default_factory=list)
+    citation_ids: list[str] = Field(default_factory=list[str])
 
 
 class GroundedModelResponse(StrictModel):
     """Strict response contract required from the local model."""
 
     schema_version: str = "1"
-    paragraphs: list[GroundedParagraph] = Field(default_factory=list)
-    claims: list[GroundedClaim] = Field(default_factory=list)
-    insufficient_evidence: list[str] = Field(default_factory=list)
-    contradictions: list[str] = Field(default_factory=list)
+    paragraphs: list[GroundedParagraph] = Field(default_factory=list[GroundedParagraph])
+    claims: list[GroundedClaim] = Field(default_factory=list[GroundedClaim])
+    insufficient_evidence: list[str] = Field(default_factory=list[str])
+    contradictions: list[str] = Field(default_factory=list[str])

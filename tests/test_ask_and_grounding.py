@@ -3,9 +3,11 @@ from __future__ import annotations
 import json
 import socket
 import time
+from collections.abc import Generator
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from threading import Thread
+from typing import cast
 
 import pytest
 from typer.testing import CliRunner
@@ -42,7 +44,7 @@ class MockModelHandler(BaseHTTPRequestHandler):
 
 
 @pytest.fixture
-def mock_model_server():
+def mock_model_server() -> Generator[tuple[str, type[MockModelHandler]], None, None]:
     server = HTTPServer(("127.0.0.1", 0), MockModelHandler)
     thread = Thread(target=server.serve_forever)
     thread.daemon = True
@@ -75,7 +77,9 @@ def test_ask_with_disabled_model(tmp_path: Path) -> None:
     assert "disabled" in result.errors[0]
 
 
-def test_ask_successful_grounded_answer(tmp_path: Path, mock_model_server) -> None:
+def test_ask_successful_grounded_answer(
+    tmp_path: Path, mock_model_server: tuple[str, type[MockModelHandler]]
+) -> None:
     endpoint, handler = mock_model_server
     home = tmp_path / "home"
     corpus = tmp_path / "corpus"
@@ -122,10 +126,13 @@ def test_ask_successful_grounded_answer(tmp_path: Path, mock_model_server) -> No
     assert run_res.status == RunStatus.SUCCEEDED
     assert run_res.grounded_response is not None
     assert len(run_res.retrieved_citations) >= 1
-    assert run_res.grounded_response["paragraphs"][0]["citation_ids"] == ["CIT-1"]
+    paras = cast(list[dict[str, object]], run_res.grounded_response["paragraphs"])
+    assert paras[0]["citation_ids"] == ["CIT-1"]
 
 
-def test_ask_unknown_citation_rejection(tmp_path: Path, mock_model_server) -> None:
+def test_ask_unknown_citation_rejection(
+    tmp_path: Path, mock_model_server: tuple[str, type[MockModelHandler]]
+) -> None:
     endpoint, handler = mock_model_server
     home = tmp_path / "home"
     corpus = tmp_path / "corpus"
@@ -162,7 +169,9 @@ def test_ask_unknown_citation_rejection(tmp_path: Path, mock_model_server) -> No
     assert any("unknown or un-retrieved source" in err for err in run_res.errors)
 
 
-def test_ask_malformed_json_response(tmp_path: Path, mock_model_server) -> None:
+def test_ask_malformed_json_response(
+    tmp_path: Path, mock_model_server: tuple[str, type[MockModelHandler]]
+) -> None:
     endpoint, handler = mock_model_server
     home = tmp_path / "home"
     corpus = tmp_path / "corpus"
@@ -195,7 +204,9 @@ def test_ask_model_timeout_and_unreachable(tmp_path: Path) -> None:
     assert any("model request failed" in err for err in run_res.errors)
 
 
-def test_ask_insufficient_evidence_and_contradictions(tmp_path: Path, mock_model_server) -> None:
+def test_ask_insufficient_evidence_and_contradictions(
+    tmp_path: Path, mock_model_server: tuple[str, type[MockModelHandler]]
+) -> None:
     endpoint, handler = mock_model_server
     home = tmp_path / "home"
     corpus = tmp_path / "corpus"
@@ -223,6 +234,7 @@ def test_ask_insufficient_evidence_and_contradictions(tmp_path: Path, mock_model
 
     run_res = run_grounded_ask("unique fixture marker", home=home)
     assert run_res.status == RunStatus.SUCCEEDED
+    assert run_res.grounded_response is not None
     assert run_res.grounded_response["insufficient_evidence"] == [
         "No budget information present in evidence."
     ]
@@ -231,7 +243,9 @@ def test_ask_insufficient_evidence_and_contradictions(tmp_path: Path, mock_model
     ]
 
 
-def test_ask_cli_readable_and_json_output(tmp_path: Path, mock_model_server) -> None:
+def test_ask_cli_readable_and_json_output(
+    tmp_path: Path, mock_model_server: tuple[str, type[MockModelHandler]]
+) -> None:
     endpoint, handler = mock_model_server
     home = tmp_path / "home"
     corpus = tmp_path / "corpus"
