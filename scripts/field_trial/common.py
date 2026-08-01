@@ -117,8 +117,7 @@ def load_benchmark(path: Path = DEFAULT_BENCHMARK) -> dict[str, object]:
         if unknown:
             raise BenchmarkError(f"question {question_id} references unknown sources: {unknown}")
         if not isinstance(facts, list) or any(
-            not isinstance(fact, dict) or not isinstance(fact.get("terms"), list)
-            for fact in facts
+            not isinstance(fact, dict) or not isinstance(fact.get("terms"), list) for fact in facts
         ):
             raise BenchmarkError(f"question {question_id} has malformed required_facts")
         question_ids.add(question_id)
