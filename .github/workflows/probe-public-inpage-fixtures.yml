@@ -1,0 +1,403 @@
+name: Probe public native InPage fixtures
+
+on:
+  push:
+    branches: [research/probe-public-inpage-fixtures]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: archiv-public-inpage-probe-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out Archiv without retained credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.12"
+
+      - name: Download pinned public fixtures and licence evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_commit='1f9bc57a6cdbe6ad69f18b38913e1af06ba5b41a'
+          base="https://raw.githubusercontent.com/ShakesVision/html-experiments/${source_commit}"
+          work=/tmp/archiv-public-inpage-probe
+          mkdir -p "$work"
+
+          curl --proto '=https' --tlsv1.2 --fail --show-error --location \
+            --retry 2 --retry-all-errors --max-time 45 --max-filesize 67108864 \
+            --output "$work/juz_29.inp" \
+            "$base/inpage/juz_29.inp"
+          curl --proto '=https' --tlsv1.2 --fail --show-error --location \
+            --retry 2 --retry-all-errors --max-time 45 --max-filesize 67108864 \
+            --output "$work/khali-hathely-1.inp" \
+            "$base/inpage/khali%20hathely%20%281%29.inp"
+          curl --proto '=https' --tlsv1.2 --fail --show-error --location \
+            --retry 2 --retry-all-errors --max-time 30 --max-filesize 1048576 \
+            --output "$work/LICENSE" "$base/LICENSE"
+          curl --proto '=https' --tlsv1.2 --fail --show-error --location \
+            --retry 2 --retry-all-errors --max-time 30 --max-filesize 1048576 \
+            --output "$work/NOTICE" "$base/NOTICE"
+
+          test -s "$work/juz_29.inp"
+          test -s "$work/khali-hathely-1.inp"
+          test -s "$work/LICENSE"
+          test -s "$work/NOTICE"
+
+      - name: Run bounded probe and aggregate-only native-stream measurements
+        env:
+          PYTHONPATH: src
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p public-inpage-probe-evidence
+          python - <<'PY'
+          from __future__ import annotations
+
+          import hashlib
+          import json
+          import math
+          import struct
+          from pathlib import Path
+          from typing import Any
+
+          from archiv.research.inpage_cfb_probe import (
+              ProbeLimits,
+              _collect_fat_sector_ids,
+              _follow_chain,
+              _parse_directory,
+              _read_fat,
+              _read_sector,
+              probe_path,
+          )
+
+          SOURCE_REPOSITORY = "ShakesVision/html-experiments"
+          SOURCE_COMMIT = "1f9bc57a6cdbe6ad69f18b38913e1af06ba5b41a"
+          ATTRIBUTION = "Based on tools and public research fixtures by Shakeeb Ahmad — https://shakeeb.in"
+          WORK = Path("/tmp/archiv-public-inpage-probe")
+          OUTPUT = Path("public-inpage-probe-evidence/evidence.json")
+
+          fixtures = [
+              {
+                  "logical_name": "juz_29.inp",
+                  "local_path": WORK / "juz_29.inp",
+                  "source_path": "inpage/juz_29.inp",
+                  "expected_git_blob_sha1": "b5c5774f41ea84a4b7ad6c859f0576da70604925",
+                  "expected_stream": "InPage300",
+                  "variant": "300",
+              },
+              {
+                  "logical_name": "khali hathely (1).inp",
+                  "local_path": WORK / "khali-hathely-1.inp",
+                  "source_path": "inpage/khali hathely (1).inp",
+                  "expected_git_blob_sha1": "c7f69058ca0024be6866531429292967ad852ef1",
+                  "expected_stream": "InPage100",
+                  "variant": "100",
+              },
+          ]
+
+          def git_blob_sha1(data: bytes) -> str:
+              header = f"blob {len(data)}\0".encode("ascii")
+              return hashlib.sha1(header + data).hexdigest()
+
+          def u16(data: bytes, offset: int) -> int:
+              return struct.unpack_from("<H", data, offset)[0]
+
+          def u32(data: bytes, offset: int) -> int:
+              return struct.unpack_from("<I", data, offset)[0]
+
+          def read_regular_stream(path: Path, stream_name: str) -> tuple[bytes, dict[str, int]]:
+              data = path.read_bytes()
+              limits = ProbeLimits()
+              sector_size = 1 << u16(data, 30)
+              fat_sector_ids = _collect_fat_sector_ids(
+                  data,
+                  sector_size=sector_size,
+                  number_of_fat_sectors=u32(data, 44),
+                  first_difat_sector=u32(data, 68),
+                  number_of_difat_sectors=u32(data, 72),
+                  limits=limits,
+              )
+              fat = _read_fat(data, fat_sector_ids, sector_size)
+              entries = _parse_directory(
+                  data,
+                  sector_size=sector_size,
+                  first_directory_sector=u32(data, 48),
+                  fat=fat,
+                  limits=limits,
+              )
+              matches = [
+                  entry
+                  for entry in entries
+                  if entry is not None
+                  and entry.object_type == 2
+                  and entry.name.casefold() == stream_name.casefold()
+              ]
+              if len(matches) != 1:
+                  raise ValueError(f"expected one {stream_name!r} stream, found {len(matches)}")
+              entry = matches[0]
+              if entry.stream_size < 4096:
+                  raise ValueError("research reader intentionally refuses mini-stream content")
+              expected_sectors = math.ceil(entry.stream_size / sector_size)
+              sector_ids = _follow_chain(
+                  entry.starting_sector,
+                  fat,
+                  maximum_sectors=expected_sectors + 1,
+                  label=f"{stream_name} research stream",
+              )
+              if len(sector_ids) != expected_sectors:
+                  raise ValueError(
+                      f"stream sector count mismatch: expected {expected_sectors}, got {len(sector_ids)}"
+                  )
+              payload = b"".join(_read_sector(data, sector_id, sector_size) for sector_id in sector_ids)
+              payload = payload[: entry.stream_size]
+              return payload, {
+                  "stream_size": entry.stream_size,
+                  "starting_sector": entry.starting_sector,
+                  "sector_count": len(sector_ids),
+                  "sector_size": sector_size,
+              }
+
+          def is_arabic(codepoint: int) -> bool:
+              return (
+                  0x0600 <= codepoint <= 0x06FF
+                  or 0x0750 <= codepoint <= 0x077F
+                  or 0x08A0 <= codepoint <= 0x08FF
+                  or 0xFB50 <= codepoint <= 0xFDFF
+                  or 0xFE70 <= codepoint <= 0xFEFF
+              )
+
+          def inpage300_metrics(payload: bytes) -> dict[str, int | str]:
+              usable = payload[: len(payload) - (len(payload) % 2)]
+              units = struct.unpack(f"<{len(usable) // 2}H", usable)
+              arabic_units = 0
+              ascii_printable_units = 0
+              zero_units = 0
+              longest_allowed_run = 0
+              current_allowed_run = 0
+              for unit in units:
+                  allowed = (
+                      unit in {0x0009, 0x000A, 0x000D, 0x200C, 0x200D, 0x200E, 0x200F}
+                      or 0x0020 <= unit <= 0x007E
+                      or is_arabic(unit)
+                  )
+                  if is_arabic(unit):
+                      arabic_units += 1
+                  if 0x0020 <= unit <= 0x007E:
+                      ascii_printable_units += 1
+                  if unit == 0:
+                      zero_units += 1
+                  if allowed:
+                      current_allowed_run += 1
+                      longest_allowed_run = max(longest_allowed_run, current_allowed_run)
+                  else:
+                      current_allowed_run = 0
+              return {
+                  "measurement_kind": "aligned UTF-16LE aggregate scan; no text emitted",
+                  "utf16_code_units": len(units),
+                  "arabic_code_units": arabic_units,
+                  "ascii_printable_code_units": ascii_printable_units,
+                  "zero_code_units": zero_units,
+                  "longest_allowed_run_code_units": longest_allowed_run,
+              }
+
+          def inpage100_metrics(payload: bytes) -> dict[str, int | str]:
+              escape_pairs = sum(
+                  1
+                  for index in range(len(payload) - 1)
+                  if payload[index] == 0x04 and 0x09 <= payload[index + 1] <= 0xFE
+              )
+              plausible_records = 0
+              plausible_payload_bytes = 0
+              record_escape_pairs = 0
+              position = 0
+              while position + 4 <= len(payload):
+                  length = struct.unpack_from("<I", payload, position)[0]
+                  end = position + 4 + length
+                  if 1 <= length <= 16_384 and end <= len(payload) and payload[end - 1] == 0x0D:
+                      record = payload[position + 4 : end]
+                      plausible_records += 1
+                      plausible_payload_bytes += len(record)
+                      record_escape_pairs += sum(
+                          1
+                          for index in range(len(record) - 1)
+                          if record[index] == 0x04 and 0x09 <= record[index + 1] <= 0xFE
+                      )
+                      position = end
+                  else:
+                      position += 1
+              return {
+                  "measurement_kind": "aggregate legacy escape/record scan; heuristic only; no text emitted",
+                  "all_04_escape_pairs": escape_pairs,
+                  "plausible_length_prefixed_records": plausible_records,
+                  "plausible_record_payload_bytes": plausible_payload_bytes,
+                  "04_escape_pairs_inside_plausible_records": record_escape_pairs,
+              }
+
+          evidence: dict[str, Any] = {
+              "schema_version": 1,
+              "scope": "non-redistributing research probe of public native InPage candidates",
+              "source_repository": SOURCE_REPOSITORY,
+              "source_commit": SOURCE_COMMIT,
+              "source_license": "Attribution Required License (ARL) 1.0",
+              "attribution": ATTRIBUTION,
+              "fixture_origin_limitation": (
+                  "The repository publishes these files and licenses the repository, but does not document "
+                  "the fixtures' original creator, InPage build, or independent text/layout ground truth. "
+                  "They are research candidates, not mergeable Archiv fixtures."
+              ),
+              "privacy": {
+                  "fixture_bytes_uploaded_to_artifact": False,
+                  "stream_text_printed_or_uploaded": False,
+                  "third_party_code_executed": False,
+                  "legacy_inpage_executed": False,
+                  "online_converter_used": False,
+              },
+              "licence_files": {},
+              "fixtures": [],
+          }
+
+          for name, expected_sha in (
+              ("LICENSE", "3eeb87abc1249472a615b87cec629164d01be9f5"),
+              ("NOTICE", "6017c85ce73750fd8157271aa93319af20085b76"),
+          ):
+              data = (WORK / name).read_bytes()
+              observed = git_blob_sha1(data)
+              if observed != expected_sha:
+                  raise SystemExit(f"{name} Git blob mismatch: expected {expected_sha}, got {observed}")
+              evidence["licence_files"][name] = {
+                  "git_blob_sha1": observed,
+                  "sha256": hashlib.sha256(data).hexdigest(),
+                  "size": len(data),
+              }
+
+          for fixture in fixtures:
+              path = fixture["local_path"]
+              data = path.read_bytes()
+              observed_blob = git_blob_sha1(data)
+              if observed_blob != fixture["expected_git_blob_sha1"]:
+                  raise SystemExit(
+                      f"{fixture['logical_name']} Git blob mismatch: expected "
+                      f"{fixture['expected_git_blob_sha1']}, got {observed_blob}"
+                  )
+
+              probe = probe_path(path)
+              if probe.native_support_claimed or probe.stream_contents_read:
+                  raise SystemExit("bounded probe violated its declared safety boundary")
+
+              record: dict[str, Any] = {
+                  "logical_name": fixture["logical_name"],
+                  "source_path": fixture["source_path"],
+                  "source_url": (
+                      f"https://github.com/{SOURCE_REPOSITORY}/blob/{SOURCE_COMMIT}/"
+                      f"{fixture['source_path'].replace(' ', '%20')}"
+                  ),
+                  "git_blob_sha1": observed_blob,
+                  "sha256": hashlib.sha256(data).hexdigest(),
+                  "size": len(data),
+                  "bounded_probe": {
+                      "classification": probe.classification,
+                      "cfb_major_version": probe.cfb_major_version,
+                      "sector_size": probe.sector_size,
+                      "directory_entry_count": probe.directory_entry_count,
+                      "stream_count": probe.stream_count,
+                      "stream_names": list(probe.stream_names),
+                      "candidate_content_streams": list(probe.candidate_content_streams),
+                      "has_document_info": probe.has_document_info,
+                      "native_support_claimed": probe.native_support_claimed,
+                      "stream_contents_read": probe.stream_contents_read,
+                      "warnings": list(probe.warnings),
+                      "error": probe.error,
+                  },
+              }
+
+              try:
+                  stream, stream_metadata = read_regular_stream(path, fixture["expected_stream"])
+                  record["native_stream"] = {
+                      "name": fixture["expected_stream"],
+                      "sha256": hashlib.sha256(stream).hexdigest(),
+                      **stream_metadata,
+                      "aggregate_metrics": (
+                          inpage300_metrics(stream)
+                          if fixture["variant"] == "300"
+                          else inpage100_metrics(stream)
+                      ),
+                  }
+              except Exception as error:  # research evidence must record, not disguise, failures
+                  record["native_stream"] = {
+                      "name": fixture["expected_stream"],
+                      "measurement_error": f"{type(error).__name__}: {error}",
+                  }
+
+              evidence["fixtures"].append(record)
+
+          OUTPUT.write_text(
+              json.dumps(evidence, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          print(json.dumps(evidence, ensure_ascii=False, indent=2, sort_keys=True))
+          PY
+
+      - name: Publish sanitized measurement summary
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if test -f public-inpage-probe-evidence/evidence.json; then
+            python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          from pathlib import Path
+
+          evidence = json.loads(Path("public-inpage-probe-evidence/evidence.json").read_text(encoding="utf-8"))
+          print("# Public native InPage research probe")
+          print()
+          print(f"Source: `{evidence['source_repository']}@{evidence['source_commit']}`")
+          print()
+          for fixture in evidence["fixtures"]:
+              probe = fixture["bounded_probe"]
+              native = fixture["native_stream"]
+              print(f"## {fixture['logical_name']}")
+              print(f"- File SHA-256: `{fixture['sha256']}`")
+              print(f"- Size: {fixture['size']} bytes")
+              print(f"- Probe classification: `{probe['classification']}`")
+              print(f"- Streams: `{', '.join(probe['stream_names'])}`")
+              print(f"- Native support claimed: `{probe['native_support_claimed']}`")
+              print(f"- Probe read stream contents: `{probe['stream_contents_read']}`")
+              if "measurement_error" in native:
+                  print(f"- Aggregate stream measurement: failed — `{native['measurement_error']}`")
+              else:
+                  print(f"- Native stream: `{native['name']}` ({native['stream_size']} bytes)")
+                  print(f"- Native stream SHA-256: `{native['sha256']}`")
+                  for key, value in native["aggregate_metrics"].items():
+                      print(f"- {key}: `{value}`")
+              print()
+          print("No fixture bytes or document text were uploaded. These remain provenance-limited research candidates, not production fixtures or native-support evidence.")
+          PY
+          else
+            echo "Evidence file was not produced." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Delete downloaded fixture bytes
+        if: always()
+        run: rm -rf /tmp/archiv-public-inpage-probe
+
+      - name: Upload sanitized evidence only
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: archiv-public-inpage-probe
+          path: public-inpage-probe-evidence/evidence.json
+          if-no-files-found: error
+          retention-days: 14
