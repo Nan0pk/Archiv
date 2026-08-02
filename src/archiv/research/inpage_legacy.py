@@ -62,19 +62,22 @@ def _scan_records(
     nonzero_upper_words = 0
     position = 0
     while position + 4 <= len(payload):
+        upper_word = 0
         if use_u16_length:
             length = struct.unpack_from("<H", payload, position)[0]
-            if struct.unpack_from("<H", payload, position + 2)[0] != 0:
-                nonzero_upper_words += 1
+            upper_word = struct.unpack_from("<H", payload, position + 2)[0]
         else:
             length = struct.unpack_from("<I", payload, position)[0]
         end = position + 4 + length
-        if (
+        valid = (
             1 <= length <= limits.max_record_bytes
             and end <= len(payload)
             and payload[end - 1] == 0x0D
-        ):
+        )
+        if valid:
             records.append((position, length))
+            if use_u16_length and upper_word != 0:
+                nonzero_upper_words += 1
             if len(records) > limits.max_records:
                 raise ExtractionError("plausible record limit exceeded")
             position = end
@@ -83,7 +86,9 @@ def _scan_records(
     return tuple(records), nonzero_upper_words
 
 
-def _decode_record(record: bytes, mapping: Mapping[int, str] | None) -> tuple[str, int, int]:
+def _decode_record(
+    record: bytes, mapping: Mapping[int, str] | None
+) -> tuple[str, int, int]:
     output: list[str] = []
     escapes = 0
     unmapped = 0
@@ -93,15 +98,16 @@ def _decode_record(record: bytes, mapping: Mapping[int, str] | None) -> tuple[st
         if byte == 0x04 and index + 1 < len(record) - 1:
             index += 1
             code = record[index]
-            escapes += 1
-            if code in SPECIAL_ESCAPES:
-                output.append(SPECIAL_ESCAPES[code])
-            elif mapping is not None and code in mapping:
-                output.append(mapping[code])
-            else:
-                output.append("\ufffd")
-                unmapped += 1
-        elif byte in range(0x09, 0x0E) or 0x20 <= byte <= 0x7E:
+            if 0x09 <= code <= 0xFE:
+                escapes += 1
+                if code in SPECIAL_ESCAPES:
+                    output.append(SPECIAL_ESCAPES[code])
+                elif mapping is not None and code in mapping:
+                    output.append(mapping[code])
+                else:
+                    output.append("\uFFFD")
+                    unmapped += 1
+        elif byte in range(0x09, 0x0E) or 0x20 <= byte <= 0xFE:
             output.append("\n" if byte in {0x0A, 0x0D} else chr(byte))
         index += 1
     return "".join(output), escapes, unmapped
@@ -118,8 +124,12 @@ def extract_inpage100(
     limits = limits or ExtractionLimits()
     if stream.variant != "100":
         raise ExtractionError(f"expected InPage100, got {stream.name}")
-    u32_records, _ = _scan_records(stream.payload, use_u16_length=False, limits=limits)
-    u16_records, nonzero_upper = _scan_records(stream.payload, use_u16_length=True, limits=limits)
+    u32_records, _ = _scan_records(
+        stream.payload, use_u16_length=False, limits=limits
+    )
+    u16_records, nonzero_upper = _scan_records(
+        stream.payload, use_u16_length=True, limits=limits
+    )
     u32_offsets = {offset for offset, _ in u32_records}
     u16_offsets = {offset for offset, _ in u16_records}
     lines: list[str] = []
@@ -137,8 +147,16 @@ def extract_inpage100(
                 blank += 1
                 continue
             arabic = sum(is_arabic(ord(character)) for character in stripped)
-            foreign = sum(0x80 <= ord(character) <= 0x05FF for character in stripped)
-            if arabic or (not foreign and re.search(r"[A-Za-z]{2}", stripped)):
+            foreign = sum(
+                0x80 <= ord(character) <= 0x05FF for character in stripped
+            )
+            latin_text = re.search(r"[A-Za-z]{2}", stripped) is not None
+            latin_shape = (
+                len(stripped) >= 5
+                or " " in stripped
+                or any(character.isdigit() for character in stripped)
+            )
+            if arabic or (not foreign and latin_text and latin_shape):
                 lines.append(unicodedata.normalize("NFC", stripped))
             else:
                 dropped += 1
@@ -147,7 +165,8 @@ def extract_inpage100(
         raise ExtractionError("extracted text codepoint limit exceeded")
     count, arabic, ascii_count, replacement = basic_text_counts(text)
     all_escapes = sum(
-        stream.payload[index] == 0x04 and 0x09 <= stream.payload[index + 1] <= 0xFE
+        stream.payload[index] == 0x04
+        and 0x09 <= stream.payload[index + 1] <= 0xFE
         for index in range(len(stream.payload) - 1)
     )
     return TextMetrics(
@@ -183,12 +202,17 @@ def extract_inpage100(
     ), text
 
 
-def parse_mapping_xml(data: bytes, *, limits: ExtractionLimits | None = None) -> MappingTable:
+def parse_mapping_xml(
+    data: bytes, *, limits: ExtractionLimits | None = None
+) -> MappingTable:
     """Parse bounded ``InpageToUni.xml`` data, preserving first-key-wins."""
 
     limits = limits or ExtractionLimits()
     if len(data) > limits.max_mapping_bytes:
         raise ExtractionError("mapping file size limit exceeded")
+    upper = data.upper()
+    if b"<!DOCTYPE" in upper or b"<!ENTITY" in upper:
+        raise ExtractionError("mapping XML declarations and entities are forbidden")
     try:
         root = ET.fromstring(data)
     except ET.ParseError as error:
@@ -196,7 +220,10 @@ def parse_mapping_xml(data: bytes, *, limits: ExtractionLimits | None = None) ->
     values: dict[int, str] = {}
     duplicates = conflicts = ignored = 0
     for row in root.iter():
-        children = {child.tag.rsplit("}", 1)[-1]: (child.text or "").strip() for child in row}
+        children = {
+            child.tag.rsplit("}", 1)[-1]: (child.text or "").strip()
+            for child in row
+        }
         if "InpageDec" not in children or "UnicodeDec" not in children:
             continue
         if children.get("Ignore", "").upper() in {"T", "TRUE", "1"}:
@@ -225,7 +252,9 @@ def compare_mappings(left: MappingTable, right: MappingTable) -> MappingComparis
     """Compare mapping values without emitting mapped source text."""
 
     overlap = set(left.values) & set(right.values)
-    conflicting = tuple(sorted(code for code in overlap if left.values[code] != right.values[code]))
+    conflicting = tuple(
+        sorted(code for code in overlap if left.values[code] != right.values[code])
+    )
     return MappingComparison(
         left_sha256=left.source_sha256,
         right_sha256=right.source_sha256,
