@@ -67,13 +67,20 @@ def _walk_root_entries(
     return streams
 
 
-def read_native_root_stream(path: Path, *, limits: ExtractionLimits | None = None) -> RootStream:
+def read_native_root_stream(
+    path: Path, *, limits: ExtractionLimits | None = None
+) -> RootStream:
     """Read exactly one validated root-level ``InPageNNN`` regular stream."""
 
     limits = limits or ExtractionLimits()
     probe = probe_path(path, limits=limits.cfb)
-    if probe.classification not in {"inpage_cfb_candidate", "split_inpage_cfb_candidate"}:
-        raise ExtractionError(probe.error or f"not an InPage CFB candidate: {probe.classification}")
+    if probe.classification not in {
+        "inpage_cfb_candidate",
+        "split_inpage_cfb_candidate",
+    }:
+        raise ExtractionError(
+            probe.error or f"not an InPage CFB candidate: {probe.classification}"
+        )
     data = path.read_bytes()
     sector_size = 1 << _u16(data, 30)
     fat_sector_ids = _collect_fat_sector_ids(
@@ -97,15 +104,21 @@ def read_native_root_stream(path: Path, *, limits: ExtractionLimits | None = Non
     streams = _walk_root_entries(entries, entries[0], limits.cfb)
     if "documentinfo" not in streams:
         raise ExtractionError("missing root-level DocumentInfo stream")
-    candidates = [entry for entry in streams.values() if INPAGE_RE.fullmatch(entry.name)]
+    candidates = [
+        entry for entry in streams.values() if INPAGE_RE.fullmatch(entry.name)
+    ]
     if len(candidates) != 1:
-        raise ExtractionError(f"expected one root-level InPageNNN stream, found {len(candidates)}")
+        raise ExtractionError(
+            f"expected one root-level InPageNNN stream, found {len(candidates)}"
+        )
     entry = candidates[0]
     match = INPAGE_RE.fullmatch(entry.name)
     if match is None:
         raise ExtractionError("candidate stream name changed during validation")
     if entry.stream_size < 4096:
-        raise ExtractionError("mini-stream native content is outside this research boundary")
+        raise ExtractionError(
+            "mini-stream native content is outside this research boundary"
+        )
     if entry.stream_size > limits.max_stream_bytes:
         raise ExtractionError("native stream size limit exceeded")
     expected_sectors = math.ceil(entry.stream_size / sector_size)
@@ -117,7 +130,9 @@ def read_native_root_stream(path: Path, *, limits: ExtractionLimits | None = Non
     )
     if len(sector_ids) != expected_sectors:
         raise ExtractionError("native stream sector count does not match declared size")
-    payload = b"".join(_read_sector(data, sector_id, sector_size) for sector_id in sector_ids)
+    payload = b"".join(
+        _read_sector(data, sector_id, sector_size) for sector_id in sector_ids
+    )
     payload = payload[: entry.stream_size]
     return RootStream(
         name=entry.name,
@@ -144,12 +159,15 @@ def extract_inpage300(
     current: list[int] = []
     rejected_regions = 0
     rejected_bytes = 0
+    in_rejected_region = False
     longest = 0
     unpaired_surrogates = 0
 
     def flush() -> None:
         nonlocal current
-        if len(current) >= limits.min_utf16_run_units and any(is_arabic(unit) for unit in current):
+        if len(current) >= limits.min_utf16_run_units and any(
+            is_arabic(unit) for unit in current
+        ):
             runs.append(current)
         current = []
 
@@ -167,13 +185,18 @@ def extract_inpage300(
         if allowed:
             current.append(unit)
             longest = max(longest, len(current))
+            in_rejected_region = False
         else:
             if current:
                 flush()
-            rejected_regions += 1
+            if not in_rejected_region:
+                rejected_regions += 1
+                in_rejected_region = True
             rejected_bytes += 2
     flush()
-    text = "\n".join(struct.pack(f"<{len(run)}H", *run).decode("utf-16le") for run in runs)
+    text = "\n".join(
+        struct.pack(f"<{len(run)}H", *run).decode("utf-16le") for run in runs
+    )
     if len(text) > limits.max_text_codepoints:
         raise ExtractionError("extracted text codepoint limit exceeded")
     nfc = unicodedata.normalize("NFC", text)
@@ -195,7 +218,9 @@ def extract_inpage300(
         details={
             "utf16_code_units": len(units),
             "arabic_code_units": sum(is_arabic(unit) for unit in units),
-            "ascii_printable_code_units": sum(0x20 <= unit <= 0x7E for unit in units),
+            "ascii_printable_code_units": sum(
+                0x20 <= unit <= 0x7E for unit in units
+            ),
             "zero_code_units": units.count(0),
             "unpaired_surrogates": unpaired_surrogates,
             "longest_allowed_run_code_units": longest,
