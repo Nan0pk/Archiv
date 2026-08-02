@@ -86,9 +86,7 @@ def _scan_records(
     return tuple(records), nonzero_upper_words
 
 
-def _decode_record(
-    record: bytes, mapping: Mapping[int, str] | None
-) -> tuple[str, int, int]:
+def _decode_record(record: bytes, mapping: Mapping[int, str] | None) -> tuple[str, int, int]:
     output: list[str] = []
     escapes = 0
     unmapped = 0
@@ -105,7 +103,7 @@ def _decode_record(
                 elif mapping is not None and code in mapping:
                     output.append(mapping[code])
                 else:
-                    output.append("\uFFFD")
+                    output.append("\ufffd")
                     unmapped += 1
         elif byte in range(0x09, 0x0E) or 0x20 <= byte <= 0xFE:
             output.append("\n" if byte in {0x0A, 0x0D} else chr(byte))
@@ -124,12 +122,8 @@ def extract_inpage100(
     limits = limits or ExtractionLimits()
     if stream.variant != "100":
         raise ExtractionError(f"expected InPage100, got {stream.name}")
-    u32_records, _ = _scan_records(
-        stream.payload, use_u16_length=False, limits=limits
-    )
-    u16_records, nonzero_upper = _scan_records(
-        stream.payload, use_u16_length=True, limits=limits
-    )
+    u32_records, _ = _scan_records(stream.payload, use_u16_length=False, limits=limits)
+    u16_records, nonzero_upper = _scan_records(stream.payload, use_u16_length=True, limits=limits)
     u32_offsets = {offset for offset, _ in u32_records}
     u16_offsets = {offset for offset, _ in u16_records}
     lines: list[str] = []
@@ -147,9 +141,7 @@ def extract_inpage100(
                 blank += 1
                 continue
             arabic = sum(is_arabic(ord(character)) for character in stripped)
-            foreign = sum(
-                0x80 <= ord(character) <= 0x05FF for character in stripped
-            )
+            foreign = sum(0x80 <= ord(character) <= 0x05FF for character in stripped)
             latin_text = re.search(r"[A-Za-z]{2}", stripped) is not None
             latin_shape = (
                 len(stripped) >= 5
@@ -165,8 +157,7 @@ def extract_inpage100(
         raise ExtractionError("extracted text codepoint limit exceeded")
     count, arabic, ascii_count, replacement = basic_text_counts(text)
     all_escapes = sum(
-        stream.payload[index] == 0x04
-        and 0x09 <= stream.payload[index + 1] <= 0xFE
+        stream.payload[index] == 0x04 and 0x09 <= stream.payload[index + 1] <= 0xFE
         for index in range(len(stream.payload) - 1)
     )
     return TextMetrics(
@@ -202,9 +193,7 @@ def extract_inpage100(
     ), text
 
 
-def parse_mapping_xml(
-    data: bytes, *, limits: ExtractionLimits | None = None
-) -> MappingTable:
+def parse_mapping_xml(data: bytes, *, limits: ExtractionLimits | None = None) -> MappingTable:
     """Parse bounded ``InpageToUni.xml`` data, preserving first-key-wins."""
 
     limits = limits or ExtractionLimits()
@@ -220,10 +209,7 @@ def parse_mapping_xml(
     values: dict[int, str] = {}
     duplicates = conflicts = ignored = 0
     for row in root.iter():
-        children = {
-            child.tag.rsplit("}", 1)[-1]: (child.text or "").strip()
-            for child in row
-        }
+        children = {child.tag.rsplit("}", 1)[-1]: (child.text or "").strip() for child in row}
         if "InpageDec" not in children or "UnicodeDec" not in children:
             continue
         if children.get("Ignore", "").upper() in {"T", "TRUE", "1"}:
@@ -252,9 +238,7 @@ def compare_mappings(left: MappingTable, right: MappingTable) -> MappingComparis
     """Compare mapping values without emitting mapped source text."""
 
     overlap = set(left.values) & set(right.values)
-    conflicting = tuple(
-        sorted(code for code in overlap if left.values[code] != right.values[code])
-    )
+    conflicting = tuple(sorted(code for code in overlap if left.values[code] != right.values[code]))
     return MappingComparison(
         left_sha256=left.source_sha256,
         right_sha256=right.source_sha256,
