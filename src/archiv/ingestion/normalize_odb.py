@@ -38,7 +38,7 @@ def _bounded_name(element: ElementTree.Element) -> str | None:
         return None
     if len(value) > MAX_DATABASE_NAME_CHARACTERS:
         raise ValueError("ODB object name character limit exceeded")
-    if any(category(character).startswith("C") for character in value):
+    if any(category(character) == "Cc" for character in value):
         raise ValueError("ODB object name contains control characters")
     return value
 
@@ -159,7 +159,12 @@ def normalize_odb(
     )
     opaque_member_count, opaque_member_bytes = _opaque_database_members(path)
 
-    object_counts = {f"{kind}s": len(names) for kind, names in objects.items()}
+    object_counts = {
+        "tables": len(objects["table"]),
+        "queries": len(objects["query"]),
+        "forms": len(objects["form"]),
+        "reports": len(objects["report"]),
+    }
     return NormalizedDocument(
         object_sha256=digest,
         media_type=media_type,
