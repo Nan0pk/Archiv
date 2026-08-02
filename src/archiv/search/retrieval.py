@@ -161,7 +161,7 @@ class _SourceCandidate:
     score: float = 0.0
     best_result: SearchResult | None = None
     best_result_score: float = float("-inf")
-    matched_queries: set[str] = field(default_factory=set)
+    matched_queries: set[str] = field(default_factory=lambda: set[str]())
 
 
 def _tokens(objective: str) -> list[str]:
