@@ -1,10 +1,10 @@
 {
   "schema_version": "1",
   "benchmark_id": "archiv-real-work-field-trial-v1",
-  "measured_workflow_run_id": 30744859517,
-  "measured_head_sha": "029e3d96a44fb010999747615fa5f2131dc56ef1",
-  "artifact_id": 8832544059,
-  "artifact_sha256": "7df9935fc8ea3e73c83cf3e17f16a9053ec59ad13d4ebb17e0ac64e892672dc9",
+  "measured_workflow_run_id": 30748825568,
+  "measured_head_sha": "c7d7d4ccf783adae683dd4f0b21aabcda4f7d7ed",
+  "artifact_id": 8833770549,
+  "artifact_sha256": "60d73fa371063df484211eafd056153c42553f40754992bd47abedca29d57ed4",
   "corpus_document_count": 12,
   "question_count": 22,
   "evidence_limit": 8,
@@ -26,19 +26,24 @@
     "mean_completeness_score": 1.0,
     "unsupported_claim_count": 0
   },
+  "source_navigation": {
+    "bounded_source_location_available": true,
+    "citation_revalidated": true,
+    "original_hash_revalidated": true,
+    "read_only": true,
+    "private_path_or_source_metadata_retained": false
+  },
   "performance": {
-    "indexing_duration_ms": 854.24,
-    "median_question_duration_ms": 558.67,
-    "total_question_duration_ms": 12334.73
+    "indexing_duration_ms": 951.56,
+    "median_question_duration_ms": 659.32,
+    "total_question_duration_ms": 14494.1
   },
   "dominant_failure": "none",
-  "confirmed_remaining_defects": [
-    "source navigation friction"
-  ],
+  "confirmed_remaining_defects": [],
   "report": {
     "status": "succeeded",
     "rendered_page_count": 3,
-    "visual_inspection": "passed: all pages readable; headings, tables, citations, appendix and provenance fit; no blank page, clipping or overflow"
+    "visual_inspection": "passed: all pages readable; no blank page, clipping, overflow, broken table, unsupported citation, or private data"
   },
   "privacy": {
     "public_safe_fixture_only": true,
@@ -49,7 +54,9 @@
     "status": "externally_blocked",
     "reason": "No user-selected disposable private corpus and no explicit suitable local loopback model endpoint were accessible in the GitHub execution environment."
   },
-  "resolved_issue": "https://github.com/Nan0pk/Archiv/issues/36",
-  "next_evidence_derived_issue": "https://github.com/Nan0pk/Archiv/issues/40",
-  "separate_format_compatibility_issue": "https://github.com/Nan0pk/Archiv/issues/38"
+  "resolved_issues": [
+    "https://github.com/Nan0pk/Archiv/issues/36",
+    "https://github.com/Nan0pk/Archiv/issues/40"
+  ],
+  "next_evidence_derived_issue": "https://github.com/Nan0pk/Archiv/issues/38"
 }

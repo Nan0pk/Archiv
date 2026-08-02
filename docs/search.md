@@ -79,11 +79,25 @@ validation = validate_citation(evidence.results[0].citation)
 excerpt = read_source_excerpt(evidence.results[0].citation)
 ```
 
+## Bounded source location
+
+Use one explicit object digest or citation to locate the preserved original after independent revalidation:
+
+```bash
+archiv source 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+archiv find "quarterly finding" --json > matches.json
+archiv source --citation-file matches.json --citation-number 1
+```
+
+`--citation-file` accepts a raw citation object, one search result, a list of find results, an ask result containing `retrieved_citations`, or a report manifest containing `sources`. `--citation-number` is one-based and prevents ambiguous implicit selection.
+
+The command revalidates the citation envelope, canonical original hash, normalized source metadata, and the resolved path boundary. It rejects malformed or uppercase digests, stale or fabricated citations, object substitution, symbolic links, and any path that resolves outside Archiv-controlled storage. Output is read-only metadata; the command does not launch an application, execute document content, follow external links, or expose a general file browser.
+
 ## Current boundary
 
 TXT/Markdown, PDF, DOCX, XLSX, and PPTX normalized text is indexed with exact locations. Images and audio are represented in durable normalized metadata, but their text is not fabricated: image OCR and audio transcription remain unavailable until real local processors are integrated. The citation model is locator-agnostic and can carry image regions, audio timestamps, or metadata-chunk locations when those processors produce evidence.
 
-OpenDocument and native InPage ingestion are tracked separately in issue #38. A bounded command for moving from a validated citation to its preserved source is tracked in issue #40.
+OpenDocument and native InPage ingestion are tracked separately in issue #38. Bounded source location is implemented by `archiv source`; opening, executing, editing, or browsing arbitrary files remains outside the trust boundary.
 
 ## Why SQLite first
 

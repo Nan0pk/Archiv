@@ -79,14 +79,22 @@
 - deterministic local query derivation for `archiv ask` and model-assisted `archiv report`;
 - bounded source-diverse merge, ranking, deduplication, and evidence-limit enforcement;
 - versioned retrieval diagnostics and `--explain-retrieval`;
-- private-safe aggregate diagnostics with no filenames, paths, questions, excerpts, queries, locators, prompts, model output, or source identifiers;
+- private-safe aggregate diagnostics;
 - full required-source recall for all 22 frozen benchmark questions at evidence limit 8;
 - 22/22 valid citation packages, full deterministic completeness and honesty, and no source mutation;
 - no vectors, embeddings, semantic reranker, model query rewriting, new daemon, or provider expansion.
 
+## Bounded source location (0.1.0a5)
+
+- `archiv source <object-sha256>` for an independently hash-validated immutable original;
+- `archiv source --citation-file ... --citation-number N` for exact find, ask, and report citation envelopes;
+- bounded path verification with traversal, symlink-escape, stale-citation, and object-substitution rejection;
+- stable versioned JSON and readable human output;
+- public-safe field-trial proof retaining only validation booleans;
+- no shell execution, generic file browser, source execution, cloud link, upload, or storage-layout change.
+
 ## Evidence-derived next work
 
-- bounded read-only source-location command for moving from a validated citation to its preserved original and native locator (issue #40);
 - complete OpenDocument-family ingestion and truthful local native InPage `.inp` extraction for Urdu and other Perso-Arabic text (issue #38);
 - real image OCR and audio transcription only when local processors and evidence-backed acceptance tests exist.
 

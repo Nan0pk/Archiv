@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -212,6 +213,23 @@ class CitationValidation(StrictModel):
 
     valid: bool
     errors: list[str] = Field(default_factory=lambda: list[str]())
+
+
+class SourceLocation(StrictModel):
+    """Bounded local location of one independently verified canonical source."""
+
+    schema_version: str = "1"
+    reference_type: Literal["object", "citation"]
+    object_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    source_name: str
+    media_type: str
+    kind: str
+    locator: dict[str, object] | None = None
+    canonical_path: str
+    canonical_relative_path: str
+    citation_validated: bool
+    original_hash_validated: bool
+    read_only: bool = True
 
 
 class SearchIndexBuild(StrictModel):
