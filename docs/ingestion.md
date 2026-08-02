@@ -73,6 +73,8 @@ The current claim does **not** include extracting table rows, query results, dat
 
 Native InPage files remain unsupported. `.inp` support will not be claimed until lawful real fixtures and independently verified Urdu/Arabic extraction are available. Unsupported inputs fail explicitly rather than falling back to cloud conversion or treating OCR as native extraction.
 
+The verified evidence, rejected shortcuts, fixture requirements and parser/adapter acceptance conditions are recorded in [Native InPage evidence and acceptance gate](native-inpage-evidence-gate.md).
+
 OCR and transcription are not silently simulated. Image and audio ingestion create explicit `not_run` status artifacts until real local processors are integrated.
 
 ## Trust rules
