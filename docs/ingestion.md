@@ -34,6 +34,7 @@ Originals are stored without an extension under their SHA-256 digest and made re
 
 ```bash
 archiv ingest ./document.docx
+archiv ingest ./document.odt
 archiv ingest ./document.docx --home /srv/archiv
 archiv rebuild-derived <sha256>
 ```
@@ -42,9 +43,13 @@ archiv rebuild-derived <sha256>
 
 `archiv rebuild-derived` deletes only the selected object's derived directory and recreates it from the immutable original. It verifies the original digest before returning success.
 
-## Initial format surface
+## Current format surface
 
-The first ingestion slice supports UTF-8 TXT/Markdown, PDF, DOCX, XLSX, PPTX, PNG/JPEG and WAV. It creates a portable normalized JSON document with format-native locators such as page, paragraph, sheet/cell and slide/shape.
+Archiv supports UTF-8 TXT/Markdown, PDF, DOCX, XLSX, PPTX, core ZIP-based OpenDocument packages (ODT, ODS, ODP and ODG), PNG/JPEG and WAV. It creates a portable normalized JSON document with format-native locators such as page, paragraph, sheet/cell, slide/object and drawing page/object.
+
+Core ODF ingestion is deliberately bounded and non-executing. It validates the exact package mimetype, required manifest declarations, expected document body, safe archive paths, supported compression, XML structure and aggregate repeat expansion. Spreadsheet formulas are recorded but never executed. External links are counted and ignored. ODF text-space, tab and line-break elements are preserved in normalized text.
+
+The current ODF claim does **not** include templates, master documents, formulas, flat-XML variants, databases, presentation notes or native InPage files. Those formats must fail as unsupported until separately implemented and verified.
 
 OCR and transcription are not silently simulated. Image and audio ingestion create explicit `not_run` status artifacts until real local processors are integrated.
 
