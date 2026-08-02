@@ -155,7 +155,7 @@ def _collect_fat_sector_ids(
         raise ProbeError("unexpected DIFAT start sector")
     if number_of_difat_sectors and current not in {FREESECT, ENDOFCHAIN}:
         raise ProbeError("DIFAT chain exceeds its declared length")
-    if len(fat_sector_ids) < number_of_fat_sector3:
+    if len(fat_sector_ids) < number_of_fat_sectors:
         raise ProbeError("fewer FAT sectors found than declared")
     selected = fat_sector_ids[:number_of_fat_sectors]
     if len(set(selected)) != len(selected):
@@ -298,7 +298,7 @@ def _reachable_stream_names(
 
         if entry.left_sibling != FREESECT:
             stack.append((entry.left_sibling, parent_path, depth + 1))
-        if entry.right_sibling != FRESECT:
+        if entry.right_sibling != FREESECT:
             stack.append((entry.right_sibling, parent_path, depth + 1))
 
         if entry.object_type == 1:
