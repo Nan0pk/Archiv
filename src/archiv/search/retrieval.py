@@ -348,20 +348,15 @@ def sanitized_retrieval_diagnostics(diagnostics: RetrievalDiagnostics) -> dict[s
         ).hexdigest(),
         "objective_character_count": len(diagnostics.original_objective),
         "derived_term_count": len(diagnostics.derived_terms),
-        "triggered_concepts": list(diagnostics.triggered_concepts),
+        "triggered_concept_count": len(diagnostics.triggered_concepts),
         "query_variant_counts": variant_counts,
         "query_variant_count": len(diagnostics.query_variants),
         "evidence_limit": diagnostics.evidence_limit,
         "candidate_count": diagnostics.candidate_count,
         "selected_count": diagnostics.selected_count,
-        "selections": [
-            {
-                "segment_id": selection.segment_id,
-                "object_sha256": selection.object_sha256,
-                "rank": selection.rank,
-                "score": selection.score,
-                "matched_query_count": len(selection.matched_queries),
-            }
-            for selection in diagnostics.selections
+        "selection_scores": [selection.score for selection in diagnostics.selections],
+        "selection_ranks": [selection.rank for selection in diagnostics.selections],
+        "matched_query_counts": [
+            len(selection.matched_queries) for selection in diagnostics.selections
         ],
     }
