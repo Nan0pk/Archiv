@@ -197,9 +197,7 @@ class RetrievalDiagnostics(StrictModel):
     evidence_limit: int = Field(ge=1, le=50)
     candidate_count: int = Field(ge=0)
     selected_count: int = Field(ge=0)
-    selections: list[RetrievalSelection] = Field(
-        default_factory=lambda: list[RetrievalSelection]()
-    )
+    selections: list[RetrievalSelection] = Field(default_factory=lambda: list[RetrievalSelection]())
 
 
 class EvidenceRetrieval(StrictModel):
