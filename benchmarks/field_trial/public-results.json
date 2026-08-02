@@ -1,18 +1,19 @@
 {
   "schema_version": "1",
   "benchmark_id": "archiv-real-work-field-trial-v1",
-  "measured_workflow_run_id": 30719864845,
-  "measured_head_sha": "fc093886f002f66249b4043543e3093ae97557ee",
-  "artifact_id": 8824523536,
-  "artifact_sha256": "e306874f995dee5a819b7e678c05af8d4a20db5dffa4ad3e661397167078ff1c",
+  "measured_workflow_run_id": 30744859517,
+  "measured_head_sha": "029e3d96a44fb010999747615fa5f2131dc56ef1",
+  "artifact_id": 8832544059,
+  "artifact_sha256": "7df9935fc8ea3e73c83cf3e17f16a9053ec59ad13d4ebb17e0ac64e892672dc9",
   "corpus_document_count": 12,
   "question_count": 22,
   "evidence_limit": 8,
   "retrieval": {
-    "questions_with_full_recall": 16,
-    "questions_with_retrieval_miss": 6,
-    "mean_recall_at_evidence_limit": 0.7273,
-    "failed_question_ids": ["Q02", "Q12", "Q17", "Q18", "Q20", "Q21"]
+    "strategy_version": "deterministic-literal-expansion-v1",
+    "questions_with_full_recall": 22,
+    "questions_with_retrieval_miss": 0,
+    "mean_recall_at_evidence_limit": 1.0,
+    "failed_question_ids": []
   },
   "citation_integrity": {
     "structurally_valid_questions": 22,
@@ -20,25 +21,24 @@
     "fabricated_identifier_count": 0
   },
   "answer_quality": {
-    "fully_complete_questions": 16,
-    "honesty_checks_passed": 16,
-    "mean_completeness_score": 0.7273,
+    "fully_complete_questions": 22,
+    "honesty_checks_passed": 22,
+    "mean_completeness_score": 1.0,
     "unsupported_claim_count": 0
   },
   "performance": {
-    "indexing_duration_ms": 753.12,
-    "median_question_duration_ms": 443.8,
-    "total_question_duration_ms": 9663.89
+    "indexing_duration_ms": 854.24,
+    "median_question_duration_ms": 558.67,
+    "total_question_duration_ms": 12334.73
   },
-  "dominant_failure": "query construction failure",
-  "confirmed_secondary_defects": [
-    "source navigation friction",
-    "blank page before source appendix (fixed and regression-tested in the field-trial PR)"
+  "dominant_failure": "none",
+  "confirmed_remaining_defects": [
+    "source navigation friction"
   ],
   "report": {
     "status": "succeeded",
     "rendered_page_count": 3,
-    "visual_inspection": "passed: all pages readable; headings, tables, citations, appendix and provenance fit; no blank page remains"
+    "visual_inspection": "passed: all pages readable; headings, tables, citations, appendix and provenance fit; no blank page, clipping or overflow"
   },
   "privacy": {
     "public_safe_fixture_only": true,
@@ -49,5 +49,7 @@
     "status": "externally_blocked",
     "reason": "No user-selected disposable private corpus and no explicit suitable local loopback model endpoint were accessible in the GitHub execution environment."
   },
-  "next_release_issue": "https://github.com/Nan0pk/Archiv/issues/36"
+  "resolved_issue": "https://github.com/Nan0pk/Archiv/issues/36",
+  "next_evidence_derived_issue": "https://github.com/Nan0pk/Archiv/issues/40",
+  "separate_format_compatibility_issue": "https://github.com/Nan0pk/Archiv/issues/38"
 }

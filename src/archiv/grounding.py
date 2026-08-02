@@ -13,7 +13,7 @@ from archiv.contracts import Citation, RunStatus, SearchResult
 from archiv.grounding_contracts import GroundedModelResponse
 from archiv.model_adapter import build_model_adapter, load_model_config
 from archiv.reports.formatting import format_locator
-from archiv.search import read_source_excerpt, search_documents, validate_citation
+from archiv.search import read_source_excerpt, retrieve_evidence, validate_citation
 from archiv.storage.layout import ArchivLayout
 
 
@@ -124,24 +124,6 @@ def parse_and_validate_grounded_response(
     return (response if not errors else None), errors
 
 
-def _distinct_search_results(
-    results: list[SearchResult],
-    *,
-    limit: int,
-) -> list[SearchResult]:
-    selected: list[SearchResult] = []
-    seen: set[str] = set()
-    for result in results:
-        digest = result.citation.object_sha256
-        if digest in seen:
-            continue
-        selected.append(result)
-        seen.add(digest)
-        if len(selected) == limit:
-            break
-    return selected
-
-
 def _write_json(path: Path, payload: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
@@ -179,14 +161,17 @@ def run_grounded_ask(
         _write_json(evidence_dir / "result.json", result.model_dump(mode="json"))
         return result
 
-    search_results = search_documents(query, home=layout.root, limit=max_sources * 2)
-    selected_results = _distinct_search_results(search_results, limit=max_sources)
+    retrieval = retrieve_evidence(query, home=layout.root, evidence_limit=max_sources)
+    _write_json(
+        evidence_dir / "retrieval.json",
+        retrieval.diagnostics.model_dump(mode="json"),
+    )
 
     citations_map: dict[str, SearchResult] = {}
     retrieved_citations: list[Citation] = []
     errors: list[str] = []
 
-    for index, res in enumerate(selected_results, start=1):
+    for index, res in enumerate(retrieval.results, start=1):
         cid = f"CIT-{index}"
         validation = validate_citation(res.citation, home=layout.root)
         if not validation.valid:
@@ -212,6 +197,7 @@ def run_grounded_ask(
             evidence_dir=str(evidence_dir),
             model=model_config,
             retrieved_citations=retrieved_citations,
+            retrieval_diagnostics=retrieval.diagnostics,
             errors=errors,
         )
         _write_json(evidence_dir / "result.json", result.model_dump(mode="json"))
@@ -228,6 +214,7 @@ def run_grounded_ask(
             evidence_dir=str(evidence_dir),
             model=model_config,
             retrieved_citations=[],
+            retrieval_diagnostics=retrieval.diagnostics,
             grounded_response=grounded_resp.model_dump(mode="json"),
         )
         _write_json(evidence_dir / "result.json", result.model_dump(mode="json"))
@@ -258,6 +245,7 @@ def run_grounded_ask(
             evidence_dir=str(evidence_dir),
             model=model_config,
             retrieved_citations=retrieved_citations,
+            retrieval_diagnostics=retrieval.diagnostics,
             errors=[f"model request failed: {type(error).__name__}: {error}"],
         )
         _write_json(evidence_dir / "result.json", result.model_dump(mode="json"))
@@ -277,6 +265,7 @@ def run_grounded_ask(
             evidence_dir=str(evidence_dir),
             model=model_config,
             retrieved_citations=retrieved_citations,
+            retrieval_diagnostics=retrieval.diagnostics,
             raw_model_response=raw_response,
             errors=parse_errors or ["failed to parse model response"],
         )
@@ -290,6 +279,7 @@ def run_grounded_ask(
         evidence_dir=str(evidence_dir),
         model=model_config,
         retrieved_citations=retrieved_citations,
+        retrieval_diagnostics=retrieval.diagnostics,
         raw_model_response=raw_response,
         grounded_response=parsed_response.model_dump(mode="json"),
     )

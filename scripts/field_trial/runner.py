@@ -11,9 +11,9 @@ import tempfile
 from collections.abc import Iterable, Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
-from archiv.search import search_documents
+from archiv.search import retrieve_evidence
 from field_trial.common import (
     PRIVATE_KEYS,
     PRIVATE_ROOT,
@@ -82,15 +82,8 @@ def run_public_trial(args: argparse.Namespace) -> dict[str, object]:
         limit = int(benchmark["evidence_limit"])
         for question in cast(Sequence[Mapping[str, object]], benchmark["questions"]):
             text = str(question["question"])
-            retrieved = search_documents(text, home=home, limit=limit * 2)
-            selected: list[Any] = []
-            seen: set[str] = set()
-            for item in retrieved:
-                if item.citation.object_sha256 not in seen:
-                    selected.append(item)
-                    seen.add(item.citation.object_sha256)
-                if len(selected) == limit:
-                    break
+            package = retrieve_evidence(text, home=home, evidence_limit=limit)
+            selected = package.results
             source_ids = [
                 by_filename.get(item.citation.source_name, "UNKNOWN") for item in selected
             ]
@@ -99,11 +92,18 @@ def run_public_trial(args: argparse.Namespace) -> dict[str, object]:
             )
             retrieval.update(
                 {
-                    "derived_query": text,
-                    "query_strategy": "single exact FTS phrase",
-                    "retrieved_passage_count": len(retrieved),
+                    "derived_query": [
+                        variant.query for variant in package.diagnostics.query_variants
+                    ],
+                    "query_strategy": package.diagnostics.strategy_version,
+                    "derived_terms": package.diagnostics.derived_terms,
+                    "triggered_concepts": package.diagnostics.triggered_concepts,
+                    "retrieved_passage_count": package.diagnostics.candidate_count,
                     "selected_passage_count": len(selected),
                     "retrieval_ranks": [round(float(item.rank), 6) for item in selected],
+                    "selection_scores": [
+                        round(selection.score, 6) for selection in package.diagnostics.selections
+                    ],
                     "normalized_evidence_contains_required_facts": _facts_exist(
                         question, normalized, source_files
                     ),
@@ -331,14 +331,21 @@ def run_private_trial(args: argparse.Namespace) -> dict[str, object]:
             raise RuntimeError("explicit local model configuration failed")
     details: list[dict[str, object]] = []
     durations: list[float] = []
+    candidate_counts: list[int] = []
+    selected_counts: list[int] = []
     for question in questions:
-        retrieved = search_documents(question, home=home, limit=args.evidence_limit * 2)
+        package = retrieve_evidence(
+            question,
+            home=home,
+            evidence_limit=args.evidence_limit,
+        )
+        candidate_counts.append(package.diagnostics.candidate_count)
+        selected_counts.append(package.diagnostics.selected_count)
         item: dict[str, object] = {
             "question": question,
-            "retrieved_passages": len(retrieved),
-            "source_names": [
-                result.citation.source_name for result in retrieved[: args.evidence_limit]
-            ],
+            "retrieval_diagnostics": package.diagnostics.model_dump(mode="json"),
+            "retrieved_passages": package.diagnostics.candidate_count,
+            "source_names": [result.citation.source_name for result in package.results],
         }
         if model_available:
             ask = run_command(
@@ -377,9 +384,16 @@ def run_private_trial(args: argparse.Namespace) -> dict[str, object]:
     summary = {
         "schema_version": SCHEMA_VERSION,
         "mode": "private-local-sanitized",
+        "retrieval_strategy": "deterministic-literal-expansion-v1",
         "question_count": len(questions),
         "corpus_file_count": len(copied),
         "model_available": model_available,
+        "median_candidate_count": (
+            sorted(candidate_counts)[len(candidate_counts) // 2] if candidate_counts else 0
+        ),
+        "median_selected_count": (
+            sorted(selected_counts)[len(selected_counts) // 2] if selected_counts else 0
+        ),
         "median_question_duration_ms": (
             sorted(durations)[len(durations) // 2] if durations else None
         ),
@@ -397,6 +411,8 @@ def run_private_trial(args: argparse.Namespace) -> dict[str, object]:
             "paths_included": False,
             "questions_included": False,
             "excerpts_included": False,
+            "derived_queries_included": False,
+            "source_identifiers_included": False,
         },
     }
     sanitized = cast(dict[str, object], redact_private(summary, [str(corpus), *hashes]))

@@ -67,8 +67,27 @@
 ## First real-work field trial
 
 - deterministic public-safe multi-format benchmark;
-- at least 20 evidence-grounding questions;
+- 22 evidence-grounding questions at a fixed evidence limit;
 - retrieval, citation, completeness, honesty, latency, and usability measurements;
 - explicitly opted-in private local mode with sanitized aggregate output;
-- one evidence-derived `0.1.0a4` issue after the measured dominant failure is known;
-- no speculative `0.1.0a4` implementation during baseline collection.
+- evidence-derived retrieval issue after the measured dominant failure was known;
+- no speculative implementation during baseline collection.
+
+## Explainable natural-language retrieval (0.1.0a4)
+
+- keep `archiv find` literal and unchanged;
+- deterministic local query derivation for `archiv ask` and model-assisted `archiv report`;
+- bounded source-diverse merge, ranking, deduplication, and evidence-limit enforcement;
+- versioned retrieval diagnostics and `--explain-retrieval`;
+- private-safe aggregate diagnostics with no filenames, paths, questions, excerpts, queries, locators, prompts, model output, or source identifiers;
+- full required-source recall for all 22 frozen benchmark questions at evidence limit 8;
+- 22/22 valid citation packages, full deterministic completeness and honesty, and no source mutation;
+- no vectors, embeddings, semantic reranker, model query rewriting, new daemon, or provider expansion.
+
+## Evidence-derived next work
+
+- bounded read-only source-location command for moving from a validated citation to its preserved original and native locator (issue #40);
+- complete OpenDocument-family ingestion and truthful local native InPage `.inp` extraction for Urdu and other Perso-Arabic text (issue #38);
+- real image OCR and audio transcription only when local processors and evidence-backed acceptance tests exist.
+
+Collections, synchronization, vector infrastructure, GUI work, and broader provider support remain deferred until measured user work demonstrates that the simpler architecture is insufficient.

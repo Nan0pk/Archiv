@@ -6,7 +6,7 @@ from typing import Literal
 
 from pydantic import Field
 
-from archiv.contracts import RunStatus, StrictModel
+from archiv.contracts import RetrievalDiagnostics, RunStatus, StrictModel
 from archiv.model_adapter import ModelConfig
 from archiv.report_contracts import ReportValidation
 
@@ -38,6 +38,7 @@ class TaskRunResult(StrictModel):
     source_hashes_before: dict[str, str] = Field(default_factory=dict)
     source_hashes_after: dict[str, str] = Field(default_factory=dict)
     citation_count: int = Field(default=0, ge=0)
+    retrieval_diagnostics: RetrievalDiagnostics | None = None
     model: ModelConfig
     network_policy: Literal["denied"] = "denied"
     errors: list[str] = Field(default_factory=list)

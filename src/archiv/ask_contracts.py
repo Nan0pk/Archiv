@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pydantic import Field
 
-from archiv.contracts import Citation, RunStatus, StrictModel
+from archiv.contracts import Citation, RetrievalDiagnostics, RunStatus, StrictModel
 from archiv.model_adapter import ModelConfig
 
 
@@ -26,6 +26,7 @@ class AskRunResult(StrictModel):
     evidence_dir: str
     model: ModelConfig
     retrieved_citations: list[Citation] = Field(default_factory=_default_citations)
+    retrieval_diagnostics: RetrievalDiagnostics | None = None
     raw_model_response: str | None = None
     grounded_response: dict[str, object] | None = None
     errors: list[str] = Field(default_factory=_default_errors)
