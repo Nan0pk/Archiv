@@ -76,7 +76,10 @@ def _read_package(path: Path, expected_mimetype: str) -> _Package:
                     raise ValueError("ODF archive total size limit exceeded")
                 if entry.compress_size == 0 and entry.file_size:
                     raise ValueError("ODF archive has an invalid compression ratio")
-                if entry.compress_size and entry.file_size / entry.compress_size > MAX_COMPRESSION_RATIO:
+                if (
+                    entry.compress_size
+                    and entry.file_size / entry.compress_size > MAX_COMPRESSION_RATIO
+                ):
                     raise ValueError("ODF archive compression-ratio limit exceeded")
             if "mimetype" not in names or "content.xml" not in names:
                 raise ValueError("ODF package is missing required members")
@@ -113,7 +116,9 @@ def _paragraph_segments(root: ElementTree.Element) -> list[NormalizedSegment]:
     return segments
 
 
-def _spreadsheet(root: ElementTree.Element) -> tuple[list[NormalizedSegment], list[NormalizedTable]]:
+def _spreadsheet(
+    root: ElementTree.Element,
+) -> tuple[list[NormalizedSegment], list[NormalizedTable]]:
     segments: list[NormalizedSegment] = []
     tables: list[NormalizedTable] = []
     for sheet_number, sheet in enumerate(root.iter(f"{{{TABLE}}}table"), 1):
