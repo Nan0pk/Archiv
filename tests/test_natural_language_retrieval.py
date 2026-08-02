@@ -44,10 +44,7 @@ def _field_trial_home(tmp_path: Path) -> tuple[dict[str, object], Path, dict[str
         ingest_file(path, home=home)
     rebuild_search_index(home=home)
     source_specs = cast(Sequence[Mapping[str, object]], benchmark["corpus"])
-    by_filename = {
-        str(item["filename"]): str(item["id"])
-        for item in source_specs
-    }
+    by_filename = {str(item["filename"]): str(item["id"]) for item in source_specs}
     return benchmark, home, by_filename
 
 
