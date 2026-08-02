@@ -149,7 +149,7 @@ def test_odb_exposes_only_bounded_object_metadata(tmp_path: Path) -> None:
 
 def test_odb_preserves_urdu_object_names(tmp_path: Path) -> None:
     path = tmp_path / "urdu-database.odb"
-    _package(path, content=_content(names=["صارفین", "رپورٹس"] ))
+    _package(path, content=_content(names=["صارفین", "رپورٹس"]))
 
     result = normalize(path, DIGEST)
 
