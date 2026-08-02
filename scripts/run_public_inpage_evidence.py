@@ -111,9 +111,7 @@ C_SOURCE = (
 )
 
 
-def _verified_file(
-    path: Path, expected_blob_sha1: str
-) -> tuple[bytes, dict[str, object]]:
+def _verified_file(path: Path, expected_blob_sha1: str) -> tuple[bytes, dict[str, object]]:
     data = path.read_bytes()
     observed_blob = compute_git_blob_sha1(data)
     if observed_blob != expected_blob_sha1:
@@ -143,9 +141,7 @@ def _parse_c_mapping(data: bytes) -> MappingTable:
     tokens = re.findall(r"0x[0-9A-Fa-f]+|\b\d+\b", body)
     values = [int(token, 0) for token in tokens]
     if len(values) != 256 or any(not 0 <= value <= 255 for value in values):
-        raise ExtractionError(
-            f"expected 256 bounded C mapping values, got {len(values)}"
-        )
+        raise ExtractionError(f"expected 256 bounded C mapping values, got {len(values)}")
     mapping = {
         code: chr(0x0600 + value)
         for code, value in enumerate(values)
@@ -162,9 +158,7 @@ def _parse_c_mapping(data: bytes) -> MappingTable:
     )
 
 
-def _extract(
-    stream: RootStream, xml_mapping: MappingTable
-) -> tuple[TextMetrics, str]:
+def _extract(stream: RootStream, xml_mapping: MappingTable) -> tuple[TextMetrics, str]:
     if stream.variant == "300":
         return extract_inpage300(stream)
     if stream.variant == "100":
@@ -193,23 +187,15 @@ def _measure_fixture(
     try:
         stream = read_native_root_stream(path)
         if stream.variant != spec.variant:
-            raise ExtractionError(
-                f"expected InPage{spec.variant}, got {stream.name}"
-            )
+            raise ExtractionError(f"expected InPage{spec.variant}, got {stream.name}")
         first_metrics, first_text = _extract(stream, xml_mapping)
         second_metrics, second_text = _extract(stream, xml_mapping)
         if asdict(first_metrics) != asdict(second_metrics):
-            raise ExtractionError(
-                "repeated sanitized metrics are not deterministic"
-            )
-        if sha256(first_text.encode("utf-8")) != sha256(
-            second_text.encode("utf-8")
-        ):
+            raise ExtractionError("repeated sanitized metrics are not deterministic")
+        if sha256(first_text.encode("utf-8")) != sha256(second_text.encode("utf-8")):
             raise ExtractionError("repeated private text hash is not deterministic")
         if first_metrics.native_support_claimed or first_metrics.text_emitted:
-            raise ExtractionError(
-                "research result violated its support/privacy boundary"
-            )
+            raise ExtractionError("research result violated its support/privacy boundary")
         if (
             spec.expected_stream_sha256 is not None
             and stream.stream_sha256 != spec.expected_stream_sha256
@@ -261,9 +247,7 @@ def build_evidence(
     source_measurements: dict[str, object] = {}
     source_data: dict[str, bytes] = {}
     for name, relative_path, expected_blob in SOURCE_FILES:
-        data, measurement = _verified_file(
-            source_root / relative_path, expected_blob
-        )
+        data, measurement = _verified_file(source_root / relative_path, expected_blob)
         source_data[name] = data
         source_measurements[name] = measurement
     c_name, c_relative_path, c_blob = C_SOURCE
@@ -273,9 +257,7 @@ def build_evidence(
     xml_mapping = parse_mapping_xml(source_data["InpageToUni.xml"])
     c_mapping = _parse_c_mapping(c_data)
     comparison = compare_mappings(xml_mapping, c_mapping)
-    fixtures = [
-        _measure_fixture(source_root, spec, xml_mapping) for spec in FIXTURES
-    ]
+    fixtures = [_measure_fixture(source_root, spec, xml_mapping) for spec in FIXTURES]
 
     return {
         "schema_version": 1,
@@ -331,9 +313,7 @@ def main() -> int:
         c_source_root=args.c_source_root,
         archiv_head=args.archiv_head,
     )
-    serialized = (
-        json.dumps(evidence, ensure_ascii=True, indent=2, sort_keys=True) + "\n"
-    )
+    serialized = json.dumps(evidence, ensure_ascii=True, indent=2, sort_keys=True) + "\n"
     serialized.encode("ascii")
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(serialized, encoding="ascii")
