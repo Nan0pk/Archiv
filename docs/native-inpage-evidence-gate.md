@@ -26,7 +26,7 @@ Archiv must not use the legacy InPage application as an untrusted-file parser. N
 
 The Center for Language Engineering publishes an InPage-to-Unicode converter page and user guide describing folder-based conversion of InPage files to Unicode text files. It is a candidate for future adapter evaluation, but this review did not independently inspect its downloadable binary, source, license text, supported InPage versions, command-line behavior or hostile-input safety.
 
-Recent open-source InPage/Unicode converters provide useful glyph-mapping evidence, but the inspected implementations convert pasted or supplied legacy-encoded text. They explicitly do not parse binary `.inp` documents and do not preserve native layout. They cannot satisfy native ingestion by themselves.
+Open-source InPage/Unicode converters provide useful glyph-mapping evidence but do not currently establish native file parsing. The inspected GPL application explicitly says it bypasses binary `.inp` parsing and converts pasted clipboard text. The inspected MIT package exposes text-to-text mapping APIs rather than a native document parser. Neither preserves native layout or satisfies native ingestion by itself.
 
 ## What remains unknown
 
