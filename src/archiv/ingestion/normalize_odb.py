@@ -9,7 +9,12 @@ from xml.etree import ElementTree
 from zipfile import ZipFile
 
 from archiv.contracts import NormalizedDocument, NormalizedSegment
-from archiv.ingestion.normalize_odf import OFFICE, XLINK, _parse_xml, _read_package
+from archiv.ingestion.normalize_odf import (
+    OFFICE,
+    XLINK,
+    parse_odf_xml,
+    read_odf_package,
+)
 
 ODB_MIMETYPE = "application/vnd.oasis.opendocument.base"
 DATABASE = "urn:oasis:names:tc:opendocument:xmlns:database:1.0"
@@ -135,8 +140,8 @@ def normalize_odb(
 
     if media_type != ODB_MIMETYPE:
         raise ValueError("ODB registry media type mismatch")
-    package = _read_package(path, ODB_MIMETYPE)
-    root = _parse_xml(package.content, label="ODB content XML")
+    package = read_odf_package(path, ODB_MIMETYPE)
+    root = parse_odf_xml(package.content, label="ODB content XML")
     database = _validated_database(root)
     objects = _database_objects(database)
     segments = _object_segments(objects)
