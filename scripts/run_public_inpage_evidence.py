@@ -5,9 +5,9 @@ from __future__ import annotations
 import argparse
 import json
 import re
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Mapping
 
 from archiv.research.inpage_container import extract_inpage300, read_native_root_stream
 from archiv.research.inpage_legacy import (
@@ -262,7 +262,10 @@ def build_evidence(
     return {
         "schema_version": 1,
         "archiv_head": archiv_head,
-        "scope": "bounded non-redistributing research extraction from pinned public native candidates",
+        "scope": (
+            "bounded non-redistributing research extraction from pinned public "
+            "native candidates"
+        ),
         "source_repository": SOURCE_REPOSITORY,
         "source_commit": SOURCE_COMMIT,
         "source_license": (
