@@ -201,12 +201,8 @@ def test_formula_package_rejects_non_mathml_content_root(tmp_path: Path) -> None
         normalize(path, DIGEST)
 
 
-@pytest.mark.parametrize("suffix", ["odb", "inp"])
-def test_unimplemented_database_and_inpage_formats_remain_unsupported(
-    tmp_path: Path,
-    suffix: str,
-) -> None:
-    path = tmp_path / f"unsupported.{suffix}"
+def test_native_inpage_remains_unsupported(tmp_path: Path) -> None:
+    path = tmp_path / "unsupported.inp"
     path.write_bytes(b"not accepted")
 
     with pytest.raises(UnsupportedFormatError, match="unsupported file type"):
