@@ -7,7 +7,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any, cast
 
-from typer.main import get_command
+from typer.testing import CliRunner
 
 from archiv.cli import app
 from archiv.contracts import (
@@ -33,6 +33,7 @@ assert SPEC is not None and SPEC.loader is not None
 FIELD_TRIAL: Any = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = FIELD_TRIAL
 SPEC.loader.exec_module(FIELD_TRIAL)
+RUNNER = CliRunner()
 
 
 def _field_trial_home(tmp_path: Path) -> tuple[dict[str, object], Path, dict[str, str]]:
@@ -151,7 +152,8 @@ def test_sanitized_diagnostics_remove_private_identifiers() -> None:
 
 
 def test_ask_and_report_expose_retrieval_explanation_option() -> None:
-    root = get_command(app)
     for command_name in ("ask", "report"):
-        command = root.commands[command_name]
-        assert any(parameter.name == "explain_retrieval" for parameter in command.params)
+        result = RUNNER.invoke(app, [command_name, "--help"])
+        assert result.exit_code == 0, result.output
+        normalized = "".join(result.output.split())
+        assert "--explain-retrieval" in normalized
