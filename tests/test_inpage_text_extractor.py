@@ -15,6 +15,7 @@ from archiv.research.inpage_validation import (
     compare_quran_text,
     compute_git_blob_sha1,
     metrics_json,
+    normalize_quran_text,
     write_private_text,
 )
 
@@ -63,7 +64,9 @@ def _cfb_with_stream(name: str, payload: bytes, *, duplicate: bool = False) -> b
 
     directory = bytearray(512)
     directory[:128] = _entry("Root Entry", object_type=5, child=1)
-    directory[128:256] = _entry("DocumentInfo", object_type=2, right=2, start=2, size=len(document))
+    directory[128:256] = _entry(
+        "DocumentInfo", object_type=2, right=2, start=2, size=len(document)
+    )
     directory[256:384] = _entry(
         name,
         object_type=2,
@@ -72,7 +75,9 @@ def _cfb_with_stream(name: str, payload: bytes, *, duplicate: bool = False) -> b
         size=len(payload),
     )
     if duplicate:
-        directory[384:512] = _entry(name, object_type=2, start=2 + doc_sectors, size=len(payload))
+        directory[384:512] = _entry(
+            name, object_type=2, start=2 + doc_sectors, size=len(payload)
+        )
 
     fat = [FREESECT] * 128
     fat[0] = ENDOFCHAIN
@@ -81,7 +86,9 @@ def _cfb_with_stream(name: str, payload: bytes, *, duplicate: bool = False) -> b
         fat[sector] = sector + 1 if sector < 1 + doc_sectors else ENDOFCHAIN
     start = 2 + doc_sectors
     for sector in range(start, start + native_sectors):
-        fat[sector] = sector + 1 if sector < start + native_sectors - 1 else ENDOFCHAIN
+        fat[sector] = (
+            sector + 1 if sector < start + native_sectors - 1 else ENDOFCHAIN
+        )
     fat_bytes = struct.pack("<128I", *fat)
     body = bytearray(directory + fat_bytes + document + payload)
     expected = total_sectors * 512
@@ -125,6 +132,13 @@ def test_inpage300_metrics_never_emit_text() -> None:
     assert arabic_units >= 8
 
 
+def test_inpage300_counts_contiguous_rejected_regions() -> None:
+    payload = struct.pack("<5H", 0, 1, ord("ا"), 0, 0)
+    metrics, _ = extract_inpage300(_root_stream("300", payload))
+    assert metrics.details["rejected_region_count"] == 2
+    assert metrics.details["rejected_bytes"] == 8
+
+
 def test_inpage100_measures_both_record_lengths() -> None:
     record = b"\x04\x81abc\r"
     payload = struct.pack("<I", len(record)) + record
@@ -144,7 +158,14 @@ def test_nonzero_upper_word_exposes_framing_disagreement() -> None:
     assert metrics.details["plausible_u16_length_records"] == 1
     nonzero_upper = metrics.details["nonzero_upper_length_words"]
     assert isinstance(nonzero_upper, int)
-    assert nonzero_upper >= 1
+    assert nonzero_upper == 1
+
+
+def test_invalid_escape_is_not_counted() -> None:
+    record = b"\x04\x01abc\r"
+    payload = struct.pack("<I", len(record)) + record
+    metrics, _ = extract_inpage100(_root_stream("100", payload))
+    assert metrics.details["04_escape_pairs_inside_plausible_records"] == 0
 
 
 def test_mapping_first_key_wins_and_comparison() -> None:
@@ -160,6 +181,11 @@ def test_mapping_first_key_wins_and_comparison() -> None:
     assert comparison.conflicting_codes == (129,)
 
 
+def test_mapping_xml_rejects_entities() -> None:
+    with pytest.raises(ExtractionError, match="entities are forbidden"):
+        parse_mapping_xml(b'<!DOCTYPE R [<!ENTITY x "boom">]><R>&x;</R>')
+
+
 def test_private_output_is_exclusive_and_mode_0600(tmp_path: Path) -> None:
     path = tmp_path / "private.txt"
     write_private_text(path, "secret")
@@ -170,9 +196,15 @@ def test_private_output_is_exclusive_and_mode_0600(tmp_path: Path) -> None:
 
 
 def test_quran_comparison_modes_and_blob_identity() -> None:
-    result = compare_quran_text("بِسْمِ  الله", "بسم الله", mode="diacritic_insensitive")
+    result = compare_quran_text(
+        "بِسْمِ  الله", "بسم الله", mode="diacritic_insensitive"
+    )
     assert result.exact_match is True
     assert result.matching_ratio == 1.0
     data = b"abc"
     assert compute_git_blob_sha1(data) == hashlib.sha1(b"blob 3\0abc").hexdigest()
     assert "بسم" not in json.dumps(result.__dict__, ensure_ascii=False)
+
+
+def test_verse_symbol_normalization_preserves_character_adjacency() -> None:
+    assert normalize_quran_text("بسم\u06dd الله", "verse_symbol_normalized") == "بسم الله"
