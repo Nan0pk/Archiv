@@ -1,27 +1,22 @@
 from __future__ import annotations
 
+import importlib.util
 import json
 import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 from typer.testing import CliRunner
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "scripts"))
-
-from field_trial.common import load_benchmark  # noqa: E402
-from field_trial.fixtures import _source_maps, generate_public_corpus  # noqa: E402
-
-from archiv.cli import app  # noqa: E402
-from archiv.contracts import (  # noqa: E402
+from archiv.cli import app
+from archiv.contracts import (
     RetrievalDiagnostics,
     RetrievalQueryVariant,
     RetrievalSelection,
 )
-from archiv.ingestion import ingest_file  # noqa: E402
-from archiv.search import (  # noqa: E402
+from archiv.ingestion import ingest_file
+from archiv.search import (
     derive_query_variants,
     rebuild_search_index,
     retrieve_evidence,
@@ -29,20 +24,28 @@ from archiv.search import (  # noqa: E402
     search_documents,
 )
 
+ROOT = Path(__file__).resolve().parents[1]
+SCRIPT = ROOT / "scripts/run_field_trial.py"
 BENCHMARK = ROOT / "benchmarks/field_trial/benchmark.json"
+sys.path.insert(0, str(ROOT / "scripts"))
+SPEC = importlib.util.spec_from_file_location("archiv_retrieval_field_trial", SCRIPT)
+assert SPEC is not None and SPEC.loader is not None
+FIELD_TRIAL: Any = importlib.util.module_from_spec(SPEC)
+sys.modules[SPEC.name] = FIELD_TRIAL
+SPEC.loader.exec_module(FIELD_TRIAL)
 runner = CliRunner()
 
 
 def _field_trial_home(tmp_path: Path) -> tuple[dict[str, object], Path, dict[str, str]]:
-    benchmark = load_benchmark(BENCHMARK)
+    benchmark = cast(dict[str, object], FIELD_TRIAL.load_benchmark(BENCHMARK))
     corpus = tmp_path / "corpus"
     home = tmp_path / "home"
-    generate_public_corpus(benchmark, corpus)
+    FIELD_TRIAL.generate_public_corpus(benchmark, corpus)
     for path in sorted(corpus.iterdir()):
         ingest_file(path, home=home)
     rebuild_search_index(home=home)
-    _, by_filename = _source_maps(benchmark)
-    return benchmark, home, by_filename
+    _, by_filename = FIELD_TRIAL._source_maps(benchmark)
+    return benchmark, home, cast(dict[str, str], by_filename)
 
 
 def test_query_derivation_is_stable_bounded_and_offline() -> None:
@@ -60,7 +63,7 @@ def test_query_derivation_is_stable_bounded_and_offline() -> None:
 
 def test_all_public_benchmark_questions_retrieve_every_expected_source(tmp_path: Path) -> None:
     benchmark, home, by_filename = _field_trial_home(tmp_path)
-    limit = int(benchmark["evidence_limit"])
+    limit = cast(int, benchmark["evidence_limit"])
     failures: list[dict[str, object]] = []
     for question in cast(Sequence[Mapping[str, object]], benchmark["questions"]):
         package = retrieve_evidence(str(question["question"]), home=home, evidence_limit=limit)
