@@ -11,6 +11,7 @@ from typing import cast
 
 from field_trial.common import DEFAULT_BENCHMARK, BenchmarkError
 from field_trial.runner import run_private_trial, run_public_trial
+from field_trial.source_location import apply_source_location_probe
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -36,6 +37,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.public:
             args.output = args.output or Path("field-trial-artifacts")
             summary = run_public_trial(args)
+            summary = apply_source_location_probe(
+                summary, output=args.output, archiv_command=args.archiv_command
+            )
             aggregate = cast(Mapping[str, object], summary["aggregate"])
             print(
                 json.dumps(
