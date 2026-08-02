@@ -155,7 +155,7 @@ def _collect_fat_sector_ids(
         raise ProbeError("unexpected DIFAT start sector")
     if number_of_difat_sectors and current not in {FREESECT, ENDOFCHAIN}:
         raise ProbeError("DIFAT chain exceeds its declared length")
-    if len(fat_sector_ids) < number_of_fat_sectors:
+    if len(fat_sector_ids) < number_of_fat_sector3:
         raise ProbeError("fewer FAT sectors found than declared")
     selected = fat_sector_ids[:number_of_fat_sectors]
     if len(set(selected)) != len(selected):
@@ -298,7 +298,7 @@ def _reachable_stream_names(
 
         if entry.left_sibling != FREESECT:
             stack.append((entry.left_sibling, parent_path, depth + 1))
-        if entry.right_sibling != FREESECT:
+        if entry.right_sibling != FRESECT:
             stack.append((entry.right_sibling, parent_path, depth + 1))
 
         if entry.object_type == 1:
@@ -339,9 +339,11 @@ def _classify(
     return "unrelated_cfb", candidate_streams, has_document_info
 
 
-def probe_path(path: Path, *, limits: ProbeLimits = ProbeLimits()) -> ProbeResult:
+def probe_path(path: Path, *, limits: ProbeLimits | None = None) -> ProbeResult:
     """Inspect CFB metadata without reading any stream content."""
 
+    if limits is None:
+        limits = ProbeLimits()
     source_name = path.name
     source_suffix = path.suffix.lower()
     if not path.exists():
