@@ -12,7 +12,12 @@ from uuid import uuid4
 import typer
 from pydantic import BaseModel
 
-from archiv.contracts import IngestionResult, RunStatus, SearchIndexBuild
+from archiv.contracts import (
+    IngestionResult,
+    RetrievalDiagnostics,
+    RunStatus,
+    SearchIndexBuild,
+)
 from archiv.grounding import run_grounded_ask
 from archiv.ingestion import ingest_file
 from archiv.ingestion.formats import SUPPORTED_SUFFIXES
@@ -72,6 +77,28 @@ def _locator_text(locator: dict[str, object]) -> str:
 def _excerpt(text: str, *, limit: int = 180) -> str:
     compact = " ".join(text.split())
     return compact if len(compact) <= limit else compact[: limit - 1].rstrip() + "…"
+
+
+def _emit_retrieval_explanation(diagnostics: RetrievalDiagnostics | None) -> None:
+    typer.echo("")
+    typer.echo("Retrieval explanation:")
+    if diagnostics is None:
+        typer.echo("  Not available for this run.")
+        return
+    terms = ", ".join(diagnostics.derived_terms) or "none"
+    concepts = ", ".join(diagnostics.triggered_concepts) or "none"
+    typer.echo(f"  Strategy: {diagnostics.strategy_version}")
+    typer.echo(f"  Derived terms: {terms}")
+    typer.echo(f"  Triggered concepts: {concepts}")
+    typer.echo(
+        f"  Candidates: {diagnostics.candidate_count}; "
+        f"selected: {diagnostics.selected_count}/{diagnostics.evidence_limit}"
+    )
+    for selection in diagnostics.selections:
+        typer.echo(
+            f"  - {selection.source_name} — {_locator_text(selection.locator)} "
+            f"(score {selection.score:.3f}, rank {selection.rank:.6f})"
+        )
 
 
 def _status_payload(home: Path | None) -> dict[str, object]:
@@ -272,6 +299,13 @@ def register_user_commands(app: typer.Typer) -> tuple[Callable[..., None], ...]:
             typer.Option("--home", file_okay=False, resolve_path=True),
         ] = None,
         max_sources: Annotated[int, typer.Option("--max-sources", min=1, max=50)] = 8,
+        explain_retrieval: Annotated[
+            bool,
+            typer.Option(
+                "--explain-retrieval",
+                help="Show deterministic query and source-selection diagnostics.",
+            ),
+        ] = False,
         json_output: Annotated[bool, typer.Option("--json")] = False,
     ) -> None:
         """Ask a grounded question over ingested evidence and receive a citation-verified answer."""
@@ -335,6 +369,9 @@ def register_user_commands(app: typer.Typer) -> tuple[Callable[..., None], ...]:
         for idx, citation in enumerate(run_result.retrieved_citations, start=1):
             typer.echo(f" [{idx}] {citation.source_name} — {_locator_text(citation.locator)}")
 
+        if explain_retrieval:
+            _emit_retrieval_explanation(run_result.retrieval_diagnostics)
+
         typer.echo("")
         model_name = run_result.model.model or run_result.model.adapter
         typer.echo(f"Model: {run_result.model.adapter} ({model_name})")
@@ -354,6 +391,13 @@ def register_user_commands(app: typer.Typer) -> tuple[Callable[..., None], ...]:
             bool,
             typer.Option(
                 "--deterministic", help="Bypass model synthesis and generate excerpt report."
+            ),
+        ] = False,
+        explain_retrieval: Annotated[
+            bool,
+            typer.Option(
+                "--explain-retrieval",
+                help="Show deterministic query and source-selection diagnostics.",
             ),
         ] = False,
         json_output: Annotated[bool, typer.Option("--json")] = False,
@@ -412,6 +456,8 @@ def register_user_commands(app: typer.Typer) -> tuple[Callable[..., None], ...]:
         typer.echo(f"Report: {result.output_path}")
         typer.echo(f"Citations: {result.citation_count}")
         typer.echo("Verified: yes")
+        if explain_retrieval:
+            _emit_retrieval_explanation(result.retrieval_diagnostics)
         typer.echo(f"Run: {result.run_id}")
 
     @app.command("status")
