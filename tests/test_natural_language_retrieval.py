@@ -15,7 +15,11 @@ from field_trial.common import load_benchmark  # noqa: E402
 from field_trial.fixtures import _source_maps, generate_public_corpus  # noqa: E402
 
 from archiv.cli import app  # noqa: E402
-from archiv.contracts import RetrievalDiagnostics, RetrievalQueryVariant, RetrievalSelection  # noqa: E402
+from archiv.contracts import (  # noqa: E402
+    RetrievalDiagnostics,
+    RetrievalQueryVariant,
+    RetrievalSelection,
+)
 from archiv.ingestion import ingest_file  # noqa: E402
 from archiv.search import (  # noqa: E402
     derive_query_variants,
