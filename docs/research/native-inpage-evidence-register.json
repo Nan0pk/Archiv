@@ -1,0 +1,151 @@
+{
+  "claim_policy": {
+    "discovery_lead": "candidate for controlled testing only",
+    "strongly_supported": "detailed technical evidence without a public native format specification",
+    "unknown": "insufficient evidence",
+    "verified": "authoritative specification or independently reproducible evidence"
+  },
+  "reviewed_date": "2026-08-02",
+  "schema_version": 1,
+  "sources": [
+    {
+      "authority": "Microsoft Open Specifications",
+      "evidence_level": "verified",
+      "id": "microsoft-cfb-overview",
+      "supports": [
+        "CFB is a general-purpose file-system-like stream container"
+      ],
+      "title": "Compound File Binary File Format",
+      "url": "https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-cfb/53989ce4-7b05-4f8d-829b-d08d6148375b"
+    },
+    {
+      "authority": "Microsoft Open Specifications",
+      "evidence_level": "verified",
+      "id": "microsoft-cfb-header",
+      "supports": [
+        "CFB signature",
+        "major versions 3 and 4",
+        "sector sizes",
+        "byte order",
+        "header FAT and DIFAT fields"
+      ],
+      "title": "Compound File Header",
+      "url": "https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-cfb/05060311-bfce-4b12-874d-71fd4ce63aea"
+    },
+    {
+      "authority": "NIST NVD",
+      "evidence_level": "verified",
+      "id": "nvd-cve-2017-12824",
+      "supports": [
+        "crafted InPage documents can lead to arbitrary code execution"
+      ],
+      "title": "CVE-2017-12824",
+      "url": "https://nvd.nist.gov/vuln/detail/CVE-2017-12824"
+    },
+    {
+      "authority": "Microsoft Threat Intelligence",
+      "evidence_level": "verified",
+      "id": "microsoft-inpage-campaign",
+      "supports": [
+        "native InPage documents have been used as exploit carriers",
+        "legacy InPage must not be used as an untrusted parser"
+      ],
+      "title": "Attack uses malicious InPage document and outdated VLC media player",
+      "url": "https://www.microsoft.com/en-us/security/blog/2018/11/08/attack-uses-malicious-inpage-document-and-outdated-vlc-media-player-to-give-attackers-backdoor-access-to-targets/"
+    },
+    {
+      "authority": "QiAnXin Threat Intelligence Center",
+      "evidence_level": "strongly_supported",
+      "id": "qianxin-inpage100",
+      "supports": [
+        "InPage processing opens an InPage100 stream",
+        "malformed type handling occurs within that document stream"
+      ],
+      "title": "Analysis of targeted attack exploiting InPage",
+      "url": "https://ti.qianxin.com/blog/articles/analysis-of-targeted-attack-against-pakistan-by-exploiting-inpage-vulnerability-and-related-apt-groups-english/"
+    },
+    {
+      "authority": "Center for Language Engineering, UET Lahore",
+      "does_not_establish": [
+        "binary identity",
+        "license terms",
+        "supported native versions",
+        "layout recovery",
+        "hostile-input safety"
+      ],
+      "evidence_level": "strongly_supported",
+      "id": "cle-inpage-unicode",
+      "supports": [
+        "legacy InPage uses an encoding scheme different from Unicode",
+        "CLE published an InPage-to-Unicode conversion utility"
+      ],
+      "title": "InPage to Unicode Converter",
+      "url": "https://www.cle.org.pk/software/langproc/inpagetounicode.htm"
+    },
+    {
+      "authority": "open-source project",
+      "does_not_establish": [
+        "binary .inp parsing",
+        "native layout recovery"
+      ],
+      "evidence_level": "verified",
+      "id": "salmanasmat-paste-converter",
+      "supports": [
+        "clipboard and legacy glyph mapping can be performed locally"
+      ],
+      "title": "InPage to Unicode converter README",
+      "url": "https://github.com/salmanasmat/InPageToUnicode"
+    },
+    {
+      "authority": "community reverse engineering",
+      "evidence_level": "discovery_lead",
+      "id": "community-documentinfo",
+      "supports": [
+        "DocumentInfo may coexist with InPage100 in legacy files"
+      ],
+      "title": "Community and file-identification reports of DocumentInfo",
+      "url": "https://www.urduweb.org/mehfil/threads/%D8%A7%D9%86%D9%BE%DB%8C%D8%AC-%D9%81%D8%A7%D8%A6%D9%84-%D9%81%D8%A7%D8%B1%D9%85%DB%8C%D9%B9-%D9%BE%D8%B1-%D8%AA%D8%AD%D9%82%DB%8C%D9%82.26462/"
+    },
+    {
+      "authority": "user-supplied research output",
+      "evidence_level": "discovery_lead",
+      "id": "independent-report-a",
+      "limitations": [
+        "no repository access",
+        "no code execution",
+        "included an incorrect 2A 48 interpretation"
+      ],
+      "supports": [
+        "broad source inventory",
+        "converter and fixture search leads"
+      ],
+      "title": "Independent frontier-model research report A"
+    },
+    {
+      "authority": "user-supplied research output",
+      "evidence_level": "discovery_lead",
+      "id": "independent-report-b",
+      "limitations": [
+        "no native fixture bytes",
+        "no local converter execution",
+        "no parser measurements"
+      ],
+      "supports": [
+        "repository-state verification at the time of the report",
+        "fixture schema and acquisition design",
+        "bounded CFB probe design",
+        "correction that *Heading is an unrelated Abaqus negative"
+      ],
+      "title": "Independent frontier-model research report B"
+    }
+  ],
+  "unresolved": [
+    "authoritative InPage version signature",
+    "on-disk text record structure",
+    "language-specific encoding variations",
+    "page/story/frame/object relationships",
+    "protection or encryption markers",
+    "lawful redistributable native fixture corpus",
+    "verified local converter identity, license and hostile-input behavior"
+  ]
+}
