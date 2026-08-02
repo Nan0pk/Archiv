@@ -37,13 +37,19 @@ def write_private_text(path: Path, text: str) -> None:
 def metrics_json(metrics: TextMetrics) -> str:
     """Serialize sanitized metrics deterministically."""
 
-    return json.dumps(asdict(metrics), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return json.dumps(
+        asdict(metrics), ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    )
 
 
 def normalize_quran_text(text: str, mode: NormalizationMode) -> str:
     """Apply exactly one explicit Quran-comparison normalization."""
 
-    normalized = unicodedata.normalize("NFC", text).replace("\r\n", "\n").replace("\r", "\n")
+    normalized = (
+        unicodedata.normalize("NFC", text)
+        .replace("\r\n", "\n")
+        .replace("\r", "\n")
+    )
     if mode == "exact_nfc":
         return normalized
     if mode == "whitespace_normalized":
@@ -53,14 +59,15 @@ def normalize_quran_text(text: str, mode: NormalizationMode) -> str:
             character
             for character in normalized
             if not (0x064B <= ord(character) <= 0x065F or ord(character) == 0x0670)
-            and unicodedata.category(character) != "Mn"
         )
         return " ".join(stripped.split())
     if mode == "verse_symbol_normalized":
         verse_symbols = {0x06DD, 0xFD3E, 0xFD3F}
-        return " ".join(
-            " ".join("" if ord(ch) in verse_symbols else ch for ch in normalized).split()
+        stripped = "".join(
+            "" if ord(character) in verse_symbols else character
+            for character in normalized
         )
+        return " ".join(stripped.split())
     raise ExtractionError(f"unsupported normalization mode: {mode}")
 
 
