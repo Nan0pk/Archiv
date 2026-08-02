@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
 from xml.etree import ElementTree
-from zipfile import BadZipFile, ZIP_DEFLATED, ZIP_STORED, ZipFile
+from zipfile import ZIP_DEFLATED, ZIP_STORED, BadZipFile, ZipFile
 
 from archiv.contracts import NormalizedDocument, NormalizedSegment, NormalizedTable
 
