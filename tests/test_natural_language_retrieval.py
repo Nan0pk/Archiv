@@ -7,7 +7,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any, cast
 
-from typer.testing import CliRunner
+from typer.main import get_command
 
 from archiv.cli import app
 from archiv.contracts import (
@@ -33,7 +33,6 @@ assert SPEC is not None and SPEC.loader is not None
 FIELD_TRIAL: Any = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = FIELD_TRIAL
 SPEC.loader.exec_module(FIELD_TRIAL)
-runner = CliRunner()
 
 
 def _field_trial_home(tmp_path: Path) -> tuple[dict[str, object], Path, dict[str, str]]:
@@ -44,8 +43,12 @@ def _field_trial_home(tmp_path: Path) -> tuple[dict[str, object], Path, dict[str
     for path in sorted(corpus.iterdir()):
         ingest_file(path, home=home)
     rebuild_search_index(home=home)
-    _, by_filename = FIELD_TRIAL._source_maps(benchmark)
-    return benchmark, home, cast(dict[str, str], by_filename)
+    source_specs = cast(Sequence[Mapping[str, object]], benchmark["corpus"])
+    by_filename = {
+        str(item["filename"]): str(item["id"])
+        for item in source_specs
+    }
+    return benchmark, home, by_filename
 
 
 def test_query_derivation_is_stable_bounded_and_offline() -> None:
@@ -151,9 +154,7 @@ def test_sanitized_diagnostics_remove_private_identifiers() -> None:
 
 
 def test_ask_and_report_expose_retrieval_explanation_option() -> None:
-    ask_help = runner.invoke(app, ["ask", "--help"])
-    report_help = runner.invoke(app, ["report", "--help"])
-    assert ask_help.exit_code == 0, ask_help.output
-    assert report_help.exit_code == 0, report_help.output
-    assert "--explain-retrieval" in ask_help.output
-    assert "--explain-retrieval" in report_help.output
+    root = get_command(app)
+    for command_name in ("ask", "report"):
+        command = root.commands[command_name]
+        assert any(parameter.name == "explain_retrieval" for parameter in command.params)
