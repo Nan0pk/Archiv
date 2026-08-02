@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -34,6 +35,7 @@ FIELD_TRIAL: Any = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = FIELD_TRIAL
 SPEC.loader.exec_module(FIELD_TRIAL)
 RUNNER = CliRunner()
+ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
 
 
 def _field_trial_home(tmp_path: Path) -> tuple[dict[str, object], Path, dict[str, str]]:
@@ -155,5 +157,5 @@ def test_ask_and_report_expose_retrieval_explanation_option() -> None:
     for command_name in ("ask", "report"):
         result = RUNNER.invoke(app, [command_name, "--help"])
         assert result.exit_code == 0, result.output
-        normalized = "".join(result.output.split())
+        normalized = "".join(ANSI_ESCAPE.sub("", result.output).split())
         assert "--explain-retrieval" in normalized
