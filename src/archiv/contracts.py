@@ -180,7 +180,7 @@ class RetrievalSelection(StrictModel):
     locator: dict[str, object]
     rank: float
     score: float
-    matched_queries: list[str] = Field(default_factory=list)
+    matched_queries: list[str] = Field(default_factory=lambda: list[str]())
 
 
 class RetrievalDiagnostics(StrictModel):
@@ -189,19 +189,23 @@ class RetrievalDiagnostics(StrictModel):
     schema_version: str = "1"
     strategy_version: str = "deterministic-literal-expansion-v1"
     original_objective: str
-    derived_terms: list[str] = Field(default_factory=list)
-    triggered_concepts: list[str] = Field(default_factory=list)
-    query_variants: list[RetrievalQueryVariant] = Field(default_factory=list)
+    derived_terms: list[str] = Field(default_factory=lambda: list[str]())
+    triggered_concepts: list[str] = Field(default_factory=lambda: list[str]())
+    query_variants: list[RetrievalQueryVariant] = Field(
+        default_factory=lambda: list[RetrievalQueryVariant]()
+    )
     evidence_limit: int = Field(ge=1, le=50)
     candidate_count: int = Field(ge=0)
     selected_count: int = Field(ge=0)
-    selections: list[RetrievalSelection] = Field(default_factory=list)
+    selections: list[RetrievalSelection] = Field(
+        default_factory=lambda: list[RetrievalSelection]()
+    )
 
 
 class EvidenceRetrieval(StrictModel):
     """Validated evidence package plus its deterministic retrieval explanation."""
 
-    results: list[SearchResult] = Field(default_factory=list)
+    results: list[SearchResult] = Field(default_factory=lambda: list[SearchResult]())
     diagnostics: RetrievalDiagnostics
 
 
