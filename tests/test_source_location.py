@@ -22,9 +22,7 @@ RUNNER = CliRunner()
 MARKER = "ARCHIV-TEXT-MARKER-2026"
 
 
-def _ingested_text(
-    ingestion_corpus: Path, tmp_path: Path
-) -> tuple[Path, IngestionResult]:
+def _ingested_text(ingestion_corpus: Path, tmp_path: Path) -> tuple[Path, IngestionResult]:
     home = tmp_path / "home"
     result = ingest_file(ingestion_corpus / "plain-text.txt", home=home)
     rebuild_search_index(home=home)
