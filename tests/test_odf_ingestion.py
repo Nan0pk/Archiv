@@ -62,7 +62,7 @@ def test_ods_records_sheet_cells_formulas_and_table(tmp_path: Path) -> None:
         _document(
             '<office:spreadsheet><table:table table:name="Budget">'
             "<table:table-row>"
-            '<table:table-cell><text:p>Item</text:p></table:table-cell>'
+            "<table:table-cell><text:p>Item</text:p></table:table-cell>"
             '<table:table-cell table:formula="of:=SUM([.C2:.C3])"><text:p>12</text:p>'
             "</table:table-cell></table:table-row>"
             "</table:table></office:spreadsheet>"
@@ -124,9 +124,8 @@ def test_odf_mimetype_mismatch_fails_closed(tmp_path: Path) -> None:
 
 def test_odf_rejects_xml_entities(tmp_path: Path) -> None:
     path = tmp_path / "entity.odt"
-    content = (
-        '<!DOCTYPE x [<!ENTITY unsafe "expanded">]>'
-        + _document("<office:text><text:p>&unsafe;</text:p></office:text>")
+    content = '<!DOCTYPE x [<!ENTITY unsafe "expanded">]>' + _document(
+        "<office:text><text:p>&unsafe;</text:p></office:text>"
     )
     _package(path, "application/vnd.oasis.opendocument.text", content)
 
