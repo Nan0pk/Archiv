@@ -147,18 +147,18 @@ def _as_mapping(value: object, *, label: str) -> Mapping[str, object]:
 
 def _candidate_payloads(payload: object) -> list[object]:
     if isinstance(payload, list):
-        return list(payload)
+        return list(cast(list[object], payload))
     mapping = _as_mapping(payload, label="citation file")
     if "retrieved_citations" in mapping:
         value = mapping["retrieved_citations"]
         if not isinstance(value, list):
             raise ValueError("retrieved_citations is not a list")
-        return list(value)
+        return list(cast(list[object], value))
     if "sources" in mapping:
         value = mapping["sources"]
         if not isinstance(value, list):
             raise ValueError("sources is not a list")
-        return list(value)
+        return list(cast(list[object], value))
     return [mapping]
 
 
