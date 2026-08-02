@@ -61,8 +61,7 @@ def test_all_public_benchmark_questions_retrieve_every_expected_source(tmp_path:
     for question in cast(Sequence[Mapping[str, object]], benchmark["questions"]):
         package = retrieve_evidence(str(question["question"]), home=home, evidence_limit=limit)
         retrieved = {
-            by_filename.get(result.citation.source_name, "UNKNOWN")
-            for result in package.results
+            by_filename.get(result.citation.source_name, "UNKNOWN") for result in package.results
         }
         expected = set(cast(Sequence[str], question["expected_sources"]))
         missing = sorted(expected - retrieved)
