@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "status": "pending_exact_head_public_fixture_run",
+  "status": "clean_research_branch_pending_exact_head_public_fixture_run",
   "archiv_base": "8b851cd8e785c1b755e718bbbcff562196fa5f0d",
   "native_support_claimed": false,
   "registry_changed": false,
@@ -25,6 +25,12 @@
       }
     ]
   },
+  "implementation": [
+    "src/archiv/research/inpage_types.py",
+    "src/archiv/research/inpage_container.py",
+    "src/archiv/research/inpage_legacy.py",
+    "src/archiv/research/inpage_validation.py"
+  ],
   "mapping_sources": [
     {
       "repository": "ShakesVision/html-experiments",
@@ -40,11 +46,11 @@
     }
   ],
   "checks": {
-    "synthetic_targeted_tests": "30 passed locally",
-    "full_local_suite": "not run: MCP package unavailable in local container",
-    "format": "pending GitHub CI",
-    "lint": "pending GitHub CI",
-    "pyright": "pending GitHub CI",
-    "public_fixture_measurement": "pending GitHub CI"
+    "targeted_research_suite": "22 passed in clean-history run 30770892833 before the single-commit rewrite",
+    "full_local_suite": "not run locally: MCP package unavailable in the local container",
+    "format": "passed in clean-history run; exact connector-authored head pending",
+    "lint": "passed in clean-history run; exact connector-authored head pending",
+    "pyright": "passed in clean-history run; exact connector-authored head pending",
+    "public_fixture_measurement": "pending exact-head ephemeral GitHub run"
   }
 }
