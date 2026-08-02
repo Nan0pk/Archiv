@@ -75,7 +75,9 @@ XLINK = "http://www.w3.org/1999/xlink"
 
 
 @dataclass(frozen=True)
-class _Package:
+class OdfPackage:
+    """Validated ODF package members shared by bounded family normalizers."""
+
     mimetype: str
     content: bytes
     manifest: bytes
@@ -131,7 +133,9 @@ def _odf_text(element: ElementTree.Element) -> str:
     return value
 
 
-def _parse_xml(data: bytes, *, label: str) -> ElementTree.Element:
+def parse_odf_xml(data: bytes, *, label: str) -> ElementTree.Element:
+    """Parse bounded ODF XML while rejecting declarations, entities, and node floods."""
+
     upper = data.upper()
     if b"<!DOCTYPE" in upper or b"<!ENTITY" in upper:
         raise ValueError(f"ODF {label} declarations and entities are not allowed")
@@ -142,7 +146,7 @@ def _parse_xml(data: bytes, *, label: str) -> ElementTree.Element:
 
 
 def _validate_manifest(data: bytes, expected_mimetype: str) -> None:
-    root = _parse_xml(data, label="manifest XML")
+    root = parse_odf_xml(data, label="manifest XML")
     if root.tag != f"{{{MANIFEST}}}manifest":
         raise ValueError("ODF manifest has an unexpected root element")
     if root.find(f".//{{{MANIFEST}}}encryption-data") is not None:
@@ -168,7 +172,9 @@ def _validate_manifest(data: bytes, expected_mimetype: str) -> None:
         raise ValueError("ODF manifest content.xml media type mismatch")
 
 
-def _read_package(path: Path, expected_mimetype: str) -> _Package:
+def read_odf_package(path: Path, expected_mimetype: str) -> OdfPackage:
+    """Validate one bounded ODF ZIP package and return required member bytes."""
+
     if path.stat().st_size > MAX_PACKAGE_BYTES:
         raise ValueError("ODF package size limit exceeded")
     try:
@@ -219,7 +225,7 @@ def _read_package(path: Path, expected_mimetype: str) -> _Package:
         raise ValueError("invalid ODF ZIP package") from error
 
     _validate_manifest(manifest, expected_mimetype)
-    return _Package(mimetype=mimetype, content=content, manifest=manifest)
+    return OdfPackage(mimetype=mimetype, content=content, manifest=manifest)
 
 
 def _read_flat_xml(path: Path) -> bytes:
@@ -470,16 +476,16 @@ def normalize_odf(
     if media_type != ODF_REGISTRY_MEDIA_TYPES[kind]:
         raise ValueError("ODF registry media type mismatch")
 
-    package: _Package | None = None
+    package: OdfPackage | None = None
     flat_xml = kind in FLAT_XML_KINDS
     if flat_xml:
         content = _read_flat_xml(path)
         representation = "flat-xml"
     else:
-        package = _read_package(path, expected_mimetype)
+        package = read_odf_package(path, expected_mimetype)
         content = package.content
         representation = "package"
-    root = _parse_xml(content, label="content XML")
+    root = parse_odf_xml(content, label="content XML")
 
     tables: list[NormalizedTable] = []
     formula_source: str | None = None
