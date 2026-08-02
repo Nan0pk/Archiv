@@ -1,9 +1,10 @@
-"""Bounded, non-executing normalization for core OpenDocument packages."""
+"""Bounded, non-executing normalization for the supported OpenDocument family."""
 
 from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass
+from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
 from xml.etree import ElementTree
@@ -13,18 +14,45 @@ from archiv.contracts import NormalizedDocument, NormalizedSegment, NormalizedTa
 
 ODF_MIMETYPES = {
     "odt": "application/vnd.oasis.opendocument.text",
+    "ott": "application/vnd.oasis.opendocument.text-template",
+    "odm": "application/vnd.oasis.opendocument.text-master",
+    "otm": "application/vnd.oasis.opendocument.text-master-template",
     "ods": "application/vnd.oasis.opendocument.spreadsheet",
+    "ots": "application/vnd.oasis.opendocument.spreadsheet-template",
     "odp": "application/vnd.oasis.opendocument.presentation",
+    "otp": "application/vnd.oasis.opendocument.presentation-template",
     "odg": "application/vnd.oasis.opendocument.graphics",
+    "otg": "application/vnd.oasis.opendocument.graphics-template",
+    "odf": "application/vnd.oasis.opendocument.formula",
+    "fodt": "application/vnd.oasis.opendocument.text",
+    "fods": "application/vnd.oasis.opendocument.spreadsheet",
+    "fodp": "application/vnd.oasis.opendocument.presentation",
+    "fodg": "application/vnd.oasis.opendocument.graphics",
+}
+FLAT_XML_KINDS = {"fodt", "fods", "fodp", "fodg"}
+ODF_REGISTRY_MEDIA_TYPES = {
+    kind: ("text/xml" if kind in FLAT_XML_KINDS else mimetype)
+    for kind, mimetype in ODF_MIMETYPES.items()
 }
 ODF_BODY_TAGS = {
     "odt": "text",
+    "ott": "text",
+    "odm": "text",
+    "otm": "text",
+    "fodt": "text",
     "ods": "spreadsheet",
+    "ots": "spreadsheet",
+    "fods": "spreadsheet",
     "odp": "presentation",
+    "otp": "presentation",
+    "fodp": "presentation",
     "odg": "drawing",
+    "otg": "drawing",
+    "fodg": "drawing",
 }
 
 MAX_PACKAGE_BYTES = 256 * 1024 * 1024
+MAX_FLAT_XML_BYTES = 32 * 1024 * 1024
 MAX_ARCHIVE_ENTRIES = 4096
 MAX_MEMBER_BYTES = 32 * 1024 * 1024
 MAX_TOTAL_UNCOMPRESSED_BYTES = 128 * 1024 * 1024
@@ -42,6 +70,7 @@ TABLE = "urn:oasis:names:tc:opendocument:xmlns:table:1.0"
 DRAW = "urn:oasis:names:tc:opendocument:xmlns:drawing:1.0"
 PRESENTATION = "urn:oasis:names:tc:opendocument:xmlns:presentation:1.0"
 MANIFEST = "urn:oasis:names:tc:opendocument:xmlns:manifest:1.0"
+MATHML = "http://www.w3.org/1998/Math/MathML"
 XLINK = "http://www.w3.org/1999/xlink"
 
 
@@ -191,6 +220,12 @@ def _read_package(path: Path, expected_mimetype: str) -> _Package:
 
     _validate_manifest(manifest, expected_mimetype)
     return _Package(mimetype=mimetype, content=content, manifest=manifest)
+
+
+def _read_flat_xml(path: Path) -> bytes:
+    if path.stat().st_size > MAX_FLAT_XML_BYTES:
+        raise ValueError("flat ODF XML size limit exceeded")
+    return path.read_bytes()
 
 
 def _paragraph_segments(root: ElementTree.Element) -> list[NormalizedSegment]:
@@ -376,17 +411,49 @@ def _page_segments(root: ElementTree.Element, *, page_key: str) -> list[Normaliz
     return segments
 
 
-def _validated_body(root: ElementTree.Element, kind: str) -> ElementTree.Element:
-    if root.tag != f"{{{OFFICE}}}document-content":
-        raise ValueError("ODF content.xml has an unexpected root element")
+def _validated_body(
+    root: ElementTree.Element,
+    kind: str,
+    *,
+    flat_xml: bool,
+) -> ElementTree.Element:
+    expected_root = f"{{{OFFICE}}}{'document' if flat_xml else 'document-content'}"
+    if root.tag != expected_root:
+        label = "flat ODF XML" if flat_xml else "ODF content.xml"
+        raise ValueError(f"{label} has an unexpected root element")
+    if flat_xml:
+        declared = root.attrib.get(f"{{{OFFICE}}}mimetype")
+        if declared != ODF_MIMETYPES[kind]:
+            raise ValueError("flat ODF XML mimetype mismatch")
     body = root.find(f"{{{OFFICE}}}body")
     if body is None:
-        raise ValueError("ODF content.xml has no office:body")
+        raise ValueError("ODF document has no office:body")
     children = list(body)
     expected = f"{{{OFFICE}}}{ODF_BODY_TAGS[kind]}"
     if len(children) != 1 or children[0].tag != expected:
         raise ValueError(f"ODF content body does not match {kind}")
     return children[0]
+
+
+def _formula_segments(
+    root: ElementTree.Element,
+) -> tuple[list[NormalizedSegment], str, str]:
+    if root.tag != f"{{{MATHML}}}math":
+        raise ValueError("ODF formula content.xml must have a MathML math root")
+    source = ElementTree.tostring(root, encoding="unicode", short_empty_elements=True)
+    if len(source) > MAX_SEGMENT_CHARACTERS:
+        raise ValueError("ODF formula source character limit exceeded")
+    text = _odf_text(root) or source
+    return (
+        [
+            NormalizedSegment(
+                locator={"formula": 1, "representation": "mathml"},
+                text=text,
+            )
+        ],
+        source,
+        sha256(source.encode("utf-8")).hexdigest(),
+    )
 
 
 def normalize_odf(
@@ -397,25 +464,39 @@ def normalize_odf(
     media_type: str,
     kind: str,
 ) -> NormalizedDocument:
-    """Validate and normalize one core ODF ZIP package without executing content."""
+    """Validate and normalize one supported ODF representation without execution."""
 
-    expected = ODF_MIMETYPES[kind]
-    if media_type != expected:
+    expected_mimetype = ODF_MIMETYPES[kind]
+    if media_type != ODF_REGISTRY_MEDIA_TYPES[kind]:
         raise ValueError("ODF registry media type mismatch")
-    package = _read_package(path, expected)
-    root = _parse_xml(package.content, label="content XML")
-    body = _validated_body(root, kind)
 
-    segments: list[NormalizedSegment]
-    tables: list[NormalizedTable] = []
-    if kind == "ods":
-        segments, tables = _spreadsheet(body)
-    elif kind == "odp":
-        segments = _page_segments(body, page_key="slide")
-    elif kind == "odg":
-        segments = _page_segments(body, page_key="page")
+    package: _Package | None = None
+    flat_xml = kind in FLAT_XML_KINDS
+    if flat_xml:
+        content = _read_flat_xml(path)
+        representation = "flat-xml"
     else:
-        segments = _paragraph_segments(body)
+        package = _read_package(path, expected_mimetype)
+        content = package.content
+        representation = "package"
+    root = _parse_xml(content, label="content XML")
+
+    tables: list[NormalizedTable] = []
+    formula_source: str | None = None
+    formula_source_sha256: str | None = None
+    family = ODF_BODY_TAGS.get(kind, "formula")
+    if family == "formula":
+        segments, formula_source, formula_source_sha256 = _formula_segments(root)
+    else:
+        body = _validated_body(root, kind, flat_xml=flat_xml)
+        if family == "spreadsheet":
+            segments, tables = _spreadsheet(body)
+        elif family == "presentation":
+            segments = _page_segments(body, page_key="slide")
+        elif family == "drawing":
+            segments = _page_segments(body, page_key="page")
+        else:
+            segments = _paragraph_segments(body)
 
     external_links = 0
     for element in root.iter():
@@ -425,15 +506,25 @@ def normalize_odf(
 
     metadata: dict[str, object] = {
         "processor": "archiv.odf-core",
-        "processor_version": "2",
-        "package_mimetype": package.mimetype,
-        "package_manifest_validated": True,
+        "processor_version": "3",
+        "odf_family": family,
+        "odf_representation": representation,
+        "declared_mimetype": expected_mimetype,
+        "package_manifest_validated": package is not None,
         "external_links_ignored": external_links,
         "macros_executed": False,
         "formulas_executed": False,
     }
-    if kind == "odp":
+    if package is not None:
+        metadata["package_mimetype"] = package.mimetype
+    else:
+        metadata["document_mimetype"] = expected_mimetype
+    if family == "presentation":
         metadata["presentation_notes_extracted"] = False
+    if formula_source is not None and formula_source_sha256 is not None:
+        metadata["formula_source_kind"] = "mathml"
+        metadata["formula_source"] = formula_source
+        metadata["formula_source_sha256"] = formula_source_sha256
 
     return NormalizedDocument(
         object_sha256=digest,
