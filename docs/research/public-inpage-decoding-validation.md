@@ -31,18 +31,27 @@ must be deleted after measurement.
 
 ## Independent implementation
 
-`src/archiv/research/inpage_text_extractor.py` is disconnected from production
-ingestion. It:
+The research-only implementation is split into:
 
-- reuses Archiv's bounded CFB validation primitives;
-- requires root-level `DocumentInfo` and exactly one root-level `InPageNNN` stream;
-- rejects mini-stream content, ambiguous candidates, malformed chains and oversize
+- `src/archiv/research/inpage_types.py` for bounded shared types and sanitized metrics;
+- `src/archiv/research/inpage_container.py` for validated root-stream selection and
+  conservative InPage300 extraction;
+- `src/archiv/research/inpage_legacy.py` for InPage100 framing, mapping and conflict
+  measurement;
+- `src/archiv/research/inpage_validation.py` for pinned Git identities, private
+  mode-0600 output and explicit Quran comparison modes.
+
+The modules are disconnected from production ingestion. Together they:
+
+- reuse Archiv's bounded CFB validation primitives;
+- require root-level `DocumentInfo` and exactly one root-level `InPageNNN` stream;
+- reject mini-stream content, ambiguous candidates, malformed chains and oversize
   streams;
-- hashes the selected stream;
-- extracts private text only in memory unless an explicit exclusive mode-0600 path is
+- hash the selected stream;
+- extract private text only in memory unless an explicit exclusive mode-0600 path is
   supplied;
-- serializes sanitized hashes and counts, never document text;
-- always records `native_support_claimed: false`.
+- serialize sanitized hashes and counts, never document text;
+- always record `native_support_claimed: false`.
 
 ## Evidence classes
 
