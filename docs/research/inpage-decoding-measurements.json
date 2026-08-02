@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "status": "pending_exact_head_public_fixture_run",
+  "archiv_base": "8b851cd8e785c1b755e718bbbcff562196fa5f0d",
+  "native_support_claimed": false,
+  "registry_changed": false,
+  "public_inputs": {
+    "repository": "ShakesVision/html-experiments",
+    "commit": "1f9bc57a6cdbe6ad69f18b38913e1af06ba5b41a",
+    "provenance_status": "publicly published but fixture-level origin and redistribution chain incomplete",
+    "candidates": [
+      {
+        "path": "inpage/juz_29.inp",
+        "git_blob_sha1": "b5c5774f41ea84a4b7ad6c859f0576da70604925",
+        "file_sha256": "81c61955c2eb38fb14c100fdb36c642ee8e0f6d005109e894c24249617939ffa",
+        "expected_stream": "InPage300",
+        "measurement_source": "closed unmerged PR #49"
+      },
+      {
+        "path": "inpage/khali hathely (1).inp",
+        "git_blob_sha1": "c7f69058ca0024be6866531429292967ad852ef1",
+        "file_sha256": "a3c6a60de0057345849529213d7a216a4f7d9b278434db883597e311ec1ab276",
+        "expected_stream": "InPage100",
+        "measurement_source": "closed unmerged PR #49"
+      }
+    ]
+  },
+  "mapping_sources": [
+    {
+      "repository": "ShakesVision/html-experiments",
+      "commit": "1f9bc57a6cdbe6ad69f18b38913e1af06ba5b41a",
+      "path": "inpage/pdf-texter/UnicodeToInpage/InpageToUni.xml",
+      "status": "pending_hash_and_comparison"
+    },
+    {
+      "repository": "KamalAbdali/InpageToUnicode",
+      "commit": "6eab0278d3717de98c230712121e4460266755b8",
+      "path": "src/InpToUni.c",
+      "status": "research_only_no_clear_repository_licence_found"
+    }
+  ],
+  "checks": {
+    "synthetic_targeted_tests": "30 passed locally",
+    "full_local_suite": "not run: MCP package unavailable in local container",
+    "format": "pending GitHub CI",
+    "lint": "pending GitHub CI",
+    "pyright": "pending GitHub CI",
+    "public_fixture_measurement": "pending GitHub CI"
+  }
+}
