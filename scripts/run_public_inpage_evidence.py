@@ -29,6 +29,7 @@ SOURCE_REPOSITORY = "ShakesVision/html-experiments"
 SOURCE_COMMIT = "1f9bc57a6cdbe6ad69f18b38913e1af06ba5b41a"
 C_REPOSITORY = "KamalAbdali/InpageToUnicode"
 C_COMMIT = "6eab0278d3717de98c230712121e4460266755b8"
+SCOPE = "bounded non-redistributing research extraction from pinned public native candidates"
 
 
 @dataclass(frozen=True)
@@ -262,10 +263,7 @@ def build_evidence(
     return {
         "schema_version": 1,
         "archiv_head": archiv_head,
-        "scope": (
-            "bounded non-redistributing research extraction from pinned public "
-            "native candidates"
-        ),
+        "scope": SCOPE,
         "source_repository": SOURCE_REPOSITORY,
         "source_commit": SOURCE_COMMIT,
         "source_license": (
