@@ -1,6 +1,6 @@
-# User-ready Fedora alpha (0.1.0a3)
+# User-ready Fedora alpha (0.1.0a4)
 
-Archiv `0.1.0a3` packages the grounded-question and cited-report local evidence workflow behind a simple everyday command surface. Installation may download Fedora and Python packages. After installation, adding, searching, asking, reporting, model configuration, verification, backup, and restore require no external network access, cloud login, telemetry endpoint, or online provider model.
+Archiv `0.1.0a4` packages explainable natural-language retrieval, grounded questions, and cited-report workflows behind a simple everyday command surface. Installation may download Fedora and Python packages. After installation, adding, searching, asking, reporting, model configuration, verification, backup, and restore require no external network access, cloud login, telemetry endpoint, or online provider model.
 
 ## One-command Fedora installation
 
@@ -30,8 +30,8 @@ archiv sample-vault "$HOME/Archiv-Sample"
 archiv add "$HOME/Archiv-Sample"
 archiv find "unique fixture marker"
 archiv model configure --endpoint http://127.0.0.1:11434 --model llama3
-archiv ask "What decisions were made and what remains unresolved?"
-archiv report "Prepare a cited status report with risks and next actions"
+archiv ask "What decisions were made and what remains unresolved?" --explain-retrieval
+archiv report "Prepare a cited status report with risks and next actions" --explain-retrieval
 archiv status
 ```
 
@@ -39,9 +39,11 @@ archiv status
 
 `archiv find` performs literal local full-text retrieval and prints readable source names, native locators, and excerpts. Every result is revalidated against the canonical original and normalized evidence before display.
 
-`archiv ask` performs grounded natural-language QA over local evidence. It sends bounded evidence passages to the configured local model, strictly validates citation identifiers, detects missing evidence and contradictions, and stores durable run evidence under `ARCHIV_HOME/runs/ask/`.
+`archiv ask` performs grounded natural-language QA over local evidence. It derives bounded query variants locally, merges and ranks results deterministically, sends only validated evidence passages to the configured local model, strictly validates citation identifiers, detects missing evidence and contradictions, and stores durable run and retrieval evidence under `ARCHIV_HOME/runs/ask/`.
 
-Normal `archiv report "objective"` requires the explicitly configured local model. Model-disabled, unreachable, timeout, and invalid-response conditions fail closed without a hidden fallback. Deterministic excerpt reporting occurs only when `--deterministic` is explicitly passed. Every successful report is reopened, structurally validated, and rendered before success is reported.
+Model-assisted `archiv report "objective"` uses the same natural-language retrieval package for model synthesis and report citations. Model-disabled, unreachable, timeout, and invalid-response conditions fail closed without a hidden fallback. Deterministic excerpt reporting occurs only when `--deterministic` is explicitly passed. Every successful report is reopened, structurally validated, and rendered before success is reported.
+
+`--explain-retrieval` shows the local strategy, derived terms, recognized concepts, candidate count, selected sources, native locators, scores, and ranks. No model or network call is used to rewrite the query.
 
 `archiv status` shows the Archiv home, document and ingestion counts, index state, ask and report run outcomes, and explicit model configuration without changing state.
 
@@ -49,7 +51,7 @@ All everyday commands use readable output by default. Add `--json` for automatio
 
 ## Model configuration and safety
 
-Model access is strictly loopback-only (HTTP on 127.0.0.1, localhost, ::1):
+Model access is strictly loopback-only over HTTP on `127.0.0.1`, `localhost`, or `::1`:
 
 ```bash
 archiv model status
@@ -58,7 +60,7 @@ archiv model test
 archiv model disable
 ```
 
-Remote hosts, HTTPS tunnels, embedded credentials, query parameters, fragments, and unexpected paths are rejected. API keys are never stored in plain text configuration files (environment variables are supported). There is no cloud fallback.
+Remote hosts, HTTPS tunnels, embedded credentials, query parameters, fragments, and unexpected paths are rejected. API keys are never stored in plain-text configuration files; environment variables are supported. There is no cloud fallback.
 
 ## Host acceptance script
 
@@ -82,4 +84,6 @@ Archives include durable SQLite metadata, immutable originals, normalized eviden
 
 ## Release evidence and limitations
 
-Archiv is an alpha software release. Answer quality depends on document extraction, FTS5 retrieval, and the capabilities of the configured local model. Validated citations prevent fabricated source references, but independent verification remains necessary for critical decisions. Private local documents remain the user's responsibility.
+The frozen public field trial retrieves every required source for all 22 questions at evidence limit 8, with 22/22 structurally valid citation packages, zero fabricated identifiers, full deterministic completeness and honesty, and unchanged original hashes.
+
+Archiv remains alpha software. The deterministic public fixture isolates retrieval and validation; it does not prove the quality of a user's chosen local model. Private local corpus/model testing remains an operator-run activity. Validated citations prevent fabricated source references, but independent verification remains necessary for critical decisions. A bounded source-location command is still pending in issue #40.
