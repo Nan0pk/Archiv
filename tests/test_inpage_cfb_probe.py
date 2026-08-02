@@ -66,14 +66,18 @@ def _cfb(
     child = 1 if reachable_streams else FREESECT
     directory[0:128] = _directory_entry("Root Entry", object_type=5, child=child)
     for index, stream_name in enumerate(stream_names, 1):
-        right = index + 1 if index < reachable_streams else FREESECT
+        right = (
+            index + 1
+            if index < reachable_streams
+            else FREESECT
+        )
         directory[index * 128 : (index + 1) * 128] = _directory_entry(
             stream_name,
             object_type=2,
             right=right,
         )
 
-    fat = bytearray(b"\xFF" * 512)
+    fat = bytearray(b"\xff" * 512)
     struct.pack_into("<I", fat, 0, directory_next)
     struct.pack_into("<I", fat, 4, FATSECT)
     return bytes(header + directory + fat)
@@ -238,3 +242,28 @@ def test_output_is_deterministic_and_contains_no_stream_bytes(tmp_path: Path) ->
     assert payload["stream_contents_read"] is False
     assert "stream_content" not in payload
     assert payload["native_support_claimed"] is False
+
+
+def test_duplicate_fat_sector_identifiers_are_rejected(tmp_path: Path) -> None:
+    data = bytearray(_cfb(["DocumentInfo", "InPage100"]))
+    struct.pack_into("<I", data, 44, 2)
+    struct.pack_into("<109I", data, 76, 1, 1, *([FREESECT] * 107))
+    path = tmp_path / "duplicate-fat.inp"
+    path.write_bytes(data)
+
+    result = probe_path(path)
+
+    assert result.classification == "malformed"
+    assert result.error == "duplicate FAT sector identifier"
+
+
+def test_fat_sector_must_mark_itself(tmp_path: Path) -> None:
+    data = bytearray(_cfb(["DocumentInfo", "InPage100"]))
+    struct.pack_into("<I", data, 1024 + 4, ENDOFCHAIN)
+    path = tmp_path / "bad-fat-marker.inp"
+    path.write_bytes(data)
+
+    result = probe_path(path)
+
+    assert result.classification == "malformed"
+    assert result.error == "FAT sector is not marked as FATSECT"

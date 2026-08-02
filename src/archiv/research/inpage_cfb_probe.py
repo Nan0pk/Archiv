@@ -127,9 +127,7 @@ def _collect_fat_sector_ids(
         raise ProbeError("DIFAT sector limit exceeded")
 
     fat_sector_ids = [
-        sector_id
-        for sector_id in struct.unpack_from("<109I", data, 76)
-        if sector_id != FREESECT
+        sector_id for sector_id in struct.unpack_from("<109I", data, 76) if sector_id != FREESECT
     ]
     if any(sector_id > MAXREGSECT for sector_id in fat_sector_ids):
         raise ProbeError("header DIFAT contains a reserved sector identifier")
@@ -159,7 +157,10 @@ def _collect_fat_sector_ids(
         raise ProbeError("DIFAT chain exceeds its declared length")
     if len(fat_sector_ids) < number_of_fat_sectors:
         raise ProbeError("fewer FAT sectors found than declared")
-    return fat_sector_ids[:number_of_fat_sectors]
+    selected = fat_sector_ids[:number_of_fat_sectors]
+    if len(set(selected)) != len(selected):
+        raise ProbeError("duplicate FAT sector identifier")
+    return selected
 
 
 def _read_fat(data: bytes, fat_sector_ids: list[int], sector_size: int) -> list[int]:
@@ -168,6 +169,9 @@ def _read_fat(data: bytes, fat_sector_ids: list[int], sector_size: int) -> list[
     for sector_id in fat_sector_ids:
         sector = _read_sector(data, sector_id, sector_size)
         fat.extend(struct.unpack_from(f"<{entries_per_sector}I", sector))
+    for sector_id in fat_sector_ids:
+        if sector_id >= len(fat) or fat[sector_id] != FATSECT:
+            raise ProbeError("FAT sector is not marked as FATSECT")
     return fat
 
 
@@ -434,6 +438,12 @@ def probe_path(path: Path, *, limits: ProbeLimits = ProbeLimits()) -> ProbeResul
     try:
         if len(data) < 512:
             raise ProbeError("truncated CFB header")
+        if data[8:24] != bytes(16):
+            raise ProbeError("CFB header CLSID must be zero")
+        if _u16(data, 24) != 0x003E:
+            raise ProbeError("unsupported CFB minor version")
+        if data[34:40] != bytes(6):
+            raise ProbeError("CFB header reserved fields must be zero")
         major_version = _u16(data, 26)
         byte_order = _u16(data, 28)
         sector_shift = _u16(data, 30)
@@ -454,6 +464,10 @@ def probe_path(path: Path, *, limits: ProbeLimits = ProbeLimits()) -> ProbeResul
             raise ProbeError("CFB file is not aligned to its sector size")
         if major_version == 3 and _u32(data, 40) != 0:
             raise ProbeError("version 3 CFB declares directory sector count")
+        if _u32(data, 56) != 4096:
+            raise ProbeError("unsupported CFB mini-stream cutoff")
+        if major_version == 4 and any(data[512:sector_size]):
+            raise ProbeError("version 4 CFB header padding must be zero")
         number_of_fat_sectors = _u32(data, 44)
         first_directory_sector = _u32(data, 48)
         first_difat_sector = _u32(data, 68)
@@ -488,16 +502,12 @@ def probe_path(path: Path, *, limits: ProbeLimits = ProbeLimits()) -> ProbeResul
         ]
         if candidate_streams and not has_document_info:
             warnings.append("InPage-like content stream exists without DocumentInfo.")
-        if candidate_streams and all(
-            name.casefold() != "inpage100" for name in candidate_streams
-        ):
+        if candidate_streams and all(name.casefold() != "inpage100" for name in candidate_streams):
             warnings.append(
                 "Stream generation is a discovery lead, not independently verified format evidence."
             )
         if orphan_entry_count:
-            warnings.append(
-                f"Ignored {orphan_entry_count} non-empty orphan directory entries."
-            )
+            warnings.append(f"Ignored {orphan_entry_count} non-empty orphan directory entries.")
         return ProbeResult(
             schema_version=1,
             classification=classification,
