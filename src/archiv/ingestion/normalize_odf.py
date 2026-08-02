@@ -220,6 +220,14 @@ def _paragraph_segments(root: ElementTree.Element) -> list[NormalizedSegment]:
     return segments
 
 
+def _iter_sheets(element: ElementTree.Element) -> Iterator[ElementTree.Element]:
+    for child in element:
+        if child.tag == f"{{{TABLE}}}table":
+            yield child
+        else:
+            yield from _iter_sheets(child)
+
+
 def _iter_sheet_rows(element: ElementTree.Element) -> Iterator[ElementTree.Element]:
     for child in element:
         if child.tag == f"{{{TABLE}}}table-row":
@@ -282,7 +290,7 @@ def _spreadsheet(
     tables: list[NormalizedTable] = []
     expanded_cells = 0
     expanded_rows = 0
-    for sheet_number, sheet in enumerate(root.iter(f"{{{TABLE}}}table"), 1):
+    for sheet_number, sheet in enumerate(_iter_sheets(root), 1):
         sheet_name = sheet.attrib.get(f"{{{TABLE}}}name") or f"Sheet {sheet_number}"
         rows: list[list[object | None]] = []
         row_number = 0
@@ -319,11 +327,7 @@ def _spreadsheet(
                             segments.append(
                                 NormalizedSegment(
                                     locator=locator,
-                                    text=(
-                                        spec.value
-                                        if spec.value is not None
-                                        else spec.formula or ""
-                                    ),
+                                    text=(spec.value if spec.value is not None else spec.formula or ""),
                                 )
                             )
                 if any(value is not None for value in values):
@@ -417,6 +421,18 @@ def normalize_odf(
         if href and (href.startswith("//") or ":" in href.split("/", 1)[0]):
             external_links += 1
 
+    metadata: dict[str, object] = {
+        "processor": "archiv.odf-core",
+        "processor_version": "2",
+        "package_mimetype": package.mimetype,
+        "package_manifest_validated": True,
+        "external_links_ignored": external_links,
+        "macros_executed": False,
+        "formulas_executed": False,
+    }
+    if kind == "odp":
+        metadata["presentation_notes_extracted"] = False
+
     return NormalizedDocument(
         object_sha256=digest,
         media_type=media_type,
@@ -424,14 +440,5 @@ def normalize_odf(
         source_name=source_name,
         segments=segments,
         tables=tables,
-        metadata={
-            "processor": "archiv.odf-core",
-            "processor_version": "2",
-            "package_mimetype": package.mimetype,
-            "package_manifest_validated": True,
-            "external_links_ignored": external_links,
-            "macros_executed": False,
-            "formulas_executed": False,
-            "presentation_notes_extracted": False if kind == "odp" else None,
-        },
+        metadata=metadata,
     )
