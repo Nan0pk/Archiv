@@ -278,8 +278,19 @@ def test_public_benchmark_executes_end_to_end(tmp_path: Path) -> None:
     )
     summary = FIELD_TRIAL.run_public_trial(args)
     aggregate = summary["aggregate"]
-    assert summary["question_count"] >= 20
+    assert summary["question_count"] == 22
+    assert summary["evidence_limit"] == 8
     assert summary["privacy"]["original_hashes_unchanged"] is True
+    assert aggregate["retrieval"]["questions_with_full_recall"] == 22
+    assert aggregate["retrieval"]["questions_with_retrieval_miss"] == 0
+    assert aggregate["retrieval"]["mean_recall_at_evidence_limit"] == 1.0
+    assert aggregate["citation_integrity"]["structurally_valid_questions"] == 22
     assert aggregate["citation_integrity"]["structural_failures"] == 0
+    assert aggregate["citation_integrity"]["fabricated_identifier_count"] == 0
+    assert aggregate["answer_quality"]["fully_complete_questions"] == 22
+    assert aggregate["answer_quality"]["honesty_checks_passed"] == 22
+    assert aggregate["answer_quality"]["mean_completeness_score"] == 1.0
+    assert aggregate["answer_quality"]["unsupported_claim_count"] == 0
+    assert aggregate["dominant_failure"] == "none"
     assert (args.output / "public-results.json").is_file()
     assert (args.output / "public-report.md").is_file()
