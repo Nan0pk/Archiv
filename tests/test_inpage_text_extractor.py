@@ -64,9 +64,7 @@ def _cfb_with_stream(name: str, payload: bytes, *, duplicate: bool = False) -> b
 
     directory = bytearray(512)
     directory[:128] = _entry("Root Entry", object_type=5, child=1)
-    directory[128:256] = _entry(
-        "DocumentInfo", object_type=2, right=2, start=2, size=len(document)
-    )
+    directory[128:256] = _entry("DocumentInfo", object_type=2, right=2, start=2, size=len(document))
     directory[256:384] = _entry(
         name,
         object_type=2,
@@ -75,9 +73,7 @@ def _cfb_with_stream(name: str, payload: bytes, *, duplicate: bool = False) -> b
         size=len(payload),
     )
     if duplicate:
-        directory[384:512] = _entry(
-            name, object_type=2, start=2 + doc_sectors, size=len(payload)
-        )
+        directory[384:512] = _entry(name, object_type=2, start=2 + doc_sectors, size=len(payload))
 
     fat = [FREESECT] * 128
     fat[0] = ENDOFCHAIN
@@ -86,9 +82,7 @@ def _cfb_with_stream(name: str, payload: bytes, *, duplicate: bool = False) -> b
         fat[sector] = sector + 1 if sector < 1 + doc_sectors else ENDOFCHAIN
     start = 2 + doc_sectors
     for sector in range(start, start + native_sectors):
-        fat[sector] = (
-            sector + 1 if sector < start + native_sectors - 1 else ENDOFCHAIN
-        )
+        fat[sector] = sector + 1 if sector < start + native_sectors - 1 else ENDOFCHAIN
     fat_bytes = struct.pack("<128I", *fat)
     body = bytearray(directory + fat_bytes + document + payload)
     expected = total_sectors * 512
@@ -196,9 +190,7 @@ def test_private_output_is_exclusive_and_mode_0600(tmp_path: Path) -> None:
 
 
 def test_quran_comparison_modes_and_blob_identity() -> None:
-    result = compare_quran_text(
-        "بِسْمِ  الله", "بسم الله", mode="diacritic_insensitive"
-    )
+    result = compare_quran_text("بِسْمِ  الله", "بسم الله", mode="diacritic_insensitive")
     assert result.exact_match is True
     assert result.matching_ratio == 1.0
     data = b"abc"
