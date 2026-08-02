@@ -137,8 +137,7 @@ def run_task(task_path: Path, *, home: Path | None = None) -> TaskRunResult:
                 retrieval.diagnostics.model_dump(mode="json"),
             )
             citations_map = {
-                f"CIT-{index}": result
-                for index, result in enumerate(retrieval.results, start=1)
+                f"CIT-{index}": result for index, result in enumerate(retrieval.results, start=1)
             }
 
             if citations_map:
