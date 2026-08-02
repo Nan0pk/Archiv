@@ -35,6 +35,9 @@ Originals are stored without an extension under their SHA-256 digest and made re
 ```bash
 archiv ingest ./document.docx
 archiv ingest ./document.odt
+archiv ingest ./template.ott
+archiv ingest ./document.fodt
+archiv ingest ./equation.odf
 archiv ingest ./document.docx --home /srv/archiv
 archiv rebuild-derived <sha256>
 ```
@@ -45,11 +48,18 @@ archiv rebuild-derived <sha256>
 
 ## Current format surface
 
-Archiv supports UTF-8 TXT/Markdown, PDF, DOCX, XLSX, PPTX, core ZIP-based OpenDocument packages (ODT, ODS, ODP and ODG), PNG/JPEG and WAV. It creates a portable normalized JSON document with format-native locators such as page, paragraph, sheet/cell, slide/object and drawing page/object.
+Archiv supports UTF-8 TXT/Markdown, PDF, DOCX, XLSX, PPTX, PNG/JPEG, WAV and the following bounded OpenDocument representations:
 
-Core ODF ingestion is deliberately bounded and non-executing. It validates the exact package mimetype, required manifest declarations, expected document body, safe archive paths, supported compression, XML structure and aggregate repeat expansion. Spreadsheet formulas are recorded but never executed. External links are counted and ignored. ODF text-space, tab and line-break elements are preserved in normalized text.
+- package documents: ODT, ODS, ODP and ODG;
+- package templates and master documents: OTT, ODM, OTM, OTS, OTP and OTG;
+- single-file flat XML: FODT, FODS, FODP and FODG;
+- packaged MathML formula documents: ODF.
 
-The current ODF claim does **not** include templates, master documents, formulas, flat-XML variants, databases, presentation notes or native InPage files. Those formats must fail as unsupported until separately implemented and verified.
+The normalized JSON uses format-native locators such as page, paragraph, sheet/cell, slide/object, drawing page/object and formula/MathML representation.
+
+ODF ingestion is deliberately bounded and non-executing. Package documents validate the exact registered mimetype, required manifest declarations, expected content root and body, safe archive paths, supported compression, XML structure and aggregate repeat expansion. Flat XML documents validate the `office:document` root, exact internal `office:mimetype`, body subtype and XML limits. Spreadsheet formulas are recorded but never executed. Formula documents preserve a bounded MathML source representation and searchable formula text without evaluation. External links are counted and ignored. ODF text-space, tab and line-break elements are preserved in normalized text.
+
+The current ODF claim does **not** include ODB databases, charts/images as standalone ODF documents, presentation notes or native InPage files. Native `.inp` support remains unclaimed until lawful real fixtures and independently verified Urdu/Arabic extraction are available. Unsupported formats fail explicitly rather than falling back to cloud conversion or OCR-equivalence claims.
 
 OCR and transcription are not silently simulated. Image and audio ingestion create explicit `not_run` status artifacts until real local processors are integrated.
 
