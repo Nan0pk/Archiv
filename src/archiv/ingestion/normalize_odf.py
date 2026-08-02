@@ -327,7 +327,9 @@ def _spreadsheet(
                             segments.append(
                                 NormalizedSegment(
                                     locator=locator,
-                                    text=(spec.value if spec.value is not None else spec.formula or ""),
+                                    text=(
+                                        spec.value if spec.value is not None else spec.formula or ""
+                                    ),
                                 )
                             )
                 if any(value is not None for value in values):
