@@ -66,11 +66,7 @@ def _cfb(
     child = 1 if reachable_streams else FREESECT
     directory[0:128] = _directory_entry("Root Entry", object_type=5, child=child)
     for index, stream_name in enumerate(stream_names, 1):
-        right = (
-            index + 1
-            if index < reachable_streams
-            else FREESECT
-        )
+        right = index + 1 if index < reachable_streams else FREESECT
         directory[index * 128 : (index + 1) * 128] = _directory_entry(
             stream_name,
             object_type=2,
