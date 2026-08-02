@@ -64,10 +64,10 @@ def _scan_records(
     while position + 4 <= len(payload):
         upper_word = 0
         if use_u16_length:
-            length = struct.unpack_from("<H", payload, position)[0]
-            upper_word = struct.unpack_from("<H", payload, position + 2)[0]
+            length = int(struct.unpack_from("<H", payload, position)[0])
+            upper_word = int(struct.unpack_from("<H", payload, position + 2)[0])
         else:
-            length = struct.unpack_from("<I", payload, position)[0]
+            length = int(struct.unpack_from("<I", payload, position)[0])
         end = position + 4 + length
         valid = (
             1 <= length <= limits.max_record_bytes
