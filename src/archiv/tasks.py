@@ -8,15 +8,14 @@ import re
 from pathlib import Path
 from uuid import uuid4
 
-from archiv.contracts import RunStatus, SearchResult
+from archiv.contracts import RetrievalDiagnostics, RunStatus, SearchResult
 from archiv.grounding import build_grounding_prompt, parse_and_validate_grounded_response
 from archiv.hashing import sha256_file
 from archiv.model_adapter import build_model_adapter, load_model_config
 from archiv.report_contracts import ReportManifest, ReportStatus
-from archiv.reports import generate_report, validate_report
-from archiv.reports.generator import distinct_sources
+from archiv.reports import generate_report, generate_report_from_results, validate_report
 from archiv.reports.validation import write_validation
-from archiv.search import rebuild_search_index, search_documents
+from archiv.search import rebuild_search_index, retrieve_evidence
 from archiv.storage.database import ArchivDatabase
 from archiv.storage.layout import ArchivLayout
 from archiv.task_contracts import CrossFileReportTask, TaskRunResult, TaskVerification
@@ -111,6 +110,8 @@ def run_task(task_path: Path, *, home: Path | None = None) -> TaskRunResult:
         return result
 
     before: dict[str, str] = {}
+    retrieval_results: list[SearchResult] | None = None
+    retrieval_diagnostics: RetrievalDiagnostics | None = None
     try:
         before = _source_hashes(layout)
         if not before:
@@ -124,14 +125,21 @@ def run_task(task_path: Path, *, home: Path | None = None) -> TaskRunResult:
         )
 
         if task.model_policy == "configured-local" and model.adapter != "disabled":
-            search_results = search_documents(
-                task.query, home=layout.root, limit=task.max_sources * 2
+            retrieval = retrieve_evidence(
+                task.query,
+                home=layout.root,
+                evidence_limit=task.max_sources,
             )
-            distinct_results = distinct_sources(search_results, limit=task.max_sources)
-            citations_map: dict[str, SearchResult] = {}
-            for idx, res in enumerate(distinct_results, 1):
-                cid = f"CIT-{idx}"
-                citations_map[cid] = res
+            retrieval_results = retrieval.results
+            retrieval_diagnostics = retrieval.diagnostics
+            _write_json(
+                evidence_dir / "retrieval.json",
+                retrieval.diagnostics.model_dump(mode="json"),
+            )
+            citations_map = {
+                f"CIT-{index}": result
+                for index, result in enumerate(retrieval.results, start=1)
+            }
 
             if citations_map:
                 prompt = build_grounding_prompt(task.query, citations_map)
@@ -144,17 +152,31 @@ def run_task(task_path: Path, *, home: Path | None = None) -> TaskRunResult:
                     raise ValueError("model response validation failed: " + "; ".join(p_errors))
                 grounded_response = parsed
 
-        report = generate_report(
-            task.query,
-            output,
-            title=task.title,
-            home=layout.root,
-            max_sources=task.max_sources,
-            render=task.render,
-            evidence_dir=output_dir / "rendered",
-            grounded_response=grounded_response,
-            model_identity=model_identity,
-        )
+        if retrieval_results is None:
+            report = generate_report(
+                task.query,
+                output,
+                title=task.title,
+                home=layout.root,
+                max_sources=task.max_sources,
+                render=task.render,
+                evidence_dir=output_dir / "rendered",
+                grounded_response=grounded_response,
+                model_identity=model_identity,
+            )
+        else:
+            report = generate_report_from_results(
+                retrieval_results,
+                output,
+                query=task.query,
+                title=task.title,
+                home=layout.root,
+                max_sources=task.max_sources,
+                render=task.render,
+                evidence_dir=output_dir / "rendered",
+                grounded_response=grounded_response,
+                model_identity=model_identity,
+            )
         after = _source_hashes(layout)
         manifest = ReportManifest.model_validate_json(
             Path(report.manifest_path).read_text(encoding="utf-8")
@@ -176,6 +198,7 @@ def run_task(task_path: Path, *, home: Path | None = None) -> TaskRunResult:
             source_hashes_before=before,
             source_hashes_after=after,
             citation_count=len(manifest.sources),
+            retrieval_diagnostics=retrieval_diagnostics,
             model=model,
             errors=errors,
         )
@@ -188,6 +211,7 @@ def run_task(task_path: Path, *, home: Path | None = None) -> TaskRunResult:
             evidence_dir=str(evidence_dir),
             source_hashes_before=before,
             source_hashes_after=after,
+            retrieval_diagnostics=retrieval_diagnostics,
             model=model,
             errors=[f"{type(error).__name__}: {error}"],
         )
