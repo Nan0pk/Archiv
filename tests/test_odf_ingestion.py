@@ -261,11 +261,7 @@ def test_odf_rejects_xml_entities_beyond_prefix_scan(tmp_path: Path) -> None:
     document = _document("<office:text><text:p>&unsafe;</text:p></office:text>")
     declaration, root = document.split("?>", 1)
     content = (
-        declaration
-        + "?>"
-        + (" " * 9000)
-        + '<!DOCTYPE x [<!ENTITY unsafe "expanded">]>'
-        + root
+        declaration + "?>" + (" " * 9000) + '<!DOCTYPE x [<!ENTITY unsafe "expanded">]>' + root
     )
     _package(path, "application/vnd.oasis.opendocument.text", content)
 
