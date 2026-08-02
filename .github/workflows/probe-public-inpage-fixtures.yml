@@ -3,6 +3,10 @@ name: Probe public native InPage fixtures
 on:
   push:
     branches: [research/probe-public-inpage-fixtures]
+  pull_request:
+    paths:
+      - ".github/workflows/probe-public-inpage-fixtures.yml"
+      - "src/archiv/research/inpage_cfb_probe.py"
   workflow_dispatch:
 
 permissions:
@@ -335,7 +339,7 @@ jobs:
                           else inpage100_metrics(stream)
                       ),
                   }
-              except Exception as error:  # research evidence must record, not disguise, failures
+              except Exception as error:
                   record["native_stream"] = {
                       "name": fixture["expected_stream"],
                       "measurement_error": f"{type(error).__name__}: {error}",
