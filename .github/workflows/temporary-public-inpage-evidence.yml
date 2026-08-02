@@ -1,0 +1,107 @@
+name: Temporary public native InPage evidence
+
+on:
+  push:
+    branches: [research/validate-public-inpage-decoding]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: archiv-public-inpage-decoding-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  evidence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out exact Archiv research branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: research/validate-public-inpage-decoding
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Check out pinned public InPage candidates
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: ShakesVision/html-experiments
+          ref: 1f9bc57a6cdbe6ad69f18b38913e1af06ba5b41a
+          path: external/shakesvision
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Check out pinned independent mapping source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: KamalAbdali/InpageToUnicode
+          ref: 6eab0278d3717de98c230712121e4460266755b8
+          path: external/kamal
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.12"
+
+      - name: Verify pinned heads and produce sanitized evidence
+        env:
+          PYTHONPATH: src
+        run: |
+          set -euo pipefail
+          test "$(git -C external/shakesvision rev-parse HEAD)" = \
+            '1f9bc57a6cdbe6ad69f18b38913e1af06ba5b41a'
+          test "$(git -C external/kamal rev-parse HEAD)" = \
+            '6eab0278d3717de98c230712121e4460266755b8'
+          mkdir -p public-inpage-decoding-evidence
+          python scripts/run_public_inpage_evidence.py \
+            --source-root external/shakesvision \
+            --c-source-root external/kamal \
+            --archiv-head "$(git rev-parse HEAD)" \
+            --output public-inpage-decoding-evidence/evidence.json
+
+      - name: Publish sanitized summary
+        run: |
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          from pathlib import Path
+
+          evidence = json.loads(
+              Path('public-inpage-decoding-evidence/evidence.json').read_text(encoding='ascii')
+          )
+          print('# Public native InPage decoding evidence')
+          print()
+          print(f"Archiv head: `{evidence['archiv_head']}`")
+          print()
+          for fixture in evidence['fixtures']:
+              print(f"- `{fixture['source_path']}`: `{fixture['status']}`")
+              if fixture['status'] == 'measured':
+                  print(
+                      f"  - `{fixture['stream_name']}`: {fixture['stream_size']} bytes, "
+                      f"SHA-256 `{fixture['stream_sha256']}`"
+                  )
+          comparison = evidence['mapping_comparison']
+          print()
+          print(
+              f"Mapping overlap: {comparison['overlap']}; agreements: "
+              f"{comparison['agreements']}; conflicts: {comparison['conflicts']}."
+          )
+          print()
+          print('No fixture bytes, mapping source, or decoded document text were retained.')
+          PY
+
+      - name: Delete all external source trees
+        if: always()
+        run: rm -rf external
+
+      - name: Upload sanitized evidence only
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: archiv-public-inpage-decoding-evidence
+          path: public-inpage-decoding-evidence/evidence.json
+          if-no-files-found: error
+          retention-days: 14
