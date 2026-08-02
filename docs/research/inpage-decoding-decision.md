@@ -2,33 +2,51 @@
 
 ## Decision
 
-Continue with bounded research-only direct extraction. Do not register `.inp`, connect
-the decoder to ingestion, or close issue #38.
+Merge only the bounded research infrastructure. Do not register `.inp`, connect the
+decoder to ingestion, claim native support, claim layout recovery, or close issue #38.
 
-## Why
+## Directly measured progress
 
-Public candidates and PR #49 now provide strong evidence that:
+Evidence run `30771593543` on Archiv head
+`081a0f8f7bd7ba87dc219f34ac4f19f371113fa3` verified pinned Git identities and
+measured five public native candidates without retaining document bytes or text.
 
-- `InPage300` can contain substantial aligned Unicode/Perso-Arabic text;
-- `InPage100` contains repeated escape and record-like structures.
+- Two `InPage300` streams extracted deterministically: 54,688 and 68,020 code points,
+  with 44,910 and 54,508 Arabic/Perso-Arabic code points.
+- Three `InPage100` streams extracted deterministically under the labelled u32
+  assumption.
+- The u16 and u32 record interpretations diverged on every InPage100 file. Accepted
+  u16 candidates with non-zero upper header words numbered 45, 151 and 72.
+- The two independently authored mapping sources overlapped on 106 byte codes, agreed
+  on 71 and conflicted on 35. The XML source itself contained 47 duplicate conflicting
+  keys under first-key-wins parsing.
 
-They do not establish creator version/build, lawful redistribution, exact text,
-reading order, layout structure, protection markers or support boundaries.
+These measurements establish technical feasibility and expose decisive ambiguity.
+They do not establish exact text, logical reading order, creator version/build,
+protection status, layout structure or lawful redistribution.
 
-## Next gate
+## Remaining gate
 
-1. Reproduce all PR #49 measurements on pinned bytes.
-2. Measure the InPage100 two-byte versus four-byte record-header discrepancy.
-3. Compare independent mapping sources and publish conflicts.
-4. Decode at least two InPage300 and three InPage100 candidates privately and
-   deterministically.
-5. Validate InPage300 against a pinned lawful Quran corpus under separately reported
-   normalizations.
-6. Obtain lawful redistributable known-version fixtures with human-reviewed text and
-   layout truth before production implementation.
+### InPage300
 
-## Stop conditions
+- compare both private extracted texts with a pinned lawful Quran corpus;
+- report exact NFC, whitespace, diacritic-insensitive and verse-symbol modes
+  separately;
+- verify verse order, numerals, punctuation and direction through human review;
+- obtain a bounded family/version identification rule.
 
-- Recommend a narrow InPage300 parser only after independent text validation passes.
-- Recommend a narrow InPage100 parser only after framing and mapping validation pass.
-- Otherwise document the exact remaining blocker and retain explicit rejection.
+### InPage100
+
+- determine the authoritative record-header meaning rather than choosing whichever
+  yields more readable output;
+- reconcile or explicitly scope the 35 overlapping mapping conflicts and remaining
+  unmapped escape codes;
+- validate punctuation, numerals, marker stripping and binary/style filtering against
+  independent text truth;
+- obtain lawful known-version fixtures.
+
+### Both families
+
+Obtain lawful redistributable fixtures with creator build, Unicode ground truth and
+page/story/frame truth. Until then, explicit rejection is the correct production
+behavior.
