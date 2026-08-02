@@ -162,6 +162,49 @@ class SearchResult(StrictModel):
     citation: Citation
 
 
+class RetrievalQueryVariant(StrictModel):
+    """One bounded literal query used by deterministic evidence retrieval."""
+
+    kind: str
+    query: str
+    weight: int = Field(ge=1)
+    result_count: int = Field(ge=0)
+
+
+class RetrievalSelection(StrictModel):
+    """Explainable source selection made after merging query variants."""
+
+    segment_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+    object_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    source_name: str
+    locator: dict[str, object]
+    rank: float
+    score: float
+    matched_queries: list[str] = Field(default_factory=list)
+
+
+class RetrievalDiagnostics(StrictModel):
+    """Versioned local diagnostics for one natural-language retrieval decision."""
+
+    schema_version: str = "1"
+    strategy_version: str = "deterministic-literal-expansion-v1"
+    original_objective: str
+    derived_terms: list[str] = Field(default_factory=list)
+    triggered_concepts: list[str] = Field(default_factory=list)
+    query_variants: list[RetrievalQueryVariant] = Field(default_factory=list)
+    evidence_limit: int = Field(ge=1, le=50)
+    candidate_count: int = Field(ge=0)
+    selected_count: int = Field(ge=0)
+    selections: list[RetrievalSelection] = Field(default_factory=list)
+
+
+class EvidenceRetrieval(StrictModel):
+    """Validated evidence package plus its deterministic retrieval explanation."""
+
+    results: list[SearchResult] = Field(default_factory=list)
+    diagnostics: RetrievalDiagnostics
+
+
 class CitationValidation(StrictModel):
     """Independent citation integrity result."""
 
