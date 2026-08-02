@@ -102,8 +102,7 @@ def run_public_trial(args: argparse.Namespace) -> dict[str, object]:
                     "selected_passage_count": len(selected),
                     "retrieval_ranks": [round(float(item.rank), 6) for item in selected],
                     "selection_scores": [
-                        round(selection.score, 6)
-                        for selection in package.diagnostics.selections
+                        round(selection.score, 6) for selection in package.diagnostics.selections
                     ],
                     "normalized_evidence_contains_required_facts": _facts_exist(
                         question, normalized, source_files
@@ -346,9 +345,7 @@ def run_private_trial(args: argparse.Namespace) -> dict[str, object]:
             "question": question,
             "retrieval_diagnostics": package.diagnostics.model_dump(mode="json"),
             "retrieved_passages": package.diagnostics.candidate_count,
-            "source_names": [
-                result.citation.source_name for result in package.results
-            ],
+            "source_names": [result.citation.source_name for result in package.results],
         }
         if model_available:
             ask = run_command(
