@@ -292,11 +292,7 @@ def retrieve_evidence(
                 source.best_result_score = result_score
 
     ordered_sources = sorted(
-        (
-            source
-            for source in sources.values()
-            if source.best_result is not None
-        ),
+        (source for source in sources.values() if source.best_result is not None),
         key=lambda source: (
             -source.score,
             source.best_result.citation.source_name.casefold()
