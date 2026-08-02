@@ -38,6 +38,7 @@ archiv ingest ./document.odt
 archiv ingest ./template.ott
 archiv ingest ./document.fodt
 archiv ingest ./equation.odf
+archiv ingest ./database.odb
 archiv ingest ./document.docx --home /srv/archiv
 archiv rebuild-derived <sha256>
 ```
@@ -53,13 +54,24 @@ Archiv supports UTF-8 TXT/Markdown, PDF, DOCX, XLSX, PPTX, PNG/JPEG, WAV and the
 - package documents: ODT, ODS, ODP and ODG;
 - package templates and master documents: OTT, ODM, OTM, OTS, OTP and OTG;
 - single-file flat XML: FODT, FODS, FODP and FODG;
-- packaged MathML formula documents: ODF.
+- packaged MathML formula documents: ODF;
+- packaged database front ends: ODB, under the metadata-only policy below.
 
-The normalized JSON uses format-native locators such as page, paragraph, sheet/cell, slide/object, drawing page/object and formula/MathML representation.
+The normalized JSON uses format-native locators such as page, paragraph, sheet/cell, slide/object, drawing page/object, formula/MathML representation and database object type/name.
 
 ODF ingestion is deliberately bounded and non-executing. Package documents validate the exact registered mimetype, required manifest declarations, expected content root and body, safe archive paths, supported compression, XML structure and aggregate repeat expansion. Flat XML documents validate the `office:document` root, exact internal `office:mimetype`, body subtype and XML limits. Spreadsheet formulas are recorded but never executed. Formula documents preserve a bounded MathML source representation and searchable formula text without evaluation. External links are counted and ignored. ODF text-space, tab and line-break elements are preserved in normalized text.
 
-The current ODF claim does **not** include ODB databases, charts/images as standalone ODF documents, presentation notes or native InPage files. Native `.inp` support remains unclaimed until lawful real fixtures and independently verified Urdu/Arabic extraction are available. Unsupported formats fail explicitly rather than falling back to cloud conversion or OCR-equivalence claims.
+### ODB metadata-only policy
+
+Archiv treats an ODB file as a database front-end package, not as permission to open or run a database. It validates the exact `application/vnd.oasis.opendocument.base` package and `office:database` body, then exposes only bounded names and counts for tables, queries, forms and reports.
+
+Connection descriptors, usernames, connection URLs and query commands are counted but never retained in normalized output. Queries are never executed. Embedded database members remain opaque: Archiv records only their aggregate count and byte size, never their paths or contents. Linked or embedded form/report documents are not parsed. No database driver, LibreOffice process, SQL engine, macro, script or network connection is invoked.
+
+The current claim does **not** include extracting table rows, query results, database schemas beyond declared object names, form/report contents or protected/encrypted ODB packages.
+
+## Native InPage boundary
+
+Native InPage files remain unsupported. `.inp` support will not be claimed until lawful real fixtures and independently verified Urdu/Arabic extraction are available. Unsupported inputs fail explicitly rather than falling back to cloud conversion or treating OCR as native extraction.
 
 OCR and transcription are not silently simulated. Image and audio ingestion create explicit `not_run` status artifacts until real local processors are integrated.
 
