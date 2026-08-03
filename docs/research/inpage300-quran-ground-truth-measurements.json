@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "status": "pending_exact_head_evidence",
+  "native_support_claimed": false,
+  "layout_support_claimed": false,
+  "registry_changed": false,
+  "planned_references": [
+    {
+      "repository": "amrayn/quran-text",
+      "commit": "d1868b249234f536c6048da69c272efc91ce44b4",
+      "path": "quran-full-tashkeel.json",
+      "git_blob_sha1": "ceccc426c01a7eef87383608efd8412064ad5cb0",
+      "license": "MIT"
+    },
+    {
+      "publisher": "Tanzil Project",
+      "declared_version": "1.1",
+      "format": "official Quran XML download",
+      "license": "Creative Commons Attribution 3.0 with Tanzil terms",
+      "exact_sha256": null
+    }
+  ],
+  "planned_candidates": [
+    {
+      "path": "inpage/juz_29.inp",
+      "juz": 29,
+      "first_verse": "67:1",
+      "last_verse": "77:50",
+      "expected_verses": 431
+    },
+    {
+      "path": "inpage/juz_30.inp",
+      "juz": 30,
+      "first_verse": "78:1",
+      "last_verse": "114:6",
+      "expected_verses": 564
+    }
+  ],
+  "privacy": {
+    "fixture_bytes_committed": false,
+    "reference_text_committed": false,
+    "decoded_text_committed": false
+  }
+}
