@@ -61,9 +61,7 @@ def test_automated_gate_ignores_diagnostic_modes() -> None:
         "comparisons": {
             "reference": {
                 "verse_sequence": {
-                    mode: {
-                        "complete_in_order_coverage": mode == "arabic_letters_only"
-                    }
+                    mode: {"complete_in_order_coverage": mode == "arabic_letters_only"}
                     for mode in (*MODULE.PRIMARY_MODES, *MODULE.DIAGNOSTIC_MODES)
                 }
             }
