@@ -90,7 +90,9 @@ jobs:
               capture_output=True,
               text=True,
           )
-          assert json.loads(rebuilt.stdout)["documents_indexed"] >= 2
+          index_result = json.loads(rebuilt.stdout)
+          assert index_result["object_count"] >= 2
+          assert index_result["segment_count"] >= 20
 
           searched = subprocess.run(
               ["archiv", "search", search_token, "--home", str(home)],
