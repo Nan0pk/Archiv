@@ -170,9 +170,7 @@ def build_evidence(
                     "tanzil": {
                         "publisher": "Tanzil Project",
                         "declared_version": "1.1",
-                        "license": (
-                            "Creative Commons Attribution 3.0 with Tanzil terms"
-                        ),
+                        "license": ("Creative Commons Attribution 3.0 with Tanzil terms"),
                         **_reference_record(references[1]),
                     }
                 }
