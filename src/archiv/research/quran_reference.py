@@ -218,17 +218,13 @@ def _checked_text(value: Any, *, label: str) -> str:
 
 def _validate_complete_quran(verses: Sequence[QuranVerse]) -> tuple[QuranVerse, ...]:
     if len(verses) != EXPECTED_AYAH_COUNT:
-        raise ExtractionError(
-            f"expected {EXPECTED_AYAH_COUNT} ayahs, found {len(verses)}"
-        )
+        raise ExtractionError(f"expected {EXPECTED_AYAH_COUNT} ayahs, found {len(verses)}")
     expected_position = 0
     for surah, ayah_count in enumerate(SURAH_AYAH_COUNTS, start=1):
         for ayah in range(1, ayah_count + 1):
             verse = verses[expected_position]
             if (verse.surah, verse.ayah) != (surah, ayah):
-                raise ExtractionError(
-                    f"expected verse {surah}:{ayah}, found {verse.key}"
-                )
+                raise ExtractionError(f"expected verse {surah}:{ayah}, found {verse.key}")
             expected_position += 1
     return tuple(verses)
 
@@ -253,9 +249,7 @@ def parse_amrayn_json(data: bytes) -> QuranReference:
             raise ExtractionError(f"expected surah {expected_surah}")
         expected_count = SURAH_AYAH_COUNTS[expected_surah - 1]
         if surah.get("total_verses") != expected_count:
-            raise ExtractionError(
-                f"surah {expected_surah} declares the wrong verse count"
-            )
+            raise ExtractionError(f"surah {expected_surah} declares the wrong verse count")
         raw_verses = surah.get("verses")
         if not isinstance(raw_verses, list) or len(raw_verses) != expected_count:
             raise ExtractionError(f"surah {expected_surah} has the wrong verse list")
@@ -264,9 +258,7 @@ def parse_amrayn_json(data: bytes) -> QuranReference:
                 raise ExtractionError("Quran JSON verse entry must be an object")
             verse = cast(dict[str, Any], raw_verse)
             if verse.get("id") != expected_ayah:
-                raise ExtractionError(
-                    f"expected verse {expected_surah}:{expected_ayah}"
-                )
+                raise ExtractionError(f"expected verse {expected_surah}:{expected_ayah}")
             text = _checked_text(
                 verse.get("text"),
                 label=f"verse {expected_surah}:{expected_ayah}",
@@ -310,14 +302,10 @@ def parse_tanzil_xml(data: bytes) -> QuranReference:
         aya_elements = [child for child in sura if _local_name(child.tag) == "aya"]
         expected_count = SURAH_AYAH_COUNTS[expected_surah - 1]
         if len(aya_elements) != expected_count:
-            raise ExtractionError(
-                f"Tanzil surah {expected_surah} has the wrong verse count"
-            )
+            raise ExtractionError(f"Tanzil surah {expected_surah} has the wrong verse count")
         for expected_ayah, aya in enumerate(aya_elements, start=1):
             if aya.attrib.get("index") != str(expected_ayah):
-                raise ExtractionError(
-                    f"expected Tanzil verse {expected_surah}:{expected_ayah}"
-                )
+                raise ExtractionError(f"expected Tanzil verse {expected_surah}:{expected_ayah}")
             text = _checked_text(
                 aya.attrib.get("text"),
                 label=f"Tanzil verse {expected_surah}:{expected_ayah}",
@@ -338,9 +326,7 @@ def verses_for_juz(reference: QuranReference, juz: int) -> tuple[QuranVerse, ...
     except KeyError as error:
         raise ExtractionError(f"unsupported research juz: {juz}") from error
     selected = tuple(
-        verse
-        for verse in reference.verses
-        if first_surah <= verse.surah <= last_surah
+        verse for verse in reference.verses if first_surah <= verse.surah <= last_surah
     )
     if not selected:
         raise ExtractionError(f"reference contains no verses for juz {juz}")
@@ -408,12 +394,9 @@ def compare_juz(
         "verse_symbol_normalized",
     )
     whole_text = {
-        mode: compare_quran_text(extracted_text, reference_text, mode=mode)
-        for mode in modes
+        mode: compare_quran_text(extracted_text, reference_text, mode=mode) for mode in modes
     }
-    verse_sequence = {
-        mode: _sequence_metrics(extracted_text, verses, mode) for mode in modes
-    }
+    verse_sequence = {mode: _sequence_metrics(extracted_text, verses, mode) for mode in modes}
     return JuzComparison(
         source_name=reference.source_name,
         source_sha256=reference.source_sha256,
