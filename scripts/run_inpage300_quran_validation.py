@@ -12,6 +12,8 @@ from archiv.research.inpage_container import extract_inpage300, read_native_root
 from archiv.research.inpage_types import ExtractionError, sha256
 from archiv.research.inpage_validation import compute_git_blob_sha1
 from archiv.research.quran_reference import (
+    DIAGNOSTIC_MODES,
+    PRIMARY_MODES,
     QuranReference,
     compare_juz,
     parse_amrayn_json,
@@ -23,7 +25,19 @@ INPAGE_REPOSITORY = "ShakesVision/html-experiments"
 INPAGE_COMMIT = "1f9bc57a6cdbe6ad69f18b38913e1af06ba5b41a"
 AMRAYN_REPOSITORY = "amrayn/quran-text"
 AMRAYN_COMMIT = "d1868b249234f536c6048da69c272efc91ce44b4"
-FORBIDDEN_CONTENT_KEYS = frozenset({"payload", "decoded_text", "reference_text", "extracted_text"})
+TANZIL_SHA256 = "203f0f1bf3158b1e5be4ab9f8f6870e570aab6d9a626fe6192a70b75d4afe0fd"
+FORBIDDEN_CONTENT_KEYS = frozenset(
+    {
+        "payload",
+        "decoded_text",
+        "reference_text",
+        "extracted_text",
+        "source_bytes",
+        "fixture_bytes",
+    }
+)
+MAX_SANITIZED_NODES = 100_000
+MAX_SANITIZED_STRING = 2_048
 
 FIXTURES = (
     {
@@ -59,15 +73,46 @@ def _verified_git_file(path: Path, expected_blob_sha1: str) -> bytes:
 
 
 def _assert_sanitized(value: object) -> None:
-    if isinstance(value, dict):
-        mapping = cast(dict[object, object], value)
-        for key, child in mapping.items():
-            if isinstance(key, str) and key in FORBIDDEN_CONTENT_KEYS:
-                raise ExtractionError(f"sanitized evidence contains forbidden key: {key}")
-            _assert_sanitized(child)
-    elif isinstance(value, list):
-        for child in cast(list[object], value):
-            _assert_sanitized(child)
+    """Reject bytes, non-ASCII strings, oversized values and explicit text-bearing keys."""
+
+    visited = 0
+
+    def walk(child: object) -> None:
+        nonlocal visited
+        visited += 1
+        if visited > MAX_SANITIZED_NODES:
+            raise ExtractionError("sanitized evidence exceeds the node limit")
+        if isinstance(child, dict):
+            mapping = cast(dict[object, object], child)
+            for key, nested in mapping.items():
+                if not isinstance(key, str):
+                    raise ExtractionError("sanitized evidence key is not text")
+                if key in FORBIDDEN_CONTENT_KEYS:
+                    raise ExtractionError(f"sanitized evidence contains forbidden key: {key}")
+                walk(key)
+                walk(nested)
+            return
+        if isinstance(child, list | tuple):
+            for nested in cast(list[object] | tuple[object, ...], child):
+                walk(nested)
+            return
+        if isinstance(child, str):
+            if len(child) > MAX_SANITIZED_STRING:
+                raise ExtractionError("sanitized evidence contains an oversized string")
+            try:
+                child.encode("ascii")
+            except UnicodeEncodeError as error:
+                raise ExtractionError("sanitized evidence contains non-ASCII text") from error
+            return
+        if isinstance(child, bytes):
+            raise ExtractionError("sanitized evidence contains raw bytes")
+        if child is None or isinstance(child, bool | int | float):
+            return
+        raise ExtractionError(
+            f"sanitized evidence contains unsupported value: {type(child).__name__}"
+        )
+
+    walk(value)
 
 
 def _reference_record(reference: QuranReference) -> dict[str, object]:
@@ -143,6 +188,40 @@ def _measure_fixture(
     }
 
 
+def _automated_gate(fixtures: list[dict[str, object]]) -> dict[str, object]:
+    pair_results: list[dict[str, object]] = []
+    every_pair_has_complete_primary_mode = True
+    for fixture in fixtures:
+        comparisons = cast(dict[str, dict[str, object]], fixture["comparisons"])
+        for source_name, comparison in comparisons.items():
+            sequences = cast(dict[str, dict[str, object]], comparison["verse_sequence"])
+            complete_modes = [
+                mode
+                for mode in PRIMARY_MODES
+                if cast(bool, sequences[mode]["complete_in_order_coverage"])
+            ]
+            if not complete_modes:
+                every_pair_has_complete_primary_mode = False
+            pair_results.append(
+                {
+                    "juz": fixture["juz"],
+                    "source_name": source_name,
+                    "complete_primary_modes": complete_modes,
+                }
+            )
+    return {
+        "all_fixture_reference_pairs_have_complete_primary_mode": (
+            every_pair_has_complete_primary_mode
+        ),
+        "pair_results": pair_results,
+        "decision": (
+            "automated_sequence_gate_satisfied"
+            if every_pair_has_complete_primary_mode
+            else "automated_sequence_gate_not_satisfied"
+        ),
+    }
+
+
 def build_evidence(
     *,
     inpage_root: Path,
@@ -153,7 +232,14 @@ def build_evidence(
     amrayn_data = _verified_git_file(amrayn_root / AMRAYN_PATH, AMRAYN_BLOB_SHA1)
     references = [parse_amrayn_json(amrayn_data)]
     if tanzil_xml is not None:
-        references.append(parse_tanzil_xml(tanzil_xml.read_bytes()))
+        tanzil_data = tanzil_xml.read_bytes()
+        observed_tanzil_sha = sha256(tanzil_data)
+        if observed_tanzil_sha != TANZIL_SHA256:
+            raise ExtractionError(
+                "Tanzil SHA-256 mismatch: "
+                f"expected {TANZIL_SHA256}, got {observed_tanzil_sha}"
+            )
+        references.append(parse_tanzil_xml(tanzil_data))
 
     fixtures = [
         _measure_fixture(
@@ -163,10 +249,22 @@ def build_evidence(
         )
         for fixture in FIXTURES
     ]
-    return {
-        "schema_version": 1,
+    evidence = {
+        "schema_version": 2,
         "archiv_head": archiv_head,
         "scope": "research-only InPage300 Quran text comparison",
+        "evidence_labels": {
+            "source_identities": "verified_fact",
+            "comparison_output": "direct_measurement",
+            "automated_gate": "reproducible_inference",
+            "human_review": "external_blocker",
+        },
+        "comparison_contract": {
+            "primary_modes": PRIMARY_MODES,
+            "diagnostic_modes": DIAGNOSTIC_MODES,
+            "diagnostic_modes_cannot_satisfy_gate": True,
+            "large_edit_comparisons_may_use_labelled_nonminimal_counts": True,
+        },
         "inpage_source": {
             "repository": INPAGE_REPOSITORY,
             "commit": INPAGE_COMMIT,
@@ -184,7 +282,8 @@ def build_evidence(
                     "tanzil": {
                         "publisher": "Tanzil Project",
                         "declared_version": "1.1",
-                        "license": ("Creative Commons Attribution 3.0 with Tanzil terms"),
+                        "expected_sha256": TANZIL_SHA256,
+                        "license": "Creative Commons Attribution 3.0 with Tanzil terms",
                         **_reference_record(references[1]),
                     }
                 }
@@ -193,6 +292,12 @@ def build_evidence(
             ),
         },
         "fixtures": fixtures,
+        "automated_gate": _automated_gate(fixtures),
+        "human_review": {
+            "status": "not_performed",
+            "classification": "external_blocker",
+            "qualified_reviewer_required": True,
+        },
         "privacy": {
             "fixture_bytes_uploaded": False,
             "reference_text_uploaded": False,
@@ -202,7 +307,10 @@ def build_evidence(
         },
         "native_support_claimed": False,
         "layout_support_claimed": False,
+        "issue_38_should_close": False,
     }
+    _assert_sanitized(evidence)
+    return evidence
 
 
 def main() -> int:
@@ -219,7 +327,6 @@ def main() -> int:
         tanzil_xml=args.tanzil_xml,
         archiv_head=args.archiv_head,
     )
-    _assert_sanitized(evidence)
     serialized = json.dumps(evidence, ensure_ascii=True, indent=2, sort_keys=True) + "\n"
     serialized.encode("ascii")
     args.output.parent.mkdir(parents=True, exist_ok=True)
