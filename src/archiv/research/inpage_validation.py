@@ -15,6 +15,7 @@ from archiv.research.inpage_types import (
     NormalizationMode,
     QuranComparison,
     TextMetrics,
+    is_arabic,
     text_sha256,
 )
 
@@ -63,6 +64,13 @@ def normalize_quran_text(text: str, mode: NormalizationMode) -> str:
             "" if ord(character) in verse_symbols else character for character in normalized
         )
         return " ".join(stripped.split())
+    if mode == "arabic_letters_only":
+        compatible = unicodedata.normalize("NFKC", text)
+        return "".join(
+            character
+            for character in compatible
+            if is_arabic(ord(character)) and unicodedata.category(character).startswith("L")
+        )
     raise ExtractionError(f"unsupported normalization mode: {mode}")
 
 
