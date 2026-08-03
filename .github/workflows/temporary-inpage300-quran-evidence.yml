@@ -1,8 +1,7 @@
 name: Temporary InPage300 Quran ground-truth evidence
 
 on:
-  push:
-    branches: [research/validate-inpage300-quran-ground-truth]
+  pull_request:
   workflow_dispatch:
 
 permissions:
