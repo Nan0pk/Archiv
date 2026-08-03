@@ -68,9 +68,10 @@ jobs:
             --data-urlencode 'marks=true' \
             --data-urlencode 'sajdah=true' \
             --data-urlencode 'rub=true' \
-            --data-urlencode 'alef=true' \
+            --data-urlencode 'tatweel=true' \
+            --data-urlencode 'stanween=false' \
             --output private/tanzil.xml \
-            'https://tanzil.net/pub/download/download.php'
+            'https://tanzil.net/pub/download/index.php'
           test -s private/tanzil.xml
           test "$(stat -c %s private/tanzil.xml)" -le 8388608
 
