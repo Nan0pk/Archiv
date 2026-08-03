@@ -39,6 +39,7 @@ NormalizationMode = Literal[
     "whitespace_normalized",
     "diacritic_insensitive",
     "verse_symbol_normalized",
+    "arabic_letters_only",
 ]
 
 
