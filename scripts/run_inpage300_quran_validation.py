@@ -23,9 +23,7 @@ INPAGE_REPOSITORY = "ShakesVision/html-experiments"
 INPAGE_COMMIT = "1f9bc57a6cdbe6ad69f18b38913e1af06ba5b41a"
 AMRAYN_REPOSITORY = "amrayn/quran-text"
 AMRAYN_COMMIT = "d1868b249234f536c6048da69c272efc91ce44b4"
-FORBIDDEN_CONTENT_KEYS = frozenset(
-    {"payload", "decoded_text", "reference_text", "extracted_text"}
-)
+FORBIDDEN_CONTENT_KEYS = frozenset({"payload", "decoded_text", "reference_text", "extracted_text"})
 
 FIXTURES = (
     {
