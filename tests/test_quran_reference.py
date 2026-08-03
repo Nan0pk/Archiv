@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# pyright: reportPrivateUsage=false
+
 import functools
 import json
 import xml.etree.ElementTree as ET
