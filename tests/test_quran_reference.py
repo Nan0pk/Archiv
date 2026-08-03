@@ -28,8 +28,7 @@ def _complete_json() -> bytes:
     surahs: list[dict[str, object]] = []
     for surah, count in enumerate(SURAH_AYAH_COUNTS, start=1):
         verses: list[dict[str, object]] = [
-            {"id": ayah, "text": f"سورة{surah} آية{ayah}"}
-            for ayah in range(1, count + 1)
+            {"id": ayah, "text": f"سورة{surah} آية{ayah}"} for ayah in range(1, count + 1)
         ]
         surahs.append(
             {
@@ -197,9 +196,7 @@ def test_reversal_sorting_and_wrong_juz_cannot_create_complete_coverage() -> Non
         is False
     )
     assert (
-        wrong_juz_comparison.verse_sequence[
-            "whitespace_normalized"
-        ].complete_in_order_coverage
+        wrong_juz_comparison.verse_sequence["whitespace_normalized"].complete_in_order_coverage
         is False
     )
 
