@@ -12,6 +12,7 @@ from archiv.ingestion.formats import (
     suffix_for,
 )
 from archiv.ingestion.normalize_documents import normalize_docx, normalize_pdf, normalize_text
+from archiv.ingestion.normalize_inpage import normalize_inpage
 from archiv.ingestion.normalize_media import normalize_image, normalize_wav
 from archiv.ingestion.normalize_odb import normalize_odb
 from archiv.ingestion.normalize_odf import ODF_MIMETYPES, normalize_odf
@@ -47,6 +48,13 @@ def normalize(
             return normalize_xlsx(path, digest, source_name=logical_name, media_type=media_type)
         if kind == "pptx":
             return normalize_pptx(path, digest, source_name=logical_name, media_type=media_type)
+        if kind == "inp":
+            return normalize_inpage(
+                path,
+                digest,
+                source_name=logical_name,
+                media_type=media_type,
+            )
         if kind == "odb":
             return normalize_odb(
                 path,
