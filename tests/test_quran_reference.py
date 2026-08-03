@@ -22,8 +22,7 @@ def _complete_json() -> bytes:
     surahs: list[dict[str, object]] = []
     for surah, count in enumerate(SURAH_AYAH_COUNTS, start=1):
         verses: list[dict[str, object]] = [
-            {"id": ayah, "text": f"س{surah} آ{ayah}"}
-            for ayah in range(1, count + 1)
+            {"id": ayah, "text": f"س{surah} آ{ayah}"} for ayah in range(1, count + 1)
         ]
         surahs.append(
             {
