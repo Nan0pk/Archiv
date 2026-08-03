@@ -8,13 +8,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from typing import cast
 
-from archiv.research.inpage_types import (
-    ExtractionError,
-    NormalizationMode,
-    QuranComparison,
-    sha256,
-)
-from archiv.research.inpage_validation import compare_quran_text, normalize_quran_text
+from archiv.research.inpage_types import ExtractionError, NormalizationMode, sha256
+from archiv.research.inpage_validation import normalize_quran_text
 
 MAX_REFERENCE_BYTES = 8 * 1024 * 1024
 EXPECTED_SURAH_COUNT = 114
@@ -163,6 +158,22 @@ class QuranReference:
 
 
 @dataclass(frozen=True)
+class BoundedTextComparison:
+    mode: NormalizationMode
+    algorithm: str
+    extracted_sha256: str
+    reference_sha256: str
+    extracted_length: int
+    reference_length: int
+    matching_characters: int
+    matching_ratio: float
+    common_prefix_characters: int
+    common_suffix_characters: int
+    length_delta: int
+    exact_match: bool
+
+
+@dataclass(frozen=True)
 class VerseSequenceMetrics:
     mode: NormalizationMode
     expected_verses: int
@@ -187,7 +198,7 @@ class JuzComparison:
     first_verse: str
     last_verse: str
     expected_verses: int
-    whole_text: Mapping[str, QuranComparison]
+    whole_text: Mapping[str, BoundedTextComparison]
     verse_sequence: Mapping[str, VerseSequenceMetrics]
     text_emitted: bool = False
     native_support_claimed: bool = False
@@ -335,6 +346,40 @@ def verses_for_juz(reference: QuranReference, juz: int) -> tuple[QuranVerse, ...
     return selected
 
 
+def _bounded_text_comparison(
+    extracted_text: str,
+    reference_text: str,
+    mode: NormalizationMode,
+) -> BoundedTextComparison:
+    left = normalize_quran_text(extracted_text, mode)
+    right = normalize_quran_text(reference_text, mode)
+    matching = sum(left_char == right_char for left_char, right_char in zip(left, right))
+    denominator = max(len(left), len(right))
+    prefix = 0
+    for left_char, right_char in zip(left, right):
+        if left_char != right_char:
+            break
+        prefix += 1
+    suffix = 0
+    suffix_limit = min(len(left), len(right)) - prefix
+    while suffix < suffix_limit and left[-(suffix + 1)] == right[-(suffix + 1)]:
+        suffix += 1
+    return BoundedTextComparison(
+        mode=mode,
+        algorithm="position_aligned_equal_codepoints_v1",
+        extracted_sha256=sha256(left.encode("utf-8")),
+        reference_sha256=sha256(right.encode("utf-8")),
+        extracted_length=len(left),
+        reference_length=len(right),
+        matching_characters=matching,
+        matching_ratio=1.0 if denominator == 0 else matching / denominator,
+        common_prefix_characters=prefix,
+        common_suffix_characters=suffix,
+        length_delta=len(left) - len(right),
+        exact_match=left == right,
+    )
+
+
 def _sequence_metrics(
     extracted_text: str,
     verses: Sequence[QuranVerse],
@@ -395,7 +440,7 @@ def compare_juz(
         "verse_symbol_normalized",
     )
     whole_text = {
-        mode: compare_quran_text(extracted_text, reference_text, mode=mode) for mode in modes
+        mode: _bounded_text_comparison(extracted_text, reference_text, mode) for mode in modes
     }
     verse_sequence = {mode: _sequence_metrics(extracted_text, verses, mode) for mode in modes}
     return JuzComparison(
