@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import unicodedata
 import xml.etree.ElementTree as ET
+from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from typing import cast
@@ -12,8 +14,25 @@ from archiv.research.inpage_types import ExtractionError, NormalizationMode, sha
 from archiv.research.inpage_validation import normalize_quran_text
 
 MAX_REFERENCE_BYTES = 8 * 1024 * 1024
+MAX_NORMALIZED_CODEPOINTS = 2_000_000
+MAX_EDIT_CELLS = 2_000_000
+MAX_EDIT_AXIS = 100_000
+MAX_XML_ELEMENTS = 7_000
+MAX_SEQUENCE_SEARCH_WORK = 100_000_000
 EXPECTED_SURAH_COUNT = 114
 EXPECTED_AYAH_COUNT = 6236
+
+PRIMARY_MODES: tuple[NormalizationMode, ...] = (
+    "exact_nfc",
+    "whitespace_normalized",
+    "diacritic_insensitive",
+    "verse_symbol_normalized",
+)
+DIAGNOSTIC_MODES: tuple[NormalizationMode, ...] = (
+    "raw",
+    "arabic_letters_only",
+)
+ALL_MODES = PRIMARY_MODES + DIAGNOSTIC_MODES
 
 SURAH_AYAH_COUNTS = (
     7,
@@ -160,7 +179,10 @@ class QuranReference:
 @dataclass(frozen=True)
 class BoundedTextComparison:
     mode: NormalizationMode
+    success_eligible: bool
     algorithm: str
+    edit_counts_kind: str
+    comparison_limited: bool
     extracted_sha256: str
     reference_sha256: str
     extracted_length: int
@@ -169,6 +191,12 @@ class BoundedTextComparison:
     matching_ratio: float
     common_prefix_characters: int
     common_suffix_characters: int
+    insertions: int
+    deletions: int
+    substitutions: int
+    edit_distance: int
+    punctuation_differences: int
+    numeral_differences: int
     length_delta: int
     exact_match: bool
 
@@ -176,12 +204,20 @@ class BoundedTextComparison:
 @dataclass(frozen=True)
 class VerseSequenceMetrics:
     mode: NormalizationMode
+    success_eligible: bool
     expected_verses: int
     matched_verses: int
+    verse_boundary_agreement: int
     contiguous_prefix_verses: int
     matching_ratio: float
+    first_matching_key: str | None
     first_unmatched_key: str | None
     last_matched_key: str | None
+    ordering_monotonic: bool
+    complete_in_order_coverage: bool
+    unmatched_prefix_characters: int | None
+    unmatched_suffix_characters: int | None
+    search_work: int
     extracted_normalized_length: int
     reference_normalized_length: int
     extracted_normalized_sha256: str
@@ -198,6 +234,8 @@ class JuzComparison:
     first_verse: str
     last_verse: str
     expected_verses: int
+    primary_modes: tuple[NormalizationMode, ...]
+    diagnostic_modes: tuple[NormalizationMode, ...]
     whole_text: Mapping[str, BoundedTextComparison]
     verse_sequence: Mapping[str, VerseSequenceMetrics]
     text_emitted: bool = False
@@ -218,6 +256,13 @@ def _checked_text(value: object, *, label: str) -> str:
     if "\x00" in value:
         raise ExtractionError(f"{label} contains a NUL character")
     return value
+
+
+def _checked_normalized(text: str, mode: NormalizationMode) -> str:
+    normalized = normalize_quran_text(text, mode)
+    if len(normalized) > MAX_NORMALIZED_CODEPOINTS:
+        raise ExtractionError("normalized comparison text exceeds the codepoint limit")
+    return normalized
 
 
 def _validate_complete_quran(verses: Sequence[QuranVerse]) -> tuple[QuranVerse, ...]:
@@ -291,13 +336,15 @@ def parse_tanzil_xml(data: bytes) -> QuranReference:
     """Parse a downloaded Tanzil Quran XML file without changing its text."""
 
     raw = _checked_bytes(data, label="Tanzil Quran XML")
-    upper_prefix = raw[:8192].upper()
-    if b"<!DOCTYPE" in upper_prefix or b"<!ENTITY" in upper_prefix:
+    upper_raw = raw.upper()
+    if b"<!DOCTYPE" in upper_raw or b"<!ENTITY" in upper_raw:
         raise ExtractionError("Tanzil Quran XML declarations and entities are forbidden")
     try:
         root = ET.fromstring(raw)
     except ET.ParseError as error:
         raise ExtractionError("Tanzil Quran XML is malformed") from error
+    if sum(1 for _ in root.iter()) > MAX_XML_ELEMENTS:
+        raise ExtractionError("Tanzil Quran XML exceeds the element limit")
     if _local_name(root.tag) != "quran":
         raise ExtractionError("Tanzil Quran XML has the wrong root element")
 
@@ -346,27 +393,125 @@ def verses_for_juz(reference: QuranReference, juz: int) -> tuple[QuranVerse, ...
     return selected
 
 
+def _operation_key(value: tuple[int, int, int, int]) -> tuple[int, int, int, int]:
+    cost, insertions, deletions, substitutions = value
+    return cost, substitutions, deletions, insertions
+
+
+def _exact_edit_counts(left: str, right: str) -> tuple[int, int, int, int]:
+    """Return exact Levenshtein cost and operation counts with bounded linear memory."""
+
+    previous = [(index, index, 0, 0) for index in range(len(right) + 1)]
+    for left_index, left_character in enumerate(left, start=1):
+        current: list[tuple[int, int, int, int]] = [(left_index, 0, left_index, 0)]
+        for right_index, right_character in enumerate(right, start=1):
+            if left_character == right_character:
+                diagonal = previous[right_index - 1]
+            else:
+                cost, insertions, deletions, substitutions = previous[right_index - 1]
+                diagonal = (cost + 1, insertions, deletions, substitutions + 1)
+            cost, insertions, deletions, substitutions = previous[right_index]
+            deletion = (cost + 1, insertions, deletions + 1, substitutions)
+            cost, insertions, deletions, substitutions = current[right_index - 1]
+            insertion = (cost + 1, insertions + 1, deletions, substitutions)
+            current.append(min((diagonal, deletion, insertion), key=_operation_key))
+        previous = current
+    return previous[-1]
+
+
+def _bounded_edit_counts(
+    left: str,
+    right: str,
+) -> tuple[str, str, bool, int, int, int, int]:
+    cells = (len(left) + 1) * (len(right) + 1)
+    if (
+        cells <= MAX_EDIT_CELLS
+        and len(left) <= MAX_EDIT_AXIS
+        and len(right) <= MAX_EDIT_AXIS
+    ):
+        cost, insertions, deletions, substitutions = _exact_edit_counts(left, right)
+        return (
+            "bounded_linear_memory_levenshtein_v1",
+            "minimal_levenshtein",
+            False,
+            insertions,
+            deletions,
+            substitutions,
+            cost,
+        )
+
+    overlap = min(len(left), len(right))
+    substitutions = sum(
+        left_character != right_character
+        for left_character, right_character in zip(left, right, strict=False)
+    )
+    deletions = max(len(left) - overlap, 0)
+    insertions = max(len(right) - overlap, 0)
+    return (
+        "position_aligned_fallback_v1",
+        "nonminimal_position_aligned",
+        True,
+        insertions,
+        deletions,
+        substitutions,
+        insertions + deletions + substitutions,
+    )
+
+
+def _is_category_character(character: str, category: str) -> bool:
+    if category == "punctuation":
+        return unicodedata.category(character).startswith("P")
+    if category == "numeral":
+        return character.isdigit()
+    raise AssertionError(f"unsupported category: {category}")
+
+
+def _category_difference(left: str, right: str, *, category: str) -> int:
+    left_counts: Counter[str] = Counter(
+        character for character in left if _is_category_character(character, category)
+    )
+    right_counts: Counter[str] = Counter(
+        character for character in right if _is_category_character(character, category)
+    )
+    return sum(abs(left_counts[key] - right_counts[key]) for key in left_counts | right_counts)
+
+
 def _bounded_text_comparison(
     extracted_text: str,
     reference_text: str,
     mode: NormalizationMode,
 ) -> BoundedTextComparison:
-    left = normalize_quran_text(extracted_text, mode)
-    right = normalize_quran_text(reference_text, mode)
-    matching = sum(left_char == right_char for left_char, right_char in zip(left, right))
+    left = _checked_normalized(extracted_text, mode)
+    right = _checked_normalized(reference_text, mode)
+    matching = sum(
+        left_character == right_character
+        for left_character, right_character in zip(left, right, strict=False)
+    )
     denominator = max(len(left), len(right))
     prefix = 0
-    for left_char, right_char in zip(left, right):
-        if left_char != right_char:
+    for left_character, right_character in zip(left, right, strict=False):
+        if left_character != right_character:
             break
         prefix += 1
     suffix = 0
     suffix_limit = min(len(left), len(right)) - prefix
     while suffix < suffix_limit and left[-(suffix + 1)] == right[-(suffix + 1)]:
         suffix += 1
+    (
+        algorithm,
+        edit_counts_kind,
+        comparison_limited,
+        insertions,
+        deletions,
+        substitutions,
+        edit_distance,
+    ) = _bounded_edit_counts(left, right)
     return BoundedTextComparison(
         mode=mode,
-        algorithm="position_aligned_equal_codepoints_v1",
+        success_eligible=mode in PRIMARY_MODES,
+        algorithm=algorithm,
+        edit_counts_kind=edit_counts_kind,
+        comparison_limited=comparison_limited,
         extracted_sha256=sha256(left.encode("utf-8")),
         reference_sha256=sha256(right.encode("utf-8")),
         extracted_length=len(left),
@@ -375,6 +520,12 @@ def _bounded_text_comparison(
         matching_ratio=1.0 if denominator == 0 else matching / denominator,
         common_prefix_characters=prefix,
         common_suffix_characters=suffix,
+        insertions=insertions,
+        deletions=deletions,
+        substitutions=substitutions,
+        edit_distance=edit_distance,
+        punctuation_differences=_category_difference(left, right, category="punctuation"),
+        numeral_differences=_category_difference(left, right, category="numeral"),
         length_delta=len(left) - len(right),
         exact_match=left == right,
     )
@@ -385,18 +536,25 @@ def _sequence_metrics(
     verses: Sequence[QuranVerse],
     mode: NormalizationMode,
 ) -> VerseSequenceMetrics:
-    normalized_extracted = normalize_quran_text(extracted_text, mode)
-    normalized_verses = [normalize_quran_text(verse.text, mode) for verse in verses]
+    normalized_extracted = _checked_normalized(extracted_text, mode)
+    normalized_verses = [_checked_normalized(verse.text, mode) for verse in verses]
     normalized_reference = " ".join(normalized_verses)
     cursor = 0
     matched = 0
     prefix = 0
     prefix_open = True
+    first_matching: str | None = None
     first_unmatched: str | None = None
-    last_matched: str | None = None
+    last_matching: str | None = None
+    first_position: int | None = None
+    last_end: int | None = None
+    search_work = 0
     for verse, normalized_verse in zip(verses, normalized_verses, strict=True):
         if not normalized_verse:
             raise ExtractionError(f"verse {verse.key} is empty after normalization")
+        search_work += len(normalized_extracted) - cursor
+        if search_work > MAX_SEQUENCE_SEARCH_WORK:
+            raise ExtractionError("verse sequence comparison exceeds the search-work limit")
         position = normalized_extracted.find(normalized_verse, cursor)
         if position < 0:
             if first_unmatched is None:
@@ -404,18 +562,33 @@ def _sequence_metrics(
             prefix_open = False
             continue
         matched += 1
-        last_matched = verse.key
+        if first_matching is None:
+            first_matching = verse.key
+            first_position = position
+        last_matching = verse.key
+        last_end = position + len(normalized_verse)
         if prefix_open:
             prefix += 1
-        cursor = position + len(normalized_verse)
+        cursor = last_end
+    complete = matched == len(verses)
     return VerseSequenceMetrics(
         mode=mode,
+        success_eligible=mode in PRIMARY_MODES,
         expected_verses=len(verses),
         matched_verses=matched,
+        verse_boundary_agreement=matched,
         contiguous_prefix_verses=prefix,
         matching_ratio=matched / len(verses),
+        first_matching_key=first_matching,
         first_unmatched_key=first_unmatched,
-        last_matched_key=last_matched,
+        last_matched_key=last_matching,
+        ordering_monotonic=True,
+        complete_in_order_coverage=complete,
+        unmatched_prefix_characters=first_position,
+        unmatched_suffix_characters=(
+            None if last_end is None else len(normalized_extracted) - last_end
+        ),
+        search_work=search_work,
         extracted_normalized_length=len(normalized_extracted),
         reference_normalized_length=len(normalized_reference),
         extracted_normalized_sha256=sha256(normalized_extracted.encode("utf-8")),
@@ -432,18 +605,13 @@ def compare_juz(
 
     verses = verses_for_juz(reference, juz)
     reference_text = "\n".join(verse.text for verse in verses)
-    modes: tuple[NormalizationMode, ...] = (
-        "raw",
-        "exact_nfc",
-        "whitespace_normalized",
-        "diacritic_insensitive",
-        "verse_symbol_normalized",
-        "arabic_letters_only",
-    )
     whole_text = {
-        mode: _bounded_text_comparison(extracted_text, reference_text, mode) for mode in modes
+        mode: _bounded_text_comparison(extracted_text, reference_text, mode)
+        for mode in ALL_MODES
     }
-    verse_sequence = {mode: _sequence_metrics(extracted_text, verses, mode) for mode in modes}
+    verse_sequence = {
+        mode: _sequence_metrics(extracted_text, verses, mode) for mode in ALL_MODES
+    }
     return JuzComparison(
         source_name=reference.source_name,
         source_sha256=reference.source_sha256,
@@ -451,6 +619,8 @@ def compare_juz(
         first_verse=verses[0].key,
         last_verse=verses[-1].key,
         expected_verses=len(verses),
+        primary_modes=PRIMARY_MODES,
+        diagnostic_modes=DIAGNOSTIC_MODES,
         whole_text=whole_text,
         verse_sequence=verse_sequence,
     )
