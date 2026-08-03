@@ -6,6 +6,7 @@ import argparse
 import json
 from dataclasses import asdict
 from pathlib import Path
+from typing import cast
 
 from archiv.research.inpage_container import extract_inpage300, read_native_root_stream
 from archiv.research.inpage_types import ExtractionError, sha256
@@ -22,6 +23,9 @@ INPAGE_REPOSITORY = "ShakesVision/html-experiments"
 INPAGE_COMMIT = "1f9bc57a6cdbe6ad69f18b38913e1af06ba5b41a"
 AMRAYN_REPOSITORY = "amrayn/quran-text"
 AMRAYN_COMMIT = "d1868b249234f536c6048da69c272efc91ce44b4"
+FORBIDDEN_CONTENT_KEYS = frozenset(
+    {"payload", "decoded_text", "reference_text", "extracted_text"}
+)
 
 FIXTURES = (
     {
@@ -54,6 +58,18 @@ def _verified_git_file(path: Path, expected_blob_sha1: str) -> bytes:
             f"Git blob mismatch for {path}: expected {expected_blob_sha1}, got {observed}"
         )
     return data
+
+
+def _assert_sanitized(value: object) -> None:
+    if isinstance(value, dict):
+        mapping = cast(dict[object, object], value)
+        for key, child in mapping.items():
+            if isinstance(key, str) and key in FORBIDDEN_CONTENT_KEYS:
+                raise ExtractionError(f"sanitized evidence contains forbidden key: {key}")
+            _assert_sanitized(child)
+    elif isinstance(value, list):
+        for child in cast(list[object], value):
+            _assert_sanitized(child)
 
 
 def _reference_record(reference: QuranReference) -> dict[str, object]:
@@ -205,11 +221,9 @@ def main() -> int:
         tanzil_xml=args.tanzil_xml,
         archiv_head=args.archiv_head,
     )
+    _assert_sanitized(evidence)
     serialized = json.dumps(evidence, ensure_ascii=True, indent=2, sort_keys=True) + "\n"
     serialized.encode("ascii")
-    forbidden = ("payload", "decoded_text", "reference_text", "extracted_text")
-    if any(field in serialized for field in forbidden):
-        raise ExtractionError("sanitized evidence contains a forbidden content field")
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(serialized, encoding="ascii")
     print(f"Wrote sanitized comparisons for {len(FIXTURES)} InPage300 candidates.")
