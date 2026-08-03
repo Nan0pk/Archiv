@@ -43,6 +43,8 @@ def metrics_json(metrics: TextMetrics) -> str:
 def normalize_quran_text(text: str, mode: NormalizationMode) -> str:
     """Apply exactly one explicit Quran-comparison normalization."""
 
+    if mode == "raw":
+        return text
     normalized = unicodedata.normalize("NFC", text).replace("\r\n", "\n").replace("\r", "\n")
     if mode == "exact_nfc":
         return normalized
