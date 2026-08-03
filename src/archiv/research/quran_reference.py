@@ -230,9 +230,11 @@ def parse_amrayn_json(data: bytes) -> QuranReference:
         parsed_value: object = json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise ExtractionError("Quran JSON is not valid bounded UTF-8 JSON") from error
-    if not isinstance(parsed_value, list) or len(parsed_value) != EXPECTED_SURAH_COUNT:
-        raise ExtractionError(f"Quran JSON must contain {EXPECTED_SURAH_COUNT} surahs")
+    if not isinstance(parsed_value, list):
+        raise ExtractionError("Quran JSON must contain a surah list")
     parsed = cast(list[object], parsed_value)
+    if len(parsed) != EXPECTED_SURAH_COUNT:
+        raise ExtractionError(f"Quran JSON must contain {EXPECTED_SURAH_COUNT} surahs")
 
     verses: list[QuranVerse] = []
     for expected_surah, raw_surah in enumerate(parsed, start=1):
@@ -245,9 +247,11 @@ def parse_amrayn_json(data: bytes) -> QuranReference:
         if surah.get("total_verses") != expected_count:
             raise ExtractionError(f"surah {expected_surah} declares the wrong verse count")
         raw_verses_value = surah.get("verses")
-        if not isinstance(raw_verses_value, list) or len(raw_verses_value) != expected_count:
-            raise ExtractionError(f"surah {expected_surah} has the wrong verse list")
+        if not isinstance(raw_verses_value, list):
+            raise ExtractionError(f"surah {expected_surah} has no verse list")
         raw_verses = cast(list[object], raw_verses_value)
+        if len(raw_verses) != expected_count:
+            raise ExtractionError(f"surah {expected_surah} has the wrong verse list")
         for expected_ayah, raw_verse in enumerate(raw_verses, start=1):
             if not isinstance(raw_verse, dict):
                 raise ExtractionError("Quran JSON verse entry must be an object")
