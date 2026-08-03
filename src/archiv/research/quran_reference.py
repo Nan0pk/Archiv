@@ -438,6 +438,7 @@ def compare_juz(
         "whitespace_normalized",
         "diacritic_insensitive",
         "verse_symbol_normalized",
+        "arabic_letters_only",
     )
     whole_text = {
         mode: _bounded_text_comparison(extracted_text, reference_text, mode) for mode in modes
