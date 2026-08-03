@@ -78,12 +78,17 @@ def _cfb_with_stream(name: str, payload: bytes) -> bytes:
 
 def _legacy_units(text: str) -> bytes:
     reverse = {
-        "پ": 0x83,
         "ا": 0x81,
-        "ک": 0x9C,
-        "س": 0x92,
+        "پ": 0x83,
         "ت": 0x84,
+        "د": 0x8B,
+        "ر": 0x8E,
+        "س": 0x92,
+        "ط": 0x96,
+        "ک": 0x9C,
         "ن": 0xA0,
+        "و": 0xA2,
+        "ی": 0xA4,
     }
     output = bytearray()
     for character in text:
@@ -154,6 +159,7 @@ def test_inpage100_ingests_legacy_urdu_and_english(tmp_path: Path) -> None:
     text = "\n".join(segment.text for segment in document.segments)
     assert marker in text
     assert "پاکستان" in text
+    assert "دوسری سطر" in text
     assert document.metadata["layout_supported"] is False
 
 
