@@ -171,7 +171,10 @@ def _useful_text(text: str) -> bool:
     stripped = text.strip()
     if len(stripped) < MIN_RUN_CHARS:
         return False
-    return any(is_arabic(ord(character)) for character in stripped) or LATIN_WORD.search(stripped) is not None
+    return (
+        any(is_arabic(ord(character)) for character in stripped)
+        or LATIN_WORD.search(stripped) is not None
+    )
 
 
 def _clean(text: str) -> str:
@@ -335,7 +338,9 @@ def normalize_inpage(
     ]
     unknown = measurements["unmapped_legacy_codes"]
     if isinstance(unknown, int) and unknown:
-        warnings.append(f"Skipped {unknown} unmapped legacy text units instead of guessing characters.")
+        warnings.append(
+            f"Skipped {unknown} unmapped legacy text units instead of guessing characters."
+        )
 
     return NormalizedDocument(
         object_sha256=digest,
