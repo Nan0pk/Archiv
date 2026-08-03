@@ -29,6 +29,7 @@ def test_fixture_constants_cover_only_juz_29_and_30() -> None:
         "inpage/juz_29.inp",
         "inpage/juz_30.inp",
     ]
+    assert len(MODULE.TANZIL_SHA256) == 64
 
 
 def test_sanitized_gate_allows_false_privacy_flags() -> None:
@@ -45,3 +46,29 @@ def test_sanitized_gate_allows_false_privacy_flags() -> None:
 def test_sanitized_gate_rejects_exact_content_key() -> None:
     with pytest.raises(ExtractionError, match="forbidden key: decoded_text"):
         MODULE._assert_sanitized({"nested": [{"decoded_text": "secret"}]})
+
+
+def test_sanitized_gate_rejects_native_text_and_bytes() -> None:
+    with pytest.raises(ExtractionError, match="non-ASCII text"):
+        MODULE._assert_sanitized({"value": "قرآن"})
+    with pytest.raises(ExtractionError, match="raw bytes"):
+        MODULE._assert_sanitized({"value": b"fixture"})
+
+
+def test_automated_gate_ignores_diagnostic_modes() -> None:
+    fixture = {
+        "juz": 29,
+        "comparisons": {
+            "reference": {
+                "verse_sequence": {
+                    mode: {
+                        "complete_in_order_coverage": mode == "arabic_letters_only"
+                    }
+                    for mode in (*MODULE.PRIMARY_MODES, *MODULE.DIAGNOSTIC_MODES)
+                }
+            }
+        },
+    }
+    gate = MODULE._automated_gate([fixture])
+    assert gate["all_fixture_reference_pairs_have_complete_primary_mode"] is False
+    assert gate["decision"] == "automated_sequence_gate_not_satisfied"
