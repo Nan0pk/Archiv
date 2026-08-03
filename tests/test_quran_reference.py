@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import xml.etree.ElementTree as ET
+from typing import cast
 
 import pytest
 
@@ -18,8 +19,12 @@ from archiv.research.quran_reference import (
 
 
 def _complete_json() -> bytes:
-    surahs = []
+    surahs: list[dict[str, object]] = []
     for surah, count in enumerate(SURAH_AYAH_COUNTS, start=1):
+        verses: list[dict[str, object]] = [
+            {"id": ayah, "text": f"س{surah} آ{ayah}"}
+            for ayah in range(1, count + 1)
+        ]
         surahs.append(
             {
                 "id": surah,
@@ -27,9 +32,7 @@ def _complete_json() -> bytes:
                 "transliteration": f"surah-{surah}",
                 "type": "test",
                 "total_verses": count,
-                "verses": [
-                    {"id": ayah, "text": f"س{surah} آ{ayah}"} for ayah in range(1, count + 1)
-                ],
+                "verses": verses,
             }
         )
     return json.dumps(surahs, ensure_ascii=False).encode("utf-8")
@@ -63,8 +66,12 @@ def test_parse_complete_amrayn_json_and_juz_boundaries() -> None:
 
 
 def test_amrayn_json_rejects_declared_count_mismatch() -> None:
-    parsed = json.loads(_complete_json())
-    parsed[66]["total_verses"] = 31
+    parsed_value: object = json.loads(_complete_json())
+    assert isinstance(parsed_value, list)
+    parsed = cast(list[object], parsed_value)
+    surah = parsed[66]
+    assert isinstance(surah, dict)
+    cast(dict[str, object], surah)["total_verses"] = 31
     with pytest.raises(ExtractionError, match="wrong verse count"):
         parse_amrayn_json(json.dumps(parsed).encode())
 
@@ -101,11 +108,20 @@ def test_sequence_comparison_reports_first_missing_verse() -> None:
     del verses[10]
     extracted = " ".join(verse.text for verse in verses)
     comparison = compare_juz(extracted, reference, 30)
-    sequence = comparison.verse_sequence["whitespace"]
+    sequence = comparison.verse_sequence["whitespace_normalized"]
     assert sequence.matched_verses == 563
     assert sequence.contiguous_prefix_verses == 10
     assert sequence.first_unmatched_key == "78:11"
     assert sequence.last_matched_key == "114:6"
+
+
+def test_raw_mode_is_distinct_from_exact_nfc() -> None:
+    reference = parse_amrayn_json(_complete_json())
+    verses = verses_for_juz(reference, 29)
+    extracted = "\r\n".join(verse.text for verse in verses)
+    comparison = compare_juz(extracted, reference, 29)
+    assert comparison.whole_text["raw"].exact_match is False
+    assert comparison.whole_text["exact_nfc"].exact_match is True
 
 
 def test_rejects_unsupported_juz() -> None:
