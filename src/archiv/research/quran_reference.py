@@ -6,14 +6,15 @@ import json
 import xml.etree.ElementTree as ET
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
-from typing import Any, Literal, cast
+from typing import cast
 
-from archiv.research.inpage_types import ExtractionError, sha256
-from archiv.research.inpage_validation import (
-    ComparisonMetrics,
-    compare_quran_text,
-    normalize_quran_text,
+from archiv.research.inpage_types import (
+    ExtractionError,
+    NormalizationMode,
+    QuranComparison,
+    sha256,
 )
+from archiv.research.inpage_validation import compare_quran_text, normalize_quran_text
 
 MAX_REFERENCE_BYTES = 8 * 1024 * 1024
 EXPECTED_SURAH_COUNT = 114
@@ -141,14 +142,6 @@ JUZ_SURAH_RANGES: Mapping[int, tuple[int, int]] = {
     30: (78, 114),
 }
 
-ComparisonMode = Literal[
-    "raw",
-    "nfc",
-    "whitespace",
-    "diacritic_insensitive",
-    "verse_symbol_normalized",
-]
-
 
 @dataclass(frozen=True)
 class QuranVerse:
@@ -171,7 +164,7 @@ class QuranReference:
 
 @dataclass(frozen=True)
 class VerseSequenceMetrics:
-    mode: ComparisonMode
+    mode: NormalizationMode
     expected_verses: int
     matched_verses: int
     contiguous_prefix_verses: int
@@ -194,7 +187,7 @@ class JuzComparison:
     first_verse: str
     last_verse: str
     expected_verses: int
-    whole_text: Mapping[str, ComparisonMetrics]
+    whole_text: Mapping[str, QuranComparison]
     verse_sequence: Mapping[str, VerseSequenceMetrics]
     text_emitted: bool = False
     native_support_claimed: bool = False
@@ -208,7 +201,7 @@ def _checked_bytes(data: bytes, *, label: str) -> bytes:
     return data
 
 
-def _checked_text(value: Any, *, label: str) -> str:
+def _checked_text(value: object, *, label: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ExtractionError(f"{label} must contain non-empty text")
     if "\x00" in value:
@@ -234,29 +227,31 @@ def parse_amrayn_json(data: bytes) -> QuranReference:
 
     raw = _checked_bytes(data, label="Quran JSON")
     try:
-        parsed = json.loads(raw.decode("utf-8"))
+        parsed_value: object = json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise ExtractionError("Quran JSON is not valid bounded UTF-8 JSON") from error
-    if not isinstance(parsed, list) or len(parsed) != EXPECTED_SURAH_COUNT:
+    if not isinstance(parsed_value, list) or len(parsed_value) != EXPECTED_SURAH_COUNT:
         raise ExtractionError(f"Quran JSON must contain {EXPECTED_SURAH_COUNT} surahs")
+    parsed = cast(list[object], parsed_value)
 
     verses: list[QuranVerse] = []
     for expected_surah, raw_surah in enumerate(parsed, start=1):
         if not isinstance(raw_surah, dict):
             raise ExtractionError("Quran JSON surah entry must be an object")
-        surah = cast(dict[str, Any], raw_surah)
+        surah = cast(dict[str, object], raw_surah)
         if surah.get("id") != expected_surah:
             raise ExtractionError(f"expected surah {expected_surah}")
         expected_count = SURAH_AYAH_COUNTS[expected_surah - 1]
         if surah.get("total_verses") != expected_count:
             raise ExtractionError(f"surah {expected_surah} declares the wrong verse count")
-        raw_verses = surah.get("verses")
-        if not isinstance(raw_verses, list) or len(raw_verses) != expected_count:
+        raw_verses_value = surah.get("verses")
+        if not isinstance(raw_verses_value, list) or len(raw_verses_value) != expected_count:
             raise ExtractionError(f"surah {expected_surah} has the wrong verse list")
+        raw_verses = cast(list[object], raw_verses_value)
         for expected_ayah, raw_verse in enumerate(raw_verses, start=1):
             if not isinstance(raw_verse, dict):
                 raise ExtractionError("Quran JSON verse entry must be an object")
-            verse = cast(dict[str, Any], raw_verse)
+            verse = cast(dict[str, object], raw_verse)
             if verse.get("id") != expected_ayah:
                 raise ExtractionError(f"expected verse {expected_surah}:{expected_ayah}")
             text = _checked_text(
@@ -339,7 +334,7 @@ def verses_for_juz(reference: QuranReference, juz: int) -> tuple[QuranVerse, ...
 def _sequence_metrics(
     extracted_text: str,
     verses: Sequence[QuranVerse],
-    mode: ComparisonMode,
+    mode: NormalizationMode,
 ) -> VerseSequenceMetrics:
     normalized_extracted = normalize_quran_text(extracted_text, mode)
     normalized_verses = [normalize_quran_text(verse.text, mode) for verse in verses]
@@ -351,6 +346,8 @@ def _sequence_metrics(
     first_unmatched: str | None = None
     last_matched: str | None = None
     for verse, normalized_verse in zip(verses, normalized_verses, strict=True):
+        if not normalized_verse:
+            raise ExtractionError(f"verse {verse.key} is empty after normalization")
         position = normalized_extracted.find(normalized_verse, cursor)
         if position < 0:
             if first_unmatched is None:
@@ -386,10 +383,10 @@ def compare_juz(
 
     verses = verses_for_juz(reference, juz)
     reference_text = "\n".join(verse.text for verse in verses)
-    modes: tuple[ComparisonMode, ...] = (
+    modes: tuple[NormalizationMode, ...] = (
         "raw",
-        "nfc",
-        "whitespace",
+        "exact_nfc",
+        "whitespace_normalized",
         "diacritic_insensitive",
         "verse_symbol_normalized",
     )
