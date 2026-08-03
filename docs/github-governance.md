@@ -14,7 +14,8 @@ These controls live in the repository and are tested on every relevant pull requ
 - superseded pull-request runs use `cancel-in-progress: true`;
 - dependency changes receive GitHub's vulnerability review at `high` severity or above;
 - CodeQL runs only on trusted `main`, schedule, or manual events because it needs `security-events: write`;
-- workflow-policy evidence is retained for seven days; ordinary product evidence is retained for fourteen days.
+- workflow-policy evidence is retained for seven days; ordinary product evidence is retained for fourteen days;
+- temporary external-evidence workflows must pin every source, publish only sanitized non-source evidence, delete external trees before upload, and be removed from the final pull-request diff.
 
 `scripts/audit_ci_trust.py` and the `CI trust boundary` workflow enforce these rules. The negative regression creates a fork-style malicious workflow containing `pull_request_target`, a secret reference, write permission, a self-hosted runner, an unpinned action, and retained checkout credentials; the auditor must reject all of them.
 
