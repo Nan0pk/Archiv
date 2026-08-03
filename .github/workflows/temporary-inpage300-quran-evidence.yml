@@ -1,0 +1,141 @@
+name: Temporary InPage300 Quran ground-truth evidence
+
+on:
+  push:
+    branches: [research/validate-inpage300-quran-ground-truth]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: archiv-inpage300-quran-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  evidence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out exact Archiv research branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: research/validate-inpage300-quran-ground-truth
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Check out pinned public InPage candidates
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: ShakesVision/html-experiments
+          ref: 1f9bc57a6cdbe6ad69f18b38913e1af06ba5b41a
+          path: external/shakesvision
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Check out pinned MIT Quran reference
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: amrayn/quran-text
+          ref: d1868b249234f536c6048da69c272efc91ce44b4
+          path: external/amrayn
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.12"
+
+      - name: Verify pinned repository heads
+        run: |
+          set -euo pipefail
+          test "$(git -C external/shakesvision rev-parse HEAD)" = \
+            '1f9bc57a6cdbe6ad69f18b38913e1af06ba5b41a'
+          test "$(git -C external/amrayn rev-parse HEAD)" = \
+            'd1868b249234f536c6048da69c272efc91ce44b4'
+
+      - name: Download official Tanzil Quran XML privately
+        run: |
+          set -euo pipefail
+          mkdir -p private
+          curl --proto '=https' --tlsv1.2 --fail --show-error --silent --location \
+            --retry 2 --retry-all-errors --max-time 90 --max-filesize 8388608 \
+            --user-agent 'Archiv bounded research validation' \
+            --request POST \
+            --data-urlencode 'quranType=uthmani' \
+            --data-urlencode 'outType=xml' \
+            --data-urlencode 'agree=true' \
+            --data-urlencode 'marks=true' \
+            --data-urlencode 'sajdah=true' \
+            --data-urlencode 'rub=true' \
+            --data-urlencode 'alef=true' \
+            --output private/tanzil.xml \
+            'https://tanzil.net/pub/download/download.php'
+          test -s private/tanzil.xml
+          test "$(stat -c %s private/tanzil.xml)" -le 8388608
+
+      - name: Run deterministic private comparisons twice
+        env:
+          PYTHONPATH: src
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          for output in first second; do
+            python scripts/run_inpage300_quran_validation.py \
+              --inpage-root external/shakesvision \
+              --amrayn-root external/amrayn \
+              --tanzil-xml private/tanzil.xml \
+              --archiv-head "$(git rev-parse HEAD)" \
+              --output "evidence/${output}.json"
+          done
+          cmp evidence/first.json evidence/second.json
+          cp evidence/first.json evidence/inpage300-quran-ground-truth.json
+
+      - name: Publish sanitized measurements
+        run: |
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          from pathlib import Path
+
+          evidence = json.loads(
+              Path('evidence/inpage300-quran-ground-truth.json').read_text(
+                  encoding='ascii'
+              )
+          )
+          print('# InPage300 Quran ground-truth evidence')
+          print()
+          print(f"Archiv head: `{evidence['archiv_head']}`")
+          for key, reference in evidence['references'].items():
+              print(
+                  f"- Reference `{key}`: SHA-256 `{reference['source_sha256']}`, "
+                  f"{reference['verse_count']} verses"
+              )
+          print()
+          for fixture in evidence['fixtures']:
+              print(f"## Juz {fixture['juz']}")
+              for source, comparison in fixture['comparisons'].items():
+                  print(f"- `{source}`")
+                  for mode, metrics in comparison['verse_sequence'].items():
+                      print(
+                          f"  - `{mode}`: {metrics['matched_verses']}/"
+                          f"{metrics['expected_verses']} verses; prefix "
+                          f"{metrics['contiguous_prefix_verses']}; first unmatched "
+                          f"`{metrics['first_unmatched_key']}`; last matched "
+                          f"`{metrics['last_matched_key']}`"
+                      )
+          print()
+          print('No native bytes, Quran text, or decoded document text were retained.')
+          PY
+
+      - name: Delete all source and private text trees
+        if: always()
+        run: rm -rf external private evidence/first.json evidence/second.json
+
+      - name: Upload sanitized evidence only
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: archiv-inpage300-quran-ground-truth
+          path: evidence/inpage300-quran-ground-truth.json
+          if-no-files-found: error
+          retention-days: 14
