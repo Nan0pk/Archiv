@@ -29,3 +29,19 @@ def test_fixture_constants_cover_only_juz_29_and_30() -> None:
         "inpage/juz_29.inp",
         "inpage/juz_30.inp",
     ]
+
+
+def test_sanitized_gate_allows_false_privacy_flags() -> None:
+    MODULE._assert_sanitized(
+        {
+            "privacy": {
+                "reference_text_uploaded": False,
+                "decoded_text_printed_or_uploaded": False,
+            }
+        }
+    )
+
+
+def test_sanitized_gate_rejects_exact_content_key() -> None:
+    with pytest.raises(ExtractionError, match="forbidden key: decoded_text"):
+        MODULE._assert_sanitized({"nested": [{"decoded_text": "secret"}]})
