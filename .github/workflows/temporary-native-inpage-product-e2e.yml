@@ -1,0 +1,122 @@
+name: Temporary native InPage product E2E
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-inpage-product:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out Archiv
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Check out pinned public InPage fixtures
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: ShakesVision/html-experiments
+          ref: 1f9bc57a6cdbe6ad69f18b38913e1af06ba5b41a
+          path: external-inpage
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install Archiv
+        run: python -m pip install -e .
+
+      - name: Ingest, rebuild and search real native documents
+        shell: bash
+        run: |
+          python - <<'PY'
+          from __future__ import annotations
+
+          import json
+          import re
+          import subprocess
+          from pathlib import Path
+
+          home = Path("${{ runner.temp }}") / "archiv-inpage-e2e"
+          fixtures = [
+              Path("external-inpage/inpage/juz_29.inp"),
+              Path("external-inpage/inpage/juz_30.inp"),
+          ]
+          documents: list[dict[str, object]] = []
+          search_token = ""
+
+          for fixture in fixtures:
+              completed = subprocess.run(
+                  ["archiv", "ingest", str(fixture), "--home", str(home)],
+                  check=True,
+                  capture_output=True,
+                  text=True,
+              )
+              result = json.loads(completed.stdout)
+              assert result["media_type"] == "application/x-inpage"
+              assert result["source_hash_unchanged"] is True
+              normalized_path = (
+                  Path(str(result["derived_root"])) / "normalized" / "document.json"
+              )
+              document = json.loads(normalized_path.read_text(encoding="utf-8"))
+              assert document["kind"] == "inp"
+              assert document["metadata"]["native_variant"] == "300"
+              assert document["metadata"]["native_text_extracted"] is True
+              assert document["metadata"]["layout_supported"] is False
+              segments = document["segments"]
+              assert len(segments) >= 10
+              text = "\n".join(str(segment["text"]) for segment in segments)
+              arabic_count = sum(
+                  1 for character in text if "\u0600" <= character <= "\u06ff"
+              )
+              assert arabic_count >= 1_000
+              if not search_token:
+                  candidates = re.findall(r"[\u0600-\u06ff]{4,}", text)
+                  assert candidates
+                  search_token = max(candidates, key=len)[:24]
+              documents.append(document)
+
+          rebuilt = subprocess.run(
+              ["archiv", "rebuild-search-index", "--home", str(home)],
+              check=True,
+              capture_output=True,
+              text=True,
+          )
+          assert json.loads(rebuilt.stdout)["documents_indexed"] >= 2
+
+          searched = subprocess.run(
+              ["archiv", "search", search_token, "--home", str(home)],
+              check=True,
+              capture_output=True,
+              text=True,
+          )
+          matches = json.loads(searched.stdout)
+          assert matches
+          assert any(match["citation"]["kind"] == "inp" for match in matches)
+
+          print(
+              json.dumps(
+                  {
+                      "fixtures_ingested": len(documents),
+                      "native_variants": sorted(
+                          {document["metadata"]["native_variant"] for document in documents}
+                      ),
+                      "searchable": True,
+                      "source_hashes_unchanged": True,
+                  },
+                  sort_keys=True,
+              )
+          )
+          PY
+
+      - name: Delete external and derived document trees
+        if: always()
+        run: rm -rf external-inpage "${{ runner.temp }}/archiv-inpage-e2e"
