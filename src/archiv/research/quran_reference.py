@@ -424,11 +424,7 @@ def _bounded_edit_counts(
     right: str,
 ) -> tuple[str, str, bool, int, int, int, int]:
     cells = (len(left) + 1) * (len(right) + 1)
-    if (
-        cells <= MAX_EDIT_CELLS
-        and len(left) <= MAX_EDIT_AXIS
-        and len(right) <= MAX_EDIT_AXIS
-    ):
+    if cells <= MAX_EDIT_CELLS and len(left) <= MAX_EDIT_AXIS and len(right) <= MAX_EDIT_AXIS:
         cost, insertions, deletions, substitutions = _exact_edit_counts(left, right)
         return (
             "bounded_linear_memory_levenshtein_v1",
@@ -606,12 +602,9 @@ def compare_juz(
     verses = verses_for_juz(reference, juz)
     reference_text = "\n".join(verse.text for verse in verses)
     whole_text = {
-        mode: _bounded_text_comparison(extracted_text, reference_text, mode)
-        for mode in ALL_MODES
+        mode: _bounded_text_comparison(extracted_text, reference_text, mode) for mode in ALL_MODES
     }
-    verse_sequence = {
-        mode: _sequence_metrics(extracted_text, verses, mode) for mode in ALL_MODES
-    }
+    verse_sequence = {mode: _sequence_metrics(extracted_text, verses, mode) for mode in ALL_MODES}
     return JuzComparison(
         source_name=reference.source_name,
         source_sha256=reference.source_sha256,
