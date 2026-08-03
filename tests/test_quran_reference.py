@@ -28,8 +28,7 @@ def _complete_json() -> bytes:
                 "type": "test",
                 "total_verses": count,
                 "verses": [
-                    {"id": ayah, "text": f"س{surah} آ{ayah}"}
-                    for ayah in range(1, count + 1)
+                    {"id": ayah, "text": f"س{surah} آ{ayah}"} for ayah in range(1, count + 1)
                 ],
             }
         )
