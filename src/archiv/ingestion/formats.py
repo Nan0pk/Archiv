@@ -37,6 +37,7 @@ SUPPORTED_SUFFIXES = {
     ".fods",
     ".fodp",
     ".fodg",
+    ".inp",
     ".png",
     ".jpg",
     ".jpeg",
@@ -63,6 +64,7 @@ MEDIA_TYPES = {
     ".fods": "text/xml",
     ".fodp": "text/xml",
     ".fodg": "text/xml",
+    ".inp": "application/x-inpage",
     ".wav": "audio/wav",
 }
 

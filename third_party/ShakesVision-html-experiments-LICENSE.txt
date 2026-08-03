@@ -1,0 +1,45 @@
+Attribution Required License (ARL) 1.0
+
+Copyright (c) 2026 Shakeeb Ahmad
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to use,
+copy, modify, merge, publish, and distribute the Software, subject to the
+following conditions:
+
+1. ATTRIBUTION. You must give appropriate credit to Shakeeb Ahmad and link to
+   https://shakeeb.in in any of the following contexts where the Software
+   is used:
+   (a) source code redistribution — include this LICENSE and NOTICE;
+   (b) public deployment, hosting, or embedding — visible credit in the user
+   interface (footer, About page, or equivalent), for example:
+   "Based on tools by Shakeeb — https://shakeeb.in";
+   (c) derivative works — state that changes were made and retain attribution
+       to the original author.
+
+2. NOTICE PRESERVATION. Redistributions of source code must retain the above
+copyright notice, this license text, and the NOTICE file.
+
+3. NO TRADEMARK GRANT. This license does not grant permission to use the trade
+names, trademarks, service marks, or product names of the copyright holder.
+
+4. THIRD-PARTY COMPONENTS. Components covered by separate licenses (including
+but not limited to MuPDF, which is licensed under AGPL-3.0-or-later) remain
+governed by their respective licenses. See NOTICE for details.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+NOTICE
+
+Archiv uses format knowledge and first-key character mapping values derived from
+ShakesVision/html-experiments commit
+1f9bc57a6cdbe6ad69f18b38913e1af06ba5b41a. Original work is by Shakeeb Ahmad,
+https://shakeeb.in. Archiv's implementation is a changed, independent Python
+implementation for bounded local ingestion; no upstream application, MuPDF
+component, font, fixture, document or external binary is redistributed here.

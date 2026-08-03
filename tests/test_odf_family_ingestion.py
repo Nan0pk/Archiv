@@ -5,7 +5,7 @@ from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile
 
 import pytest
 
-from archiv.ingestion.formats import UnsupportedFormatError, media_type_for
+from archiv.ingestion.formats import media_type_for
 from archiv.ingestion.normalizers import MalformedInputError, normalize
 
 DIGEST = "0" * 64
@@ -198,12 +198,4 @@ def test_formula_package_rejects_non_mathml_content_root(tmp_path: Path) -> None
     )
 
     with pytest.raises(MalformedInputError, match="must have a MathML math root"):
-        normalize(path, DIGEST)
-
-
-def test_native_inpage_remains_unsupported(tmp_path: Path) -> None:
-    path = tmp_path / "unsupported.inp"
-    path.write_bytes(b"not accepted")
-
-    with pytest.raises(UnsupportedFormatError, match="unsupported file type"):
         normalize(path, DIGEST)
