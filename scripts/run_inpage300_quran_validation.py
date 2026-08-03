@@ -236,8 +236,7 @@ def build_evidence(
         observed_tanzil_sha = sha256(tanzil_data)
         if observed_tanzil_sha != TANZIL_SHA256:
             raise ExtractionError(
-                "Tanzil SHA-256 mismatch: "
-                f"expected {TANZIL_SHA256}, got {observed_tanzil_sha}"
+                f"Tanzil SHA-256 mismatch: expected {TANZIL_SHA256}, got {observed_tanzil_sha}"
             )
         references.append(parse_tanzil_xml(tanzil_data))
 
