@@ -334,7 +334,8 @@ def normalize_inpage(
         raise ValueError("native InPage document contains no safely extractable searchable text")
 
     warnings = [
-        "Text is extracted locally in content-stream order; page, frame, style and exact visual layout are not reconstructed."
+        "Text is extracted locally in content-stream order; page, frame, style "
+        "and exact visual layout are not reconstructed."
     ]
     unknown = measurements["unmapped_legacy_codes"]
     if isinstance(unknown, int) and unknown:
