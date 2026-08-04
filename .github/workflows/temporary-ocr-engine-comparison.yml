@@ -1,6 +1,10 @@
 name: Temporary OCR engine comparison
 
 on:
+  push:
+    branches: [feature/ocr-engine-comparison]
+    paths:
+      - ".github/workflows/temporary-ocr-engine-comparison.yml"
   workflow_dispatch:
 
 permissions:
