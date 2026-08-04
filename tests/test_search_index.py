@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from ingestion_support import VALID_INGESTION_FIXTURES
 
 from archiv.ingestion import ingest_file
