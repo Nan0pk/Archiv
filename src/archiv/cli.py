@@ -18,6 +18,7 @@ from archiv.executor.source_marker import run_source_marker
 from archiv.ingestion import ingest_file, rebuild_derived
 from archiv.ingestion.formats import SUPPORTED_SUFFIXES
 from archiv.model_cli import model_app
+from archiv.ocr_benchmark_cli import register_ocr_benchmark_command
 from archiv.report_cli import register_report_commands
 from archiv.search import rebuild_search_index, search_documents
 from archiv.source_location_cli import register_source_location_command
@@ -30,6 +31,7 @@ register_report_commands(app)
 register_alpha_commands(app)
 register_user_commands(app)
 register_source_location_command(app)
+register_ocr_benchmark_command(app)
 
 
 @app.command()
