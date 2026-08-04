@@ -130,7 +130,7 @@ Kraken itself is not enough. A benchmark requires one specific printed-Urdu mode
 From a source checkout, the same corpus and full matrix run through:
 
 ```bash
-tools/run-ocr-engine-comparison.sh "$HOME/archiv-ocr-victus" /optional/private-corpus
+bash tools/run-ocr-engine-comparison.sh "$HOME/archiv-ocr-victus" /optional/private-corpus
 ```
 
 The script installs the Fedora OCR/font prerequisites, creates an isolated benchmark environment, materializes the exact `urd_naw` Git blob, runs once to populate optional RapidOCR models, then reruns the comparison inside a bubblewrap network namespace. The final evidence comes from the network-denied rerun.
