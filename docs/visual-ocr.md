@@ -84,6 +84,18 @@ If bubblewrap is selected and the sandboxed processor fails, Archiv records a fa
 
 Missing executables or requested language models produce a `skipped` manifest. Processor crashes, timeouts or invalid output produce a `failed` manifest. Neither state fabricates text or invalidates an otherwise valid immutable ingestion.
 
+## Measured baseline
+
+Run the local comparison command before treating an installed language configuration as suitable for a workload:
+
+```bash
+archiv benchmark-ocr --output "$HOME/archiv-ocr-benchmark"
+```
+
+The first hosted-runner measurement found `eng+ara+urd` to be the best aggregate configuration for unknown or mixed English/Arabic/Urdu input on a four-fixture synthetic corpus. Its aggregate result was 35.1% CER and 41.7% WER. Clean English was exact, but clean Urdu and degraded mixed text remained materially error-prone. Script-specific `ara` and `urd` configurations improved character accuracy on their matching clean fixtures.
+
+These measurements do not establish dependable Urdu transcription or performance on the target Fedora hardware. See the [benchmark method](ocr-benchmark.md) and [measured report](ocr-benchmark-report.md) for exact model hashes, per-fixture failures and boundaries.
+
 ## Bounded policy
 
 The first implementation enforces:
