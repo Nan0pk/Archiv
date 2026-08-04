@@ -111,6 +111,9 @@ def _run(
     timeout: int,
 ) -> tuple[str, str, str]:
     mode = _sandbox_mode()
+    if mode == "required" and os.name != "posix":
+        raise VisualOcrError("required bubblewrap isolation is unavailable on this platform")
+
     sandbox = "none"
     wrapped = command
     if mode != "off" and os.name == "posix":
@@ -142,8 +145,6 @@ def _run(
             sandbox = "bubblewrap"
         elif mode == "required":
             raise VisualOcrError("bubblewrap is required but not installed")
-    elif mode == "required":
-        raise VisualOcrError("required bubblewrap isolation is unavailable on this platform")
 
     environment = os.environ.copy()
     environment.setdefault("OMP_THREAD_LIMIT", "2")
@@ -560,9 +561,6 @@ def run_visual_ocr(
             segments.extend(page_segments)
             pages.append(evidence)
             completed += 1
-            page_warnings = evidence.get("warnings")
-            if isinstance(page_warnings, list):
-                warnings.extend(str(item) for item in page_warnings)
         except (OSError, VisualOcrError) as error:
             pages.append(
                 {
