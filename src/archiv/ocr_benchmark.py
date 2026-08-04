@@ -272,7 +272,9 @@ def _available_languages(executable: str) -> list[str]:
     )
 
 
-def _default_candidates(available: Sequence[str]) -> list[str]:
+def default_candidates(available: Sequence[str]) -> list[str]:
+    """Return the bounded Tesseract candidate matrix supported by installed models."""
+
     candidates = [language for language in ("eng", "ara", "urd") if language in available]
     if all(language in available for language in ("eng", "ara", "urd")):
         candidates.append("eng+ara+urd")
@@ -323,9 +325,10 @@ def _run_tesseract(
 def _edit_total(value: object) -> int:
     if not isinstance(value, dict):
         raise OcrBenchmarkError("benchmark edit metrics are invalid")
+    metrics = cast(dict[str, object], value)
     total = 0
     for key in ("substitutions", "deletions", "insertions"):
-        count = value.get(key)
+        count = metrics.get(key)
         if not isinstance(count, int):
             raise OcrBenchmarkError("benchmark edit metrics are invalid")
         total += count
@@ -365,6 +368,13 @@ def _aggregate(candidate: str, runs: Sequence[dict[str, object]]) -> dict[str, o
     }
 
 
+def _aggregate_number(item: dict[str, object], key: str) -> float:
+    value = item.get(key)
+    if not isinstance(value, int | float):
+        raise OcrBenchmarkError(f"aggregate {key} is invalid")
+    return float(value)
+
+
 def run_benchmark(output_dir: Path, candidates: Sequence[str] | None = None) -> dict[str, object]:
     """Generate fixtures, measure installed Tesseract candidates, and save JSON evidence."""
 
@@ -379,7 +389,7 @@ def run_benchmark(output_dir: Path, candidates: Sequence[str] | None = None) -> 
         raise OcrBenchmarkError("generated corpus manifest is invalid")
     fixtures = cast(list[dict[str, object]], fixtures_value)
     available = _available_languages(executable)
-    selected = list(candidates) if candidates else _default_candidates(available)
+    selected = list(candidates) if candidates else default_candidates(available)
     missing = sorted(
         language
         for candidate in selected
@@ -417,7 +427,11 @@ def run_benchmark(output_dir: Path, candidates: Sequence[str] | None = None) -> 
     ]
     recommended = min(
         aggregates,
-        key=lambda item: (float(item["cer"]), float(item["wer"]), float(item["elapsed_seconds"])),
+        key=lambda item: (
+            _aggregate_number(item, "cer"),
+            _aggregate_number(item, "wer"),
+            _aggregate_number(item, "elapsed_seconds"),
+        ),
     )["candidate"]
     report: dict[str, object] = {
         "schema_version": SCHEMA_VERSION,
