@@ -17,8 +17,8 @@ from typing import cast
 from archiv._ocr_benchmark_core import (
     SCHEMA_VERSION,
     CandidateExecution,
-    CandidateStatus,
     CandidateRunner,
+    CandidateStatus,
     EngineText,
     FixtureRecord,
     OcrBenchmarkError,
