@@ -10,10 +10,11 @@ import subprocess
 import sys
 import time
 import unicodedata
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Sequence, TypeVar, cast
+from typing import cast
 
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
 
@@ -21,7 +22,6 @@ from archiv.hashing import sha256_file
 
 SCHEMA_VERSION = "1"
 TIMEOUT_SECONDS = 60
-T = TypeVar("T")
 
 
 class OcrBenchmarkError(RuntimeError):
@@ -95,7 +95,7 @@ def normalize_text(text: str) -> str:
     return " ".join(unicodedata.normalize("NFKC", text).split())
 
 
-def edit_counts(reference: Sequence[T], hypothesis: Sequence[T]) -> EditCounts:
+def edit_counts[T](reference: Sequence[T], hypothesis: Sequence[T]) -> EditCounts:
     """Return deterministic Levenshtein substitution/deletion/insertion counts."""
 
     distance = [[0] * (len(hypothesis) + 1) for _ in range(len(reference) + 1)]
