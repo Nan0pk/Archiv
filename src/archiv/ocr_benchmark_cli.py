@@ -14,7 +14,6 @@ from archiv.ocr_benchmark import OcrBenchmarkError, run_benchmark
 def register_ocr_benchmark_command(app: typer.Typer) -> None:
     """Register the operator-facing OCR benchmark command."""
 
-    @app.command("benchmark-ocr")
     def benchmark_ocr_command(
         output: Annotated[
             Path,
@@ -57,3 +56,5 @@ def register_ocr_benchmark_command(app: typer.Typer) -> None:
                 sort_keys=True,
             )
         )
+
+    app.command("benchmark-ocr")(benchmark_ocr_command)
