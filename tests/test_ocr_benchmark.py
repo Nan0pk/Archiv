@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import cast
 
 import pytest
+from click.utils import strip_ansi
 from PIL import Image
 from typer import Typer
 from typer.testing import CliRunner
@@ -272,6 +273,7 @@ def test_cli_keeps_candidates_option_and_adds_engine_and_private_corpus_options(
     register_ocr_benchmark_command(app)
     result = CliRunner().invoke(app, ["benchmark-ocr", "--help"])
     assert result.exit_code == 0
-    assert "--candidates" in result.stdout
-    assert "--engines" in result.stdout
-    assert "--private-corpus" in result.stdout
+    output = strip_ansi(result.stdout)
+    assert "--candidates" in output
+    assert "--engines" in output
+    assert "--private-corpus" in output
