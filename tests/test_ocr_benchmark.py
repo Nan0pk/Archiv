@@ -4,7 +4,9 @@ import json
 import os
 import sys
 from pathlib import Path
+from typing import cast
 
+import pytest
 from PIL import Image
 
 import archiv.ocr_benchmark as benchmark
@@ -50,7 +52,7 @@ def test_default_candidates_require_installed_language_models() -> None:
 
 def test_run_benchmark_writes_scored_evidence(
     tmp_path: Path,
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
@@ -74,7 +76,7 @@ else:
         image_path = output_dir / "fixtures" / "english-clean.png"
         image_path.parent.mkdir(parents=True)
         Image.new("RGB", (32, 32), "white").save(image_path)
-        manifest: dict[str, object] = {
+        return {
             "fixtures": [
                 {
                     "fixture_id": "english-clean",
@@ -86,17 +88,25 @@ else:
             ],
             "manifest_sha256": "manifest-sha",
         }
-        return manifest
 
     monkeypatch.setattr(benchmark, "build_corpus", fake_corpus)
     report = benchmark.run_benchmark(tmp_path / "benchmark", ["eng"])
 
     assert report["recommended_candidate"] == "eng"
     assert report["engine_version"] == "tesseract 5.5.0-test"
-    aggregates = report["aggregates"]
-    assert isinstance(aggregates, list)
+    aggregates_value = report["aggregates"]
+    assert isinstance(aggregates_value, list)
+    aggregates = cast(list[dict[str, object]], aggregates_value)
     assert aggregates[0]["cer"] == 0.0
     report_path = Path(str(report["report_path"]))
     assert report_path.is_file()
-    persisted = json.loads(report_path.read_text(encoding="utf-8"))
-    assert persisted["runs"][0]["metrics"]["wer"] == 0.0
+    persisted_value = json.loads(report_path.read_text(encoding="utf-8"))
+    assert isinstance(persisted_value, dict)
+    persisted = cast(dict[str, object], persisted_value)
+    runs_value = persisted["runs"]
+    assert isinstance(runs_value, list)
+    runs = cast(list[dict[str, object]], runs_value)
+    metrics_value = runs[0]["metrics"]
+    assert isinstance(metrics_value, dict)
+    metrics = cast(dict[str, object], metrics_value)
+    assert metrics["wer"] == 0.0
