@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import platform
@@ -75,10 +76,10 @@ def _candidate_plan(
             available: list[str] = []
             executable = shutil.which("tesseract")
             if executable is not None:
-                try:
+                with contextlib.suppress(
+                    OSError, subprocess.SubprocessError, OcrBenchmarkError
+                ):
                     _, available = _language_inventory(executable)
-                except (OSError, subprocess.SubprocessError, OcrBenchmarkError):
-                    pass
             selected = list(candidates) if candidates else default_candidates(available)
             if not selected:
                 selected = [
