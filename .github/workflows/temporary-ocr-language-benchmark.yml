@@ -52,7 +52,7 @@ jobs:
             --output "$RUNNER_TEMP/archiv-ocr-benchmark" \
             --candidates eng,ara,urd,eng+ara+urd
 
-      - name: Print sanitized fixture metrics
+      - name: Print sanitized evidence
         run: |
           python - <<'PY'
           import json
@@ -79,5 +79,25 @@ jobs:
                       "peak_rss_kib": run["peak_rss_kib"],
                   }
               )
-          print(json.dumps({"fixture_metrics": rows}, indent=2, sort_keys=True))
+          model_evidence = report["model_evidence"]
+          models = [
+              {
+                  "language": item["language"],
+                  "bytes": item["bytes"],
+                  "sha256": item["sha256"],
+              }
+              for item in model_evidence["files"]
+          ]
+          print(
+              json.dumps(
+                  {
+                      "fixture_metrics": rows,
+                      "models": models,
+                      "model_total_bytes": model_evidence["total_bytes"],
+                      "model_warnings": model_evidence["warnings"],
+                  },
+                  indent=2,
+                  sort_keys=True,
+              )
+          )
           PY
