@@ -42,7 +42,7 @@ ARCHIV_HOME/derived/<source-sha256>/
 
 ## Local requirements
 
-Tesseract is optional. `pdftoppm` from Poppler is required only for image-only PDF pages. On Fedora:
+The normal Fedora installer installs Tesseract, English/Arabic/Urdu language data, Poppler and bubblewrap. Prepared or custom installations can install the same runtime directly:
 
 ```bash
 sudo dnf install \
@@ -54,7 +54,9 @@ sudo dnf install \
   bubblewrap
 ```
 
-The contributed `urd_naw` Nastaliq model is not assumed to be installed or production-proven. Archiv uses it automatically when present, unless languages are selected explicitly.
+Tesseract remains an optional external processor at runtime: if it or a requested language model is absent, Archiv records a skipped OCR result while preserving normal ingestion. `pdftoppm` from Poppler is required only for image-only PDF pages.
+
+The contributed `urd_naw` Nastaliq model is not bundled, assumed to be installed, or treated as production-proven. Archiv uses it automatically when present, unless languages are selected explicitly.
 
 ## Configuration
 
