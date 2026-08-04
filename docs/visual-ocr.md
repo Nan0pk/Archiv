@@ -74,9 +74,11 @@ export ARCHIV_OCR=off
 
 `ARCHIV_OCR_SANDBOX` accepts:
 
-- `auto` (default): use bubblewrap where available; if the local sandbox cannot launch, retry the fixed local processor and record an explicit warning;
+- `auto` (default): use bubblewrap when it is installed; otherwise invoke the fixed local processor directly and record `sandbox: none` in page evidence;
 - `required`: require bubblewrap network isolation and fail the OCR processor if it cannot be established;
 - `off`: invoke the configured local executable directly. This is intended for controlled tests and platforms without bubblewrap.
+
+If bubblewrap is selected and the sandboxed processor fails, Archiv records a failed OCR result rather than silently retrying outside the sandbox.
 
 Missing executables or requested language models produce a `skipped` manifest. Processor crashes, timeouts or invalid output produce a `failed` manifest. Neither state fabricates text or invalidates an otherwise valid immutable ingestion.
 
