@@ -16,11 +16,12 @@ Models propose. Validators decide whether work succeeded.
 
 ## Current implemented slice (0.1.0a5)
 
-Archiv includes a human-facing Fedora command surface, a deterministic environment doctor, native searchable-text ingestion for InPage `.inp` documents, explainable natural-language retrieval, bounded source-location verification (`archiv source`), grounded QA over local evidence (`archiv ask`), model-assisted cited report generation (`archiv report`), loopback-only OpenAI-compatible model configuration (`archiv model`), immutable local ingestion, validated SQLite full-text retrieval, independently verified cited DOCX generation, a bounded local MCP server, and a pinned replaceable CoWork-OS workbench integration:
+Archiv includes a human-facing Fedora command surface, a deterministic environment doctor, native searchable-text ingestion for InPage `.inp` documents, local visual OCR recovery for images and image-only PDF pages, explainable natural-language retrieval, bounded source-location verification (`archiv source`), grounded QA over local evidence (`archiv ask`), model-assisted cited report generation (`archiv report`), loopback-only OpenAI-compatible model configuration (`archiv model`), immutable local ingestion, validated SQLite full-text retrieval, independently verified cited DOCX generation, a bounded local MCP server, and a pinned replaceable CoWork-OS workbench integration:
 
 ```bash
 archiv add /path/to/documents
 archiv ingest /path/to/urdu-document.inp
+archiv ingest /path/to/scanned-page.png
 archiv model configure --endpoint http://127.0.0.1:11434 --model llama3
 archiv ask "What decisions were made and what remains unresolved?"
 archiv ask "What remains unfinished?" --explain-retrieval
@@ -47,7 +48,7 @@ user question
 
 `archiv find` remains literal and predictable. `archiv source` accepts either a canonical object SHA-256 or one explicit citation from a JSON citation, find result, ask result, or report manifest; it revalidates the immutable original and citation before returning a bounded read-only path inside Archiv-controlled storage. Natural-language `ask` and model-assisted `report` derive bounded query variants locally, without a model, embedding service, vector database, network call, or background daemon. `--explain-retrieval` shows the terms, recognized concepts, selected sources, native locators, scores, and ranks used for the decision.
 
-Ingestion validates supported inputs, stores read-only content-addressed originals, records processing in SQLite, and builds rebuildable search indexes. Native InPage100 and InPage300 files are parsed locally into stream/byte-offset text segments for search and grounded use; the immutable source is preserved, while page/frame/layout reconstruction is explicitly outside the current claim. Full-text search builds a separate replaceable FTS5 database and returns citations that are revalidated against the original and normalized hashes before use. Cited DOCX reports include exact source evidence and are reopened, structurally validated, and rendered through LibreOffice before success is reported.
+Ingestion validates supported inputs, stores read-only content-addressed originals, records processing in SQLite, and builds rebuildable search indexes. Native InPage100 and InPage300 files are parsed locally into stream/byte-offset text segments for search and grounded use; the immutable source is preserved, while page/frame/layout reconstruction is explicitly outside the current claim. When local Tesseract is installed, PNG/JPEG images and PDF pages without native text produce explicitly attributed `visual_ocr` segments with page and pixel-region citations. Missing OCR tools or requested language models skip cleanly without fabricating text or invalidating the immutable ingestion. Full-text search builds a separate replaceable FTS5 database and returns citations that are revalidated against the original and normalized hashes before use. Cited DOCX reports include exact source evidence and are reopened, structurally validated, and rendered through LibreOffice before success is reported.
 
 The model interface is strictly bound to explicit loopback-only HTTP endpoints such as Ollama, LocalAI, or vLLM. Remote hosts, cloud fallbacks, HTTPS tunnels, and credential embedding are rejected.
 
@@ -69,6 +70,7 @@ Use the everyday interface:
 archiv sample-vault "$HOME/Archiv-Sample"
 archiv add "$HOME/Archiv-Sample"
 archiv ingest "$HOME/Documents/urdu-document.inp"
+archiv ingest "$HOME/Documents/scanned-page.png"
 archiv find "unique fixture marker" --json > matches.json
 archiv source --citation-file matches.json --citation-number 1
 archiv ask "What decisions were made?" --explain-retrieval
@@ -100,6 +102,7 @@ Do not commit private documents, personal data, credentials, model keys, product
 - [Execution contract](docs/execution-contract.md)
 - [Immutable ingestion](docs/ingestion.md)
 - [Native InPage ingestion](docs/inpage-ingestion.md)
+- [Local visual OCR](docs/visual-ocr.md)
 - [Local search and citations](docs/search.md)
 - [Bounded source location](docs/source-location.md)
 - [Real-work field-trial method](docs/field-trial.md)

@@ -12,7 +12,9 @@ from archiv.ingestion.normalizers import MalformedInputError, UnsupportedFormatE
 def test_image_and_audio_record_unrun_processors_honestly(
     ingestion_corpus: Path,
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setenv("ARCHIV_OCR", "off")
     home = tmp_path / "archiv-home"
     image = ingest_file(ingestion_corpus / "scanned-page.png", home=home)
     audio = ingest_file(ingestion_corpus / "sample.wav", home=home)
@@ -23,10 +25,12 @@ def test_image_and_audio_record_unrun_processors_honestly(
     audio_transcript = json.loads(
         (Path(audio.derived_root) / "transcripts" / "status.json").read_text(encoding="utf-8")
     )
-    assert image_ocr["status"] == "not_run"
+    assert image_ocr["status"] == "skipped"
+    assert image_ocr["reason"] == "OCR disabled by ARCHIV_OCR"
     assert audio_transcript["status"] == "not_run"
     assert any(
-        item.processor == "archiv.ocr" and item.status == "skipped" for item in image.processing
+        item.processor == "archiv.visual-ocr" and item.status == "skipped"
+        for item in image.processing
     )
     assert any(
         item.processor == "archiv.transcription" and item.status == "skipped"
