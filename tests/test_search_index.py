@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from ingestion_support import VALID_INGESTION_FIXTURES
 
 from archiv.ingestion import ingest_file
@@ -83,7 +85,9 @@ def test_metadata_filters_are_exact(
 def test_unavailable_media_text_is_not_fabricated(
     ingestion_corpus: Path,
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setenv("ARCHIV_OCR", "off")
     home = tmp_path / "archiv-home"
     _ingest_corpus(ingestion_corpus, home)
     rebuild_search_index(home=home)
