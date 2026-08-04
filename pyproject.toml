@@ -28,6 +28,10 @@ dev = [
   "reportlab==4.4.9",
   "ruff>=0.9",
 ]
+ocr-benchmark = [
+  "onnxruntime==1.27.0",
+  "rapidocr==3.9.2",
+]
 
 [project.scripts]
 archiv = "archiv.cli:app"
