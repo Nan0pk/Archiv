@@ -1,0 +1,121 @@
+name: Temporary visual OCR validation
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/temporary-visual-ocr-validation.yml"
+      - "src/archiv/ingestion/**"
+      - "tests/test_visual_ocr.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: archiv-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  real-ocr:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install real OCR tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            fonts-dejavu-core \
+            poppler-utils \
+            tesseract-ocr \
+            tesseract-ocr-eng
+          python -m pip install --upgrade pip
+          python -m pip install -e '.[dev]'
+
+      - name: Prove image and image-only PDF OCR
+        env:
+          ARCHIV_OCR: auto
+          ARCHIV_OCR_LANGUAGES: eng
+          ARCHIV_OCR_SANDBOX: off
+        run: |
+          python - <<'PY'
+          from __future__ import annotations
+
+          import json
+          import os
+          from pathlib import Path
+
+          from PIL import Image, ImageDraw, ImageFont
+          from reportlab.lib.utils import ImageReader
+          from reportlab.pdfgen.canvas import Canvas
+
+          from archiv.ingestion import ingest_file
+          from archiv.search import rebuild_search_index, search_documents, validate_citation
+
+          root = Path(os.environ["RUNNER_TEMP"]) / "archiv-real-ocr-proof"
+          root.mkdir(parents=True, exist_ok=True)
+          image_path = root / "proof.png"
+          pdf_path = root / "proof.pdf"
+          home = root / "home"
+
+          image = Image.new("RGB", (1800, 320), "white")
+          draw = ImageDraw.Draw(image)
+          font = ImageFont.truetype(
+              "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+              72,
+          )
+          draw.text((70, 105), "ARCHIV VISUAL OCR PROOF 2026", fill="black", font=font)
+          image.save(image_path)
+
+          canvas = Canvas(str(pdf_path), pagesize=(1800, 320), invariant=1)
+          canvas.drawImage(ImageReader(str(image_path)), 0, 0, width=1800, height=320)
+          canvas.showPage()
+          canvas.save()
+
+          image_result = ingest_file(image_path, home=home)
+          pdf_result = ingest_file(pdf_path, home=home)
+          assert image_result.source_hash_unchanged is True
+          assert pdf_result.source_hash_unchanged is True
+
+          rebuild_search_index(home=home)
+          matches = search_documents("VISUAL", home=home, limit=10)
+          sources = {match.citation.source_name for match in matches}
+          assert sources == {"proof.png", "proof.pdf"}, sources
+          assert all(match.citation.locator.get("origin") == "visual_ocr" for match in matches)
+          assert all(validate_citation(match.citation, home=home).valid for match in matches)
+
+          image_manifest = json.loads(
+              (Path(image_result.derived_root) / "ocr" / "status.json").read_text()
+          )
+          pdf_manifest = json.loads(
+              (Path(pdf_result.derived_root) / "ocr" / "status.json").read_text()
+          )
+          assert image_manifest["status"] == "succeeded"
+          assert pdf_manifest["status"] == "succeeded"
+          assert image_manifest["pages"][0]["image_origin"] == "canonical_original"
+          assert pdf_manifest["pages"][0]["image_origin"] == "rendered_pdf_page"
+          assert pdf_manifest["pages_requiring_ocr"] == [1]
+
+          print(
+              json.dumps(
+                  {
+                      "engine": image_manifest["engine_version"],
+                      "image_segments": image_manifest["segments"],
+                      "pdf_segments": pdf_manifest["segments"],
+                      "search_sources": sorted(sources),
+                      "source_hashes_unchanged": True,
+                  },
+                  sort_keys=True,
+              )
+          )
+          PY
