@@ -76,9 +76,7 @@ def _candidate_plan(
             available: list[str] = []
             executable = shutil.which("tesseract")
             if executable is not None:
-                with contextlib.suppress(
-                    OSError, subprocess.SubprocessError, OcrBenchmarkError
-                ):
+                with contextlib.suppress(OSError, subprocess.SubprocessError, OcrBenchmarkError):
                     _, available = _language_inventory(executable)
             selected = list(candidates) if candidates else default_candidates(available)
             if not selected:
