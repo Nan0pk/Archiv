@@ -268,10 +268,14 @@ def _tool_output(executable: str, arguments: list[str]) -> str:
 def _language_inventory(executable: str) -> tuple[Path | None, list[str]]:
     output = _tool_output(executable, ["--list-langs"])
     lines = [line.strip() for line in output.splitlines() if line.strip()]
-    header = lines[0] if lines and lines[0].lower().startswith("list of available languages") else ""
+    header = (
+        lines[0] if lines and lines[0].lower().startswith("list of available languages") else ""
+    )
     match = re.search(r'in "([^"]+)"', header)
     tessdata_dir = Path(match.group(1)).expanduser().resolve() if match else None
-    languages = [line for line in lines if not line.lower().startswith("list of available languages")]
+    languages = [
+        line for line in lines if not line.lower().startswith("list of available languages")
+    ]
     return tessdata_dir, sorted(languages)
 
 
@@ -282,6 +286,7 @@ def _model_evidence(
     languages = sorted({language for candidate in candidates for language in candidate.split("+")})
     files: list[dict[str, object]] = []
     warnings: list[str] = []
+    total_bytes = 0
     if tessdata_dir is None:
         warnings.append("Tesseract did not expose its tessdata directory in --list-langs output.")
     else:
@@ -290,18 +295,20 @@ def _model_evidence(
             if not path.is_file():
                 warnings.append(f"traineddata file not found for {language}: {path}")
                 continue
+            size = path.stat().st_size
+            total_bytes += size
             files.append(
                 {
                     "language": language,
                     "path": str(path),
-                    "bytes": path.stat().st_size,
+                    "bytes": size,
                     "sha256": sha256_file(path),
                 }
             )
     return {
         "tessdata_dir": str(tessdata_dir) if tessdata_dir else None,
         "files": files,
-        "total_bytes": sum(int(item["bytes"]) for item in files),
+        "total_bytes": total_bytes,
         "warnings": warnings,
         "license_status": "operator_verification_required",
     }
