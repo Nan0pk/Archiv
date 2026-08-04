@@ -10,6 +10,7 @@ from archiv.contracts import ProcessingEvidence
 from archiv.hashing import sha256_file
 from archiv.ingestion.ledger import now_iso, record_processing
 from archiv.ingestion.normalizers import normalize
+from archiv.ingestion.visual_ocr import VisualOcrRun, run_visual_ocr
 from archiv.storage.database import ArchivDatabase
 from archiv.storage.layout import ArchivLayout
 
@@ -116,6 +117,12 @@ def derive(
         )
         raise
 
+    ocr_run: VisualOcrRun | None = None
+    if normalized.kind in {"image", "pdf"}:
+        ocr_run = run_visual_ocr(original, normalized, root)
+        normalized.segments.extend(ocr_run.segments)
+        normalized.metadata["visual_ocr"] = ocr_run.summary
+
     evidence: list[ProcessingEvidence] = []
     normalized_path = root / "normalized" / "document.json"
     normalized_item = ProcessingEvidence(
@@ -167,14 +174,31 @@ def derive(
             started_at=started_at,
         )
 
+    if ocr_run is not None:
+        _append(
+            evidence,
+            database,
+            digest,
+            ProcessingEvidence(
+                processor="archiv.visual-ocr",
+                processor_version="1",
+                status=ocr_run.status,
+                output_kind="visual-ocr-manifest",
+                output_path=str(ocr_run.manifest_path),
+                output_sha256=ocr_run.manifest_sha256,
+                error=ocr_run.error,
+            ),
+            started_at=started_at,
+        )
+
     if normalized.kind == "image":
-        _derive_image_status(evidence, database, digest, root, normalized.metadata, started_at)
+        _derive_image_preview(evidence, database, digest, root, normalized.metadata, started_at)
     if normalized.kind == "audio":
         _derive_audio_status(evidence, database, digest, root, started_at)
     return evidence
 
 
-def _derive_image_status(
+def _derive_image_preview(
     evidence: list[ProcessingEvidence],
     database: ArchivDatabase,
     digest: str,
@@ -182,25 +206,6 @@ def _derive_image_status(
     metadata: dict[str, object],
     started_at: str,
 ) -> None:
-    ocr_path = root / "ocr" / "status.json"
-    _append(
-        evidence,
-        database,
-        digest,
-        ProcessingEvidence(
-            processor="archiv.ocr",
-            processor_version="1",
-            status="skipped",
-            output_kind="ocr-status",
-            output_path=str(ocr_path),
-            output_sha256=_write_json(
-                ocr_path,
-                {"status": "not_run", "reason": "OCR processor not installed"},
-            ),
-        ),
-        started_at=started_at,
-    )
-
     preview_path = root / "previews" / "metadata.json"
     _append(
         evidence,
