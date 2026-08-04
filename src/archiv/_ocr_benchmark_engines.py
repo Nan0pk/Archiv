@@ -42,7 +42,7 @@ def _tool_output(executable: str, arguments: Sequence[str]) -> str:
     return completed.stdout.strip() or completed.stderr.strip()
 
 
-def _language_inventory(executable: str) -> tuple[Path | None, list[str]]:
+def language_inventory(executable: str) -> tuple[Path | None, list[str]]:
     lines = [
         line.strip()
         for line in _tool_output(executable, ["--list-langs"]).splitlines()
@@ -143,7 +143,7 @@ def tesseract_runner(candidate: str) -> CandidateRunner:
                 "Tesseract executable not installed",
             )
         try:
-            directory, available = _language_inventory(executable)
+            directory, available = language_inventory(executable)
             missing = [value for value in candidate.split("+") if value not in available]
             if missing:
                 return CandidateExecution(
