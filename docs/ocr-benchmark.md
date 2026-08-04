@@ -6,6 +6,8 @@ Archiv includes a small operator-run benchmark for measuring installed Tesseract
 archiv benchmark-ocr --output "$HOME/archiv-ocr-benchmark"
 ```
 
+See the [measured multilingual OCR baseline](ocr-benchmark-report.md) for the first real Tesseract results and their limitations.
+
 The command creates four synthetic PNG fixtures:
 
 - clean English;
@@ -26,8 +28,12 @@ For each installed candidate, Archiv records:
 - omitted lines and inserted characters;
 - wall-clock time;
 - peak process RSS when GNU `time` is available;
-- Tesseract version, executable hash and available language models;
+- Tesseract version and executable hash;
+- the exact traineddata path, byte size and SHA-256 for selected language models;
+- available language models;
 - fixture image, font and corpus-manifest hashes.
+
+Model licence status is recorded as requiring operator verification. Archiv does not infer redistribution or usage terms from an installed filename.
 
 The default candidate matrix is:
 
