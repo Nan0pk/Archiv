@@ -150,15 +150,19 @@ def _record(
         raise OcrBenchmarkError(f"corpus image is unavailable: {relative}")
     if image.stat().st_size > MAX_FIXTURE_BYTES:
         raise OcrBenchmarkError(f"corpus image exceeds {MAX_FIXTURE_BYTES} bytes")
-    lines = entry.get("expected_lines")
-    tags = entry.get("tags", [])
-    if (
-        not isinstance(lines, list)
-        or not lines
-        or not all(isinstance(value, str) and value.strip() for value in lines)
+    lines_value = entry.get("expected_lines")
+    tags_value = entry.get("tags", [])
+    if not isinstance(lines_value, list):
+        raise OcrBenchmarkError("corpus expected_lines must contain non-empty strings")
+    line_values = cast(list[object], lines_value)
+    if not line_values or not all(
+        isinstance(value, str) and value.strip() for value in line_values
     ):
         raise OcrBenchmarkError("corpus expected_lines must contain non-empty strings")
-    if not isinstance(tags, list) or not all(isinstance(value, str) for value in tags):
+    if not isinstance(tags_value, list):
+        raise OcrBenchmarkError("corpus tags must be strings")
+    tag_values = cast(list[object], tags_value)
+    if not all(isinstance(value, str) for value in tag_values):
         raise OcrBenchmarkError("corpus tags must be strings")
     if private and not all(
         isinstance(entry.get(key), str) and cast(str, entry[key]).strip()
@@ -169,16 +173,16 @@ def _record(
         fixture_id=strings["fixture_id"],
         language=strings["language"],
         ground_truth=strings["ground_truth"],
-        expected_lines=tuple(cast(list[str], lines)),
+        expected_lines=tuple(cast(list[str], line_values)),
         image_path=image,
         image_sha256=sha256_file(image),
-        tags=tuple(cast(list[str], tags)),
+        tags=tuple(cast(list[str], tag_values)),
         source_kind=strings["source_kind"],
         private=private,
     )
 
 
-def _fixture_record_from_entry(
+def fixture_record_from_entry(
     entry: Mapping[str, object],
     root: Path,
     private: bool,
@@ -233,15 +237,20 @@ def build_corpus(
         if not manifest_path.is_file():
             raise OcrBenchmarkError(f"private corpus manifest not found: {manifest_path}")
         payload_value: object = json.loads(manifest_path.read_text(encoding="utf-8"))
-        if not isinstance(payload_value, dict) or payload_value.get("schema_version") != "1":
-            raise OcrBenchmarkError("private corpus manifest schema_version must be '1'")
+        if not isinstance(payload_value, dict):
+            raise OcrBenchmarkError("private corpus manifest must be an object")
         payload = cast(dict[str, object], payload_value)
+        if payload.get("schema_version") != "1":
+            raise OcrBenchmarkError("private corpus manifest schema_version must be '1'")
         fixtures_value = payload.get("fixtures")
-        if not isinstance(fixtures_value, list) or len(fixtures_value) > MAX_PRIVATE_FIXTURES:
+        if not isinstance(fixtures_value, list):
+            raise OcrBenchmarkError("private corpus fixtures must be a list")
+        fixture_values = cast(list[object], fixtures_value)
+        if len(fixture_values) > MAX_PRIVATE_FIXTURES:
             raise OcrBenchmarkError(
                 f"private corpus fixtures must be a list of at most {MAX_PRIVATE_FIXTURES}"
             )
-        for value in fixtures_value:
+        for value in fixture_values:
             if not isinstance(value, dict):
                 raise OcrBenchmarkError("private corpus fixture must be an object")
             entry = cast(dict[str, object], value)
