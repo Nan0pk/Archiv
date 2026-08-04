@@ -54,19 +54,19 @@ def run(request_path: Path, response_path: Path) -> None:
 
     module = importlib.import_module("rapidocr")
     onnxruntime_module = importlib.import_module("onnxruntime")
-    rapidocr = cast(object, getattr(module, "RapidOCR"))
-    lang_rec = cast(object, getattr(module, "LangRec"))
-    model_type = cast(object, getattr(module, "ModelType"))
-    ocr_version = cast(object, getattr(module, "OCRVersion"))
-    engine_type = cast(object, getattr(module, "EngineType"))
+    rapidocr = cast(object, module.RapidOCR)
+    lang_rec = cast(object, module.LangRec)
+    model_type = cast(object, module.ModelType)
+    ocr_version = cast(object, module.OCRVersion)
+    engine_type = cast(object, module.EngineType)
     engine_factory = cast(type[_RapidEngine], rapidocr)
     engine = engine_factory(
         params={
             "Global.model_root_dir": model_root,
-            "Rec.lang_type": getattr(lang_rec, "ARABIC"),
-            "Rec.model_type": getattr(model_type, "MOBILE"),
-            "Rec.ocr_version": getattr(ocr_version, "PPOCRV5"),
-            "Rec.engine_type": getattr(engine_type, "ONNXRUNTIME"),
+            "Rec.lang_type": lang_rec.ARABIC,
+            "Rec.model_type": model_type.MOBILE,
+            "Rec.ocr_version": ocr_version.PPOCRV5,
+            "Rec.engine_type": engine_type.ONNXRUNTIME,
         }
     )
 
