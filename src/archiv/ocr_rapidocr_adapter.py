@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import importlib
 import json
 from collections.abc import Mapping
@@ -63,7 +64,7 @@ def _directory_evidence(path: Path) -> dict[str, object]:
     }
 
 
-def run(request_path: Path, response_path: Path) -> None:
+def _run_engine(request_path: Path, response_path: Path) -> None:
     request_value: object = json.loads(request_path.read_text(encoding="utf-8"))
     if not isinstance(request_value, dict):
         raise ValueError("request must be an object")
@@ -146,6 +147,15 @@ def run(request_path: Path, response_path: Path) -> None:
         json.dumps(response, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
         encoding="utf-8",
     )
+
+
+def run(request_path: Path, response_path: Path) -> None:
+    """Run RapidOCR while keeping download chatter separate from failure evidence."""
+
+    diagnostic_path = response_path.with_name("rapidocr-adapter.log")
+    with diagnostic_path.open("w", encoding="utf-8") as diagnostic:
+        with contextlib.redirect_stdout(diagnostic), contextlib.redirect_stderr(diagnostic):
+            _run_engine(request_path, response_path)
 
 
 def main() -> None:
