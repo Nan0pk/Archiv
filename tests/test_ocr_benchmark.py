@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from pathlib import Path
 from typing import cast
 
@@ -62,12 +63,7 @@ def _execution(
 
 
 def test_score_text_preserves_legacy_metrics_and_reading_order() -> None:
-    exact = benchmark.score_text(
-        "ثبوت ۱۲۳۔",
-        "ثبوت ۱۲۳۔",
-        ["ثبوت ۱۲۳۔"],
-        ["ثبوت ۱۲۳۔"],
-    )
+    exact = benchmark.score_text("ثبوت ۱۲۳۔", "ثبوت ۱۲۳۔", ["ثبوت ۱۲۳۔"], ["ثبوت ۱۲۳۔"])
     assert exact["cer"] == 0.0
     assert exact["wer"] == 0.0
     assert exact["punctuation_error_rate"] == 0.0
@@ -104,25 +100,23 @@ def test_private_manifest_requires_lawful_evidence_and_blocks_path_escape(
 ) -> None:
     private = tmp_path / "private"
     private.mkdir()
-    manifest = {
-        "schema_version": "1",
-        "fixtures": [
-            {
-                "fixture_id": "bad",
-                "language": "Urdu",
-                "ground_truth": "secret",
-                "expected_lines": ["secret"],
-                "image_path": "../outside.png",
-                "source_kind": "private_inpage_render",
-                "lawful_basis": "operator owns the document",
-                "generation_method": "local InPage export",
-            }
-        ],
+    manifest_entry: dict[str, object] = {
+        "fixture_id": "bad",
+        "language": "Urdu",
+        "ground_truth": "secret",
+        "expected_lines": ["secret"],
+        "image_path": "../outside.png",
+        "source_kind": "private_inpage_render",
+        "lawful_basis": "operator owns the document",
+        "generation_method": "local InPage export",
     }
-    (private / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    (private / "manifest.json").write_text(
+        json.dumps({"schema_version": "1", "fixtures": [manifest_entry]}),
+        encoding="utf-8",
+    )
     with pytest.raises(benchmark.OcrBenchmarkError, match="remain inside"):
         benchmark._fixture_record_from_entry(  # pyright: ignore[reportPrivateUsage]
-            cast(dict[str, object], manifest["fixtures"][0]),
+            manifest_entry,
             private,
             True,
         )
@@ -239,7 +233,7 @@ def test_run_benchmark_writes_deterministic_shareable_output(
         return {"records": [fixture], "manifest_sha256": "manifest"}
 
     def runner(
-        fixtures: list[benchmark.FixtureRecord] | tuple[benchmark.FixtureRecord, ...],
+        fixtures: Sequence[benchmark.FixtureRecord],
         output_dir: Path,
     ) -> benchmark.CandidateExecution:
         del output_dir
