@@ -1,7 +1,5 @@
 """Reproducible local OCR engine comparison on lawful multilingual fixtures."""
 
-# pyright: reportPrivateUsage=false
-
 from __future__ import annotations
 
 import contextlib
@@ -19,6 +17,7 @@ from typing import cast
 from archiv._ocr_benchmark_core import (
     SCHEMA_VERSION,
     CandidateExecution,
+    CandidateStatus,
     CandidateRunner,
     EngineText,
     FixtureRecord,
@@ -28,26 +27,30 @@ from archiv._ocr_benchmark_core import (
     normalize_text,
     score_text,
 )
-from archiv._ocr_benchmark_corpus import _fixture_record_from_entry, build_corpus
+from archiv._ocr_benchmark_corpus import build_corpus, fixture_record_from_entry
 from archiv._ocr_benchmark_engines import (
-    _blocked_kraken_runner,
-    _language_inventory,
-    _rapidocr_runner,
-    _tesseract_runner,
+    blocked_kraken_runner,
     default_candidates,
+    language_inventory,
+    rapidocr_runner,
+    tesseract_runner,
 )
 from archiv._ocr_benchmark_results import (
-    _score_execution,
-    _summary_markdown,
     rank_candidates,
     route_evidence,
     sanitized_summary,
+    score_execution,
+    summary_markdown,
 )
 from archiv.hashing import sha256_file
+
+_fixture_record_from_entry = fixture_record_from_entry
+_score_execution = score_execution
 
 __all__ = [
     "CandidateExecution",
     "CandidateRunner",
+    "CandidateStatus",
     "EngineText",
     "FixtureRecord",
     "OcrBenchmarkError",
@@ -77,7 +80,7 @@ def _candidate_plan(
             executable = shutil.which("tesseract")
             if executable is not None:
                 with contextlib.suppress(OSError, subprocess.SubprocessError, OcrBenchmarkError):
-                    _, available = _language_inventory(executable)
+                    _, available = language_inventory(executable)
             selected = list(candidates) if candidates else default_candidates(available)
             if not selected:
                 selected = [
@@ -89,12 +92,12 @@ def _candidate_plan(
                     "eng+ara+urd_naw",
                 ]
             plan.extend(
-                (f"tesseract:{candidate}", _tesseract_runner(candidate)) for candidate in selected
+                (f"tesseract:{candidate}", tesseract_runner(candidate)) for candidate in selected
             )
         elif engine == "rapidocr":
-            plan.append(("rapidocr:ppocrv5-arabic-mobile", _rapidocr_runner))
+            plan.append(("rapidocr:ppocrv5-arabic-mobile", rapidocr_runner))
         elif engine == "kraken":
-            plan.append(("kraken:printed-urdu", _blocked_kraken_runner))
+            plan.append(("kraken:printed-urdu", blocked_kraken_runner))
         else:
             raise OcrBenchmarkError(f"unsupported benchmark engine: {engine}")
     return plan
@@ -142,17 +145,18 @@ def run_benchmark(
     output_dir.mkdir(parents=True, exist_ok=True)
     corpus = build_corpus(output_dir, private_corpus)
     records_value = corpus.pop("records")
-    if not isinstance(records_value, list) or not all(
-        isinstance(item, FixtureRecord) for item in records_value
-    ):
+    if not isinstance(records_value, list):
         raise OcrBenchmarkError("generated corpus records are invalid")
-    fixtures = cast(list[FixtureRecord], records_value)
+    record_values = cast(list[object], records_value)
+    if not all(isinstance(item, FixtureRecord) for item in record_values):
+        raise OcrBenchmarkError("generated corpus records are invalid")
+    fixtures = cast(list[FixtureRecord], record_values)
     selected_engines = list(engines or ("tesseract",))
     if not selected_engines:
         raise OcrBenchmarkError("at least one OCR engine must be selected")
     overrides = dict(runner_overrides or {})
     results = [
-        _score_execution(
+        score_execution(
             candidate_id,
             overrides.get(candidate_id, runner)(fixtures, output_dir),
             fixtures,
@@ -223,7 +227,7 @@ def run_benchmark(
         encoding="utf-8",
     )
     summary_path = output_dir / "summary.md"
-    summary_path.write_text(_summary_markdown(report), encoding="utf-8")
+    summary_path.write_text(summary_markdown(report), encoding="utf-8")
     report.update(
         {
             "report_path": str(report_path),
