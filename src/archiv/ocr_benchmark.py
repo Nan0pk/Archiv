@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -264,12 +265,46 @@ def _tool_output(executable: str, arguments: list[str]) -> str:
     return completed.stdout.strip() or completed.stderr.strip()
 
 
-def _available_languages(executable: str) -> list[str]:
-    return sorted(
-        line.strip()
-        for line in _tool_output(executable, ["--list-langs"]).splitlines()
-        if line.strip() and not line.lower().startswith("list of available languages")
-    )
+def _language_inventory(executable: str) -> tuple[Path | None, list[str]]:
+    output = _tool_output(executable, ["--list-langs"])
+    lines = [line.strip() for line in output.splitlines() if line.strip()]
+    header = lines[0] if lines and lines[0].lower().startswith("list of available languages") else ""
+    match = re.search(r'in "([^"]+)"', header)
+    tessdata_dir = Path(match.group(1)).expanduser().resolve() if match else None
+    languages = [line for line in lines if not line.lower().startswith("list of available languages")]
+    return tessdata_dir, sorted(languages)
+
+
+def _model_evidence(
+    tessdata_dir: Path | None,
+    candidates: Sequence[str],
+) -> dict[str, object]:
+    languages = sorted({language for candidate in candidates for language in candidate.split("+")})
+    files: list[dict[str, object]] = []
+    warnings: list[str] = []
+    if tessdata_dir is None:
+        warnings.append("Tesseract did not expose its tessdata directory in --list-langs output.")
+    else:
+        for language in languages:
+            path = tessdata_dir / f"{language}.traineddata"
+            if not path.is_file():
+                warnings.append(f"traineddata file not found for {language}: {path}")
+                continue
+            files.append(
+                {
+                    "language": language,
+                    "path": str(path),
+                    "bytes": path.stat().st_size,
+                    "sha256": sha256_file(path),
+                }
+            )
+    return {
+        "tessdata_dir": str(tessdata_dir) if tessdata_dir else None,
+        "files": files,
+        "total_bytes": sum(int(item["bytes"]) for item in files),
+        "warnings": warnings,
+        "license_status": "operator_verification_required",
+    }
 
 
 def default_candidates(available: Sequence[str]) -> list[str]:
@@ -388,7 +423,7 @@ def run_benchmark(output_dir: Path, candidates: Sequence[str] | None = None) -> 
     if not isinstance(fixtures_value, list):
         raise OcrBenchmarkError("generated corpus manifest is invalid")
     fixtures = cast(list[dict[str, object]], fixtures_value)
-    available = _available_languages(executable)
+    tessdata_dir, available = _language_inventory(executable)
     selected = list(candidates) if candidates else default_candidates(available)
     missing = sorted(
         language
@@ -443,6 +478,7 @@ def run_benchmark(output_dir: Path, candidates: Sequence[str] | None = None) -> 
         "available_languages": available,
         "candidates": selected,
         "recommended_candidate": recommended,
+        "model_evidence": _model_evidence(tessdata_dir, selected),
         "environment": {
             "platform": platform.platform(),
             "python": sys.version.split()[0],
