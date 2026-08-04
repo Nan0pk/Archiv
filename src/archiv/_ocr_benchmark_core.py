@@ -338,7 +338,7 @@ def edit_counts[T](reference: Sequence[T], hypothesis: Sequence[T]) -> EditCount
     return EditCounts(substitutions, deletions, insertions)
 
 
-def _category(text: str, prefix: str) -> list[str]:
+def category_characters(text: str, prefix: str) -> list[str]:
     return [character for character in text if unicodedata.category(character).startswith(prefix)]
 
 
@@ -363,10 +363,10 @@ def score_text(
     characters = edit_counts(list(reference), list(hypothesis))
     reference_words = reference.split()
     words = edit_counts(reference_words, hypothesis.split())
-    reference_punctuation = _category(reference, "P")
-    reference_numerals = _category(reference, "N")
-    punctuation = edit_counts(reference_punctuation, _category(hypothesis, "P"))
-    numerals = edit_counts(reference_numerals, _category(hypothesis, "N"))
+    reference_punctuation = category_characters(reference, "P")
+    reference_numerals = category_characters(reference, "N")
+    punctuation = edit_counts(reference_punctuation, category_characters(hypothesis, "P"))
+    numerals = edit_counts(reference_numerals, category_characters(hypothesis, "N"))
     reference_lines = tuple(normalize_text(line) for line in (expected_lines or (reference,)))
     hypothesis_lines = tuple(
         normalize_text(line) for line in (observed_lines or normalize_lines(hypothesis))
