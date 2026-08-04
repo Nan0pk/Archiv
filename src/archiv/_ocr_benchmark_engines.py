@@ -126,7 +126,7 @@ def _run_process(
     return completed, elapsed, peak_rss
 
 
-def _tesseract_runner(candidate: str) -> CandidateRunner:
+def tesseract_runner(candidate: str) -> CandidateRunner:
     def run(
         fixtures: Sequence[FixtureRecord],
         output_dir: Path,
@@ -220,7 +220,7 @@ def _tesseract_runner(candidate: str) -> CandidateRunner:
     return run
 
 
-def _rapidocr_runner(
+def rapidocr_runner(
     fixtures: Sequence[FixtureRecord],
     output_dir: Path,
 ) -> CandidateExecution:
@@ -286,15 +286,18 @@ def _rapidocr_runner(
         )
     try:
         payload_value: object = json.loads(response.read_text(encoding="utf-8"))
-        if not isinstance(payload_value, dict) or payload_value.get("status") != "succeeded":
+        if not isinstance(payload_value, dict):
             raise OcrBenchmarkError("RapidOCR adapter response is invalid")
         payload = cast(dict[str, object], payload_value)
+        if payload.get("status") != "succeeded":
+            raise OcrBenchmarkError("RapidOCR adapter response is invalid")
         values = payload.get("results")
         if not isinstance(values, list):
             raise OcrBenchmarkError("RapidOCR adapter results are invalid")
+        result_values = cast(list[object], values)
         outputs: dict[str, EngineText] = {}
-        per_fixture = elapsed / max(1, len(values))
-        for value in values:
+        per_fixture = elapsed / max(1, len(result_values))
+        for value in result_values:
             if not isinstance(value, dict):
                 raise OcrBenchmarkError("RapidOCR result is invalid")
             item = cast(dict[str, object], value)
@@ -303,11 +306,14 @@ def _rapidocr_runner(
             lines = item.get("lines")
             if not isinstance(fixture_id, str) or not isinstance(text, str):
                 raise OcrBenchmarkError("RapidOCR text result is invalid")
-            if not isinstance(lines, list) or not all(isinstance(line, str) for line in lines):
+            if not isinstance(lines, list):
+                raise OcrBenchmarkError("RapidOCR line result is invalid")
+            line_values = cast(list[object], lines)
+            if not all(isinstance(line, str) for line in line_values):
                 raise OcrBenchmarkError("RapidOCR line result is invalid")
             outputs[fixture_id] = EngineText(
                 text,
-                tuple(cast(list[str], lines)),
+                tuple(cast(list[str], line_values)),
                 per_fixture,
                 peak_rss,
                 item.get("coordinates"),
@@ -337,7 +343,7 @@ def _rapidocr_runner(
         )
 
 
-def _blocked_kraken_runner(
+def blocked_kraken_runner(
     fixtures: Sequence[FixtureRecord],
     output_dir: Path,
 ) -> CandidateExecution:
