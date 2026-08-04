@@ -19,10 +19,14 @@ ARCHIV_HOME/
 ├── derived/<digest>/
 │   ├── normalized/document.json
 │   ├── extracted/text.txt
-│   ├── ocr/status.json
+│   ├── ocr/
+│   │   ├── status.json
+│   │   └── page-*.tsv
 │   ├── transcripts/status.json
 │   ├── tables/tables.json
-│   └── previews/metadata.json
+│   └── previews/
+│       ├── metadata.json
+│       └── pages/page-*.png
 ├── indexes/
 ├── temporary/
 └── archiv.sqlite3
@@ -59,7 +63,7 @@ Archiv supports native InPage INP, UTF-8 TXT/Markdown, PDF, DOCX, XLSX, PPTX, PN
 - packaged MathML formula documents: ODF;
 - packaged database front ends: ODB, under the metadata-only policy below.
 
-The normalized JSON uses format-native locators such as InPage content stream and byte offset, page, paragraph, sheet/cell, slide/object, drawing page/object, formula/MathML representation and database object type/name.
+The normalized JSON uses format-native locators such as InPage content stream and byte offset, page, paragraph, sheet/cell, slide/object, drawing page/object, formula/MathML representation and database object type/name. Visual OCR spans use explicit `visual_ocr` origin, page, line, pixel-region, engine, language and confidence locators.
 
 ### Native InPage searchable-text policy
 
@@ -85,7 +89,15 @@ Connection descriptors, usernames, connection URLs and query commands are counte
 
 The current claim does **not** include extracting table rows, query results, database schemas beyond declared object names, form/report contents or protected/encrypted ODB packages.
 
-OCR and transcription are not silently simulated. Image and audio ingestion create explicit `not_run` status artifacts until real local processors are integrated.
+### Local visual OCR policy
+
+When local Tesseract is available, Archiv can recover visible text from PNG/JPEG images. For PDFs, it uses `pdftoppm` only on pages whose native extraction is empty, then applies the same OCR path. Missing processors or requested language models produce explicit skipped evidence rather than fabricated text or failed ingestion.
+
+OCR spans are appended to the normalized document only with `origin: visual_ocr`. Native text is never overwritten. Raw Tesseract TSV, rendered page hashes, engine and renderer versions, executable hashes, selected languages, limits and warnings are retained under `derived/<digest>/ocr` and `previews/pages`. Those spans automatically participate in extracted text, search, citations, reports and MCP while remaining distinguishable from native extraction.
+
+The first processor is a bounded local baseline, not an accuracy claim. Urdu, Arabic and English language models must be installed locally and selected through `ARCHIV_OCR_LANGUAGES`; all engine and model decisions remain subject to Archiv-specific measurements. See [Local visual OCR](visual-ocr.md).
+
+Transcription is not silently simulated. Audio ingestion continues to create an explicit `not_run` status artifact until a real local processor is integrated.
 
 ## Trust rules
 
