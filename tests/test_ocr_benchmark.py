@@ -1,18 +1,20 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Sequence
 from pathlib import Path
 from typing import cast
 
 import pytest
-from click.utils import strip_ansi
 from PIL import Image
 from typer import Typer
 from typer.testing import CliRunner
 
 import archiv.ocr_benchmark as benchmark
 from archiv.ocr_benchmark_cli import register_ocr_benchmark_command
+
+ANSI_ESCAPE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
 
 def _fixture(tmp_path: Path, *, private: bool = False) -> benchmark.FixtureRecord:
@@ -273,7 +275,7 @@ def test_cli_keeps_candidates_option_and_adds_engine_and_private_corpus_options(
     register_ocr_benchmark_command(app)
     result = CliRunner().invoke(app, ["benchmark-ocr", "--help"])
     assert result.exit_code == 0
-    output = strip_ansi(result.stdout)
+    output = ANSI_ESCAPE.sub("", result.stdout)
     assert "--candidates" in output
     assert "--engines" in output
     assert "--private-corpus" in output
