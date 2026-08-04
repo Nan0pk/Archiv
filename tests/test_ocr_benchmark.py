@@ -36,13 +36,13 @@ def test_score_text_reports_exact_and_inserted_text() -> None:
 
 
 def test_default_candidates_require_installed_language_models() -> None:
-    assert benchmark._default_candidates(["ara", "eng", "osd", "urd"]) == [
+    assert benchmark.default_candidates(["ara", "eng", "osd", "urd"]) == [
         "eng",
         "ara",
         "urd",
         "eng+ara+urd",
     ]
-    assert benchmark._default_candidates(["ara", "eng", "urd_naw"]) == [
+    assert benchmark.default_candidates(["ara", "eng", "urd_naw"]) == [
         "eng",
         "ara",
         "urd_naw",
