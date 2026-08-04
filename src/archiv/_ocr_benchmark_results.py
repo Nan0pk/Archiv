@@ -10,7 +10,7 @@ from archiv._ocr_benchmark_core import (
     CandidateExecution,
     FixtureRecord,
     OcrBenchmarkError,
-    _category,
+    category_characters,
     score_text,
 )
 
@@ -23,6 +23,13 @@ def _edit_total(value: object) -> int:
     if not all(isinstance(count, int) for count in counts):
         raise OcrBenchmarkError("benchmark edit metrics are invalid")
     return sum(cast(list[int], counts))
+
+
+def _validated_float(mapping: Mapping[str, object], key: str) -> float:
+    value = mapping.get(key)
+    if not isinstance(value, int | float):
+        raise OcrBenchmarkError(f"benchmark {key} is invalid")
+    return float(value)
 
 
 def _aggregate(
@@ -49,23 +56,13 @@ def _aggregate(
         reference = metrics.get("reference")
         if not isinstance(reference, str):
             raise OcrBenchmarkError("benchmark reference is invalid")
-        punct_count = len(_category(reference, "P"))
-        num_count = len(_category(reference, "N"))
-        punct_accuracy = metrics.get("punctuation_accuracy")
-        num_accuracy = metrics.get("numeral_accuracy")
-        if not isinstance(punct_accuracy, int | float) or not isinstance(
-            num_accuracy,
-            int | float,
-        ):
-            raise OcrBenchmarkError("benchmark category accuracy is invalid")
-        punctuation += float(punct_accuracy) * punct_count
-        numeral += float(num_accuracy) * num_count
+        punct_count = len(category_characters(reference, "P"))
+        num_count = len(category_characters(reference, "N"))
+        punctuation += _validated_float(metrics, "punctuation_accuracy") * punct_count
+        numeral += _validated_float(metrics, "numeral_accuracy") * num_count
         punctuation_count += punct_count
         numeral_count += num_count
-        timing = run.get("elapsed_seconds")
-        if not isinstance(timing, int | float):
-            raise OcrBenchmarkError("benchmark timing is invalid")
-        elapsed += float(timing)
+        elapsed += _validated_float(run, "elapsed_seconds")
         peak = run.get("peak_rss_kib")
         if isinstance(peak, int):
             peaks.append(peak)
@@ -88,7 +85,7 @@ def _aggregate(
     }
 
 
-def _score_execution(
+def score_execution(
     candidate_id: str,
     execution: CandidateExecution,
     fixtures: Sequence[FixtureRecord],
@@ -147,10 +144,7 @@ def _aggregate_number(item: Mapping[str, object], key: str) -> float:
     aggregate = item.get("aggregate")
     if not isinstance(aggregate, dict):
         raise OcrBenchmarkError("candidate aggregate is unavailable")
-    value = aggregate.get(key)
-    if not isinstance(value, int | float):
-        raise OcrBenchmarkError(f"aggregate {key} is invalid")
-    return float(value)
+    return _validated_float(cast(dict[str, object], aggregate), key)
 
 
 def rank_candidates(results: Sequence[dict[str, object]]) -> list[dict[str, object]]:
@@ -189,25 +183,27 @@ def _group_aggregate(
     value = result.get("runs")
     if not isinstance(value, list):
         return None
+    run_values = cast(list[object], value)
     runs: list[dict[str, object]] = []
-    for item in value:
+    for item in run_values:
         if not isinstance(item, dict):
             continue
         run = cast(dict[str, object], item)
         run_tags = run.get("tags", [])
-        if isinstance(run_tags, list) and tags.issubset(
-            {tag for tag in run_tags if isinstance(tag, str)}
-        ):
+        if not isinstance(run_tags, list):
+            continue
+        tag_values = cast(list[object], run_tags)
+        if tags.issubset({tag for tag in tag_values if isinstance(tag, str)}):
             runs.append(run)
     if not runs:
         return None
     aggregate = _aggregate(str(result.get("candidate_id")), runs)
     return {
-        "cer": cast(float, aggregate["cer"]),
-        "wer": cast(float, aggregate["wer"]),
-        "reading_order_error_rate": cast(
-            float,
-            aggregate["reading_order_error_rate"],
+        "cer": _validated_float(aggregate, "cer"),
+        "wer": _validated_float(aggregate, "wer"),
+        "reading_order_error_rate": _validated_float(
+            aggregate,
+            "reading_order_error_rate",
         ),
     }
 
@@ -230,13 +226,13 @@ def route_evidence(results: Sequence[dict[str, object]]) -> dict[str, object]:
                     options.append({"candidate_id": result.get("candidate_id"), **metrics})
         options.sort(
             key=lambda item: (
-                float(item["cer"]),
-                float(item["wer"]),
-                str(item["candidate_id"]),
+                _validated_float(item, "cer"),
+                _validated_float(item, "wer"),
+                str(item.get("candidate_id")),
             )
         )
         routes[route] = {
-            "best_measured_candidate": (options[0]["candidate_id"] if options else None),
+            "best_measured_candidate": (options[0].get("candidate_id") if options else None),
             "measurements": options,
             "automatic_indexing_decision": (
                 "not_automated; review measured failures and source risk"
@@ -249,12 +245,14 @@ def _sanitize(value: object, key: str = "") -> object:
     if any(token in key.lower() for token in ("path", "root", "directory")):
         return "redacted-local-path"
     if isinstance(value, dict):
+        mapping = cast(dict[object, object], value)
         return {
             str(child_key): _sanitize(child_value, str(child_key))
-            for child_key, child_value in value.items()
+            for child_key, child_value in mapping.items()
         }
     if isinstance(value, list):
-        return [_sanitize(item) for item in value]
+        items = cast(list[object], value)
+        return [_sanitize(item) for item in items]
     return value
 
 
@@ -264,8 +262,9 @@ def sanitized_summary(report: Mapping[str, object]) -> dict[str, object]:
     value = report.get("candidate_results", [])
     if not isinstance(value, list):
         raise OcrBenchmarkError("candidate results are invalid")
-    candidates = []
-    for item in value:
+    result_values = cast(list[object], value)
+    candidates: list[dict[str, object]] = []
+    for item in result_values:
         if not isinstance(item, dict):
             continue
         candidate = cast(dict[str, object], item)
@@ -299,13 +298,13 @@ def sanitized_summary(report: Mapping[str, object]) -> dict[str, object]:
     }
 
 
-def _summary_markdown(report: Mapping[str, object]) -> str:
+def summary_markdown(report: Mapping[str, object]) -> str:
     value = report.get("candidate_results", [])
-    candidates = (
-        [cast(dict[str, object], item) for item in value if isinstance(item, dict)]
-        if isinstance(value, list)
-        else []
-    )
+    candidates: list[dict[str, object]] = []
+    if isinstance(value, list):
+        for item in cast(list[object], value):
+            if isinstance(item, dict):
+                candidates.append(cast(dict[str, object], item))
     lines = [
         "# Archiv OCR engine comparison",
         "",
@@ -320,9 +319,10 @@ def _summary_markdown(report: Mapping[str, object]) -> str:
             metrics = cast(dict[str, object], aggregate)
             lines.append(
                 f"| `{candidate.get('candidate_id')}` | {candidate.get('status')} | "
-                f"{float(metrics['cer']):.1%} | {float(metrics['wer']):.1%} | "
-                f"{float(metrics['reading_order_error_rate']):.1%} | "
-                f"{float(metrics['elapsed_seconds']):.3f}s | "
+                f"{_validated_float(metrics, 'cer'):.1%} | "
+                f"{_validated_float(metrics, 'wer'):.1%} | "
+                f"{_validated_float(metrics, 'reading_order_error_rate'):.1%} | "
+                f"{_validated_float(metrics, 'elapsed_seconds'):.3f}s | "
                 f"{metrics.get('peak_rss_kib')} KiB |"
             )
         else:
