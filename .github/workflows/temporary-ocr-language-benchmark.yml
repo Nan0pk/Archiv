@@ -51,3 +51,33 @@ jobs:
           archiv benchmark-ocr \
             --output "$RUNNER_TEMP/archiv-ocr-benchmark" \
             --candidates eng,ara,urd,eng+ara+urd
+
+      - name: Print sanitized fixture metrics
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          report = json.loads(
+              (Path(os.environ["RUNNER_TEMP"]) / "archiv-ocr-benchmark" / "report.json").read_text()
+          )
+          rows = []
+          for run in report["runs"]:
+              metrics = run["metrics"]
+              rows.append(
+                  {
+                      "candidate": run["candidate"],
+                      "fixture_id": run["fixture_id"],
+                      "cer": metrics["cer"],
+                      "wer": metrics["wer"],
+                      "punctuation_error_rate": metrics["punctuation_error_rate"],
+                      "numeral_error_rate": metrics["numeral_error_rate"],
+                      "omitted_line": metrics["omitted_line"],
+                      "hallucinated_characters": metrics["hallucinated_characters"],
+                      "elapsed_seconds": run["elapsed_seconds"],
+                      "peak_rss_kib": run["peak_rss_kib"],
+                  }
+              )
+          print(json.dumps({"fixture_metrics": rows}, indent=2, sort_keys=True))
+          PY
