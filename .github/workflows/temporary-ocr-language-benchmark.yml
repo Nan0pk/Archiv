@@ -1,0 +1,53 @@
+name: Temporary OCR language benchmark
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/temporary-ocr-language-benchmark.yml"
+      - "src/archiv/ocr_benchmark.py"
+      - "src/archiv/ocr_benchmark_cli.py"
+      - "tests/test_ocr_benchmark.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: archiv-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install benchmark runtime
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            fonts-noto-core \
+            fonts-noto-extra \
+            tesseract-ocr \
+            tesseract-ocr-ara \
+            tesseract-ocr-eng \
+            tesseract-ocr-urd \
+            time
+          python -m pip install --upgrade pip
+          python -m pip install -e '.[dev]'
+
+      - name: Measure installed language candidates
+        run: |
+          archiv benchmark-ocr \
+            --output "$RUNNER_TEMP/archiv-ocr-benchmark" \
+            --candidates eng,ara,urd,eng+ara+urd
