@@ -23,6 +23,8 @@ MAX_PDF_PAGES = 250
 OCR_TIMEOUT_SECONDS = 60
 RENDER_DPI = 200
 
+type OcrWord = tuple[str, int, int, int, int, float | None]
+
 
 class VisualOcrError(RuntimeError):
     """A local OCR or rendering process could not complete safely."""
@@ -204,9 +206,7 @@ def _select_languages(available: list[str]) -> tuple[list[str], list[str]]:
     configured = os.environ.get("ARCHIV_OCR_LANGUAGES", "").strip()
     if configured:
         selected = [
-            token.strip()
-            for token in configured.replace(",", "+").split("+")
-            if token.strip()
+            token.strip() for token in configured.replace(",", "+").split("+") if token.strip()
         ]
         return selected, [language for language in selected if language not in available]
 
@@ -256,8 +256,7 @@ def _parse_tsv(
     page: int,
     languages: list[str],
 ) -> list[NormalizedSegment]:
-    word_type = tuple[str, int, int, int, int, float | None]
-    lines: dict[tuple[int, int, int], list[word_type]] = {}
+    lines: dict[tuple[int, int, int], list[OcrWord]] = {}
     order: list[tuple[int, int, int]] = []
     for row in csv.DictReader(io.StringIO(payload), delimiter="\t"):
         if row.get("level") != "5":
@@ -265,7 +264,11 @@ def _parse_tsv(
         text = (row.get("text") or "").strip()
         if not text:
             continue
-        key = (_integer(row, "block_num"), _integer(row, "par_num"), _integer(row, "line_num"))
+        key = (
+            _integer(row, "block_num"),
+            _integer(row, "par_num"),
+            _integer(row, "line_num"),
+        )
         if key not in lines:
             lines[key] = []
             order.append(key)
@@ -526,7 +529,12 @@ def run_visual_ocr(
                 )
             except (OSError, VisualOcrError) as error:
                 pages.append(
-                    {"page": page, "status": "failed", "stage": "render", "error": str(error)}
+                    {
+                        "page": page,
+                        "status": "failed",
+                        "stage": "render",
+                        "error": str(error),
+                    }
                 )
                 warnings.append(f"page {page} render failed: {error}")
     else:
@@ -557,7 +565,12 @@ def run_visual_ocr(
                 warnings.extend(str(item) for item in page_warnings)
         except (OSError, VisualOcrError) as error:
             pages.append(
-                {"page": page, "status": "failed", "stage": "recognition", "error": str(error)}
+                {
+                    "page": page,
+                    "status": "failed",
+                    "stage": "recognition",
+                    "error": str(error),
+                }
             )
             warnings.append(f"page {page} OCR failed: {error}")
 
