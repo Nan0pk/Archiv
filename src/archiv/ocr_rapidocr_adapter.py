@@ -1,15 +1,13 @@
 """Isolated optional RapidOCR benchmark adapter; not part of production ingestion."""
 
-# pyright: reportAny=false, reportUnknownArgumentType=false, reportUnknownMemberType=false
-# pyright: reportUnknownVariableType=false
-
 from __future__ import annotations
 
 import argparse
 import importlib
 import json
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Protocol, cast
+from typing import Protocol, cast, runtime_checkable
 
 from archiv.hashing import sha256_file
 
@@ -22,6 +20,31 @@ class _RapidOutput(Protocol):
 
 class _RapidEngine(Protocol):
     def __call__(self, image: Path) -> _RapidOutput: ...
+
+
+class _RapidEngineFactory(Protocol):
+    def __call__(self, *, params: Mapping[str, object]) -> _RapidEngine: ...
+
+
+class _LangRec(Protocol):
+    ARABIC: object
+
+
+class _ModelType(Protocol):
+    MOBILE: object
+
+
+class _OcrVersion(Protocol):
+    PPOCRV5: object
+
+
+class _EngineType(Protocol):
+    ONNXRUNTIME: object
+
+
+@runtime_checkable
+class _ArrayLike(Protocol):
+    def tolist(self) -> object: ...
 
 
 def _directory_evidence(path: Path) -> dict[str, object]:
@@ -45,21 +68,21 @@ def run(request_path: Path, response_path: Path) -> None:
     if not isinstance(request_value, dict):
         raise ValueError("request must be an object")
     request = cast(dict[str, object], request_value)
-    fixtures = request.get("fixtures")
+    fixtures_value = request.get("fixtures")
     model_root_value = request.get("model_root")
-    if not isinstance(fixtures, list) or not isinstance(model_root_value, str):
+    if not isinstance(fixtures_value, list) or not isinstance(model_root_value, str):
         raise ValueError("request fixtures/model_root are invalid")
+    fixtures = cast(list[object], fixtures_value)
     model_root = Path(model_root_value).resolve()
     model_root.mkdir(parents=True, exist_ok=True)
 
     module = importlib.import_module("rapidocr")
     onnxruntime_module = importlib.import_module("onnxruntime")
-    rapidocr = cast(object, module.RapidOCR)
-    lang_rec = cast(object, module.LangRec)
-    model_type = cast(object, module.ModelType)
-    ocr_version = cast(object, module.OCRVersion)
-    engine_type = cast(object, module.EngineType)
-    engine_factory = cast(type[_RapidEngine], rapidocr)
+    engine_factory = cast(_RapidEngineFactory, module.RapidOCR)
+    lang_rec = cast(_LangRec, module.LangRec)
+    model_type = cast(_ModelType, module.ModelType)
+    ocr_version = cast(_OcrVersion, module.OCRVersion)
+    engine_type = cast(_EngineType, module.EngineType)
     engine = engine_factory(
         params={
             "Global.model_root_dir": model_root,
@@ -82,7 +105,8 @@ def run(request_path: Path, response_path: Path) -> None:
         output = engine(Path(image_path))
         texts = list(output.txts or ())
         scores = list(output.scores or ())
-        coordinates = output.boxes.tolist() if hasattr(output.boxes, "tolist") else output.boxes
+        boxes = output.boxes
+        coordinates = boxes.tolist() if isinstance(boxes, _ArrayLike) else boxes
         results.append(
             {
                 "fixture_id": fixture_id,
@@ -93,8 +117,12 @@ def run(request_path: Path, response_path: Path) -> None:
             }
         )
 
-    package_root = Path(module.__file__).resolve().parent
-    runtime_root = Path(onnxruntime_module.__file__).resolve().parent
+    package_file = module.__file__
+    runtime_file = onnxruntime_module.__file__
+    if not isinstance(package_file, str) or not isinstance(runtime_file, str):
+        raise RuntimeError("RapidOCR package paths are unavailable")
+    package_root = Path(package_file).resolve().parent
+    runtime_root = Path(runtime_file).resolve().parent
     response = {
         "status": "succeeded",
         "results": results,
