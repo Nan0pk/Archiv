@@ -125,7 +125,10 @@ def test_output_inspection_only_exposes_structured_existing_paths(tmp_path: Path
     assert result.result_file.stat().st_mode & 0o777 == 0o600
 
 
-def test_citation_is_validated_before_opening(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_citation_is_validated_before_opening(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
     result_file = tmp_path / "result.json"
     result_file.write_text("{}", encoding="utf-8")
     source = tmp_path / "source.pdf"
@@ -133,16 +136,18 @@ def test_citation_is_validated_before_opening(monkeypatch: pytest.MonkeyPatch, t
     citation = object()
     opened: list[Path] = []
 
-    monkeypatch.setattr(
-        ui_console,
-        "load_citation_file",
-        lambda path, *, citation_number=1: citation,
-    )
-    monkeypatch.setattr(
-        ui_console,
-        "resolve_citation_location",
-        lambda value, *, home=None: SimpleNamespace(canonical_path=str(source)),
-    )
+    def fake_load(path: Path, *, citation_number: int = 1) -> object:
+        assert path == result_file
+        assert citation_number == 1
+        return citation
+
+    def fake_resolve(value: object, *, home: Path | None = None) -> SimpleNamespace:
+        assert value is citation
+        assert home is None
+        return SimpleNamespace(canonical_path=str(source))
+
+    monkeypatch.setattr(ui_console, "load_citation_file", fake_load)
+    monkeypatch.setattr(ui_console, "resolve_citation_location", fake_resolve)
     monkeypatch.setattr(ui_console, "open_with_default_handler", opened.append)
 
     resolved = ui_console.resolve_and_open_citation(result_file, 1)
