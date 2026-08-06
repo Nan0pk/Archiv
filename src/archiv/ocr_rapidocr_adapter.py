@@ -6,6 +6,7 @@ import argparse
 import contextlib
 import importlib
 import json
+import traceback
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Protocol, cast, runtime_checkable
@@ -153,9 +154,19 @@ def run(request_path: Path, response_path: Path) -> None:
     """Run RapidOCR while keeping download chatter separate from failure evidence."""
 
     diagnostic_path = response_path.with_name("rapidocr-adapter.log")
-    with diagnostic_path.open("w", encoding="utf-8") as diagnostic:
-        with contextlib.redirect_stdout(diagnostic), contextlib.redirect_stderr(diagnostic):
+    try:
+        with (
+            diagnostic_path.open("w", encoding="utf-8") as diagnostic,
+            contextlib.redirect_stdout(diagnostic),
+            contextlib.redirect_stderr(diagnostic),
+        ):
             _run_engine(request_path, response_path)
+    except Exception as error:  # noqa: BLE001 - optional engine failures need exact evidence
+        with diagnostic_path.open("a", encoding="utf-8") as diagnostic:
+            traceback.print_exc(file=diagnostic)
+        raise RuntimeError(
+            f"RapidOCR adapter failed: {type(error).__name__}: {error}"
+        ) from error
 
 
 def main() -> None:
@@ -163,7 +174,10 @@ def main() -> None:
     parser.add_argument("--request", type=Path, required=True)
     parser.add_argument("--response", type=Path, required=True)
     args = parser.parse_args()
-    run(args.request, args.response)
+    try:
+        run(args.request, args.response)
+    except RuntimeError as error:
+        parser.exit(1, f"{error}\n")
 
 
 if __name__ == "__main__":
