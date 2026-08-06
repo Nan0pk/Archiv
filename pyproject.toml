@@ -30,6 +30,7 @@ dev = [
 ]
 ocr-benchmark = [
   "onnxruntime==1.27.0",
+  "python-bidi==0.6.11",
   "rapidocr==3.9.2",
 ]
 
