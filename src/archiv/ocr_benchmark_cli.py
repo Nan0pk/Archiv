@@ -1,4 +1,4 @@
-"""CLI registration for the local OCR benchmark."""
+"""CLI registration for the local OCR engine comparison."""
 
 from __future__ import annotations
 
@@ -32,25 +32,53 @@ def register_ocr_benchmark_command(app: typer.Typer) -> None:
                 help="Comma-separated Tesseract language candidates; auto-detected when omitted.",
             ),
         ] = "",
+        engines: Annotated[
+            str,
+            typer.Option(
+                "--engines",
+                help="Comma-separated fixed engine set: tesseract, rapidocr, kraken.",
+            ),
+        ] = "tesseract",
+        private_corpus: Annotated[
+            Path | None,
+            typer.Option(
+                "--private-corpus",
+                file_okay=False,
+                dir_okay=True,
+                resolve_path=True,
+                help=(
+                    "Local corpus directory containing manifest.json; content is never copied "
+                    "into shareable output."
+                ),
+            ),
+        ] = None,
     ) -> None:
-        """Measure installed Tesseract language configurations on lawful fixtures."""
+        """Compare local OCR candidates on the same lawful corpus."""
 
-        selected = [item.strip() for item in candidates.split(",") if item.strip()]
+        selected_candidates = [item.strip() for item in candidates.split(",") if item.strip()]
+        selected_engines = [item.strip() for item in engines.split(",") if item.strip()]
         try:
-            report = run_benchmark(output, selected or None)
-        except (OSError, OcrBenchmarkError, ValueError) as error:
+            report = run_benchmark(
+                output,
+                selected_candidates or None,
+                selected_engines,
+                private_corpus,
+            )
+        except (OSError, OcrBenchmarkError, ValueError, json.JSONDecodeError) as error:
             typer.echo(f"OCR benchmark failed: {type(error).__name__}: {error}", err=True)
             raise typer.Exit(code=1) from error
         typer.echo(
             json.dumps(
                 {
                     "status": "succeeded",
-                    "engine": report["engine"],
-                    "engine_version": report["engine_version"],
                     "recommended_candidate": report["recommended_candidate"],
-                    "aggregates": report["aggregates"],
+                    "ranking": report["ranking"],
                     "report_path": report["report_path"],
                     "report_sha256": report["report_sha256"],
+                    "summary_path": report["summary_path"],
+                    "shareable_summary_path": report["shareable_summary_path"],
+                    "shareable_summary_sha256": report["shareable_summary_sha256"],
+                    "target_hardware_status": report["target_hardware_status"],
                 },
                 indent=2,
                 sort_keys=True,
