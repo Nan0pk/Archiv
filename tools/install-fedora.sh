@@ -72,9 +72,9 @@ if ((SKIP_SYSTEM_PACKAGES == 0)); then
     DNF=(sudo dnf)
   fi
   "${DNF[@]}" install -y --setopt=install_weak_deps=False \
-    python3 python3-pip libreoffice-writer poppler-utils curl tar gzip \
+    python3 python3-pip python3-tkinter libreoffice-writer poppler-utils curl tar gzip \
     tesseract tesseract-langpack-eng tesseract-langpack-ara \
-    tesseract-langpack-urd bubblewrap
+    tesseract-langpack-urd bubblewrap xdg-utils
 fi
 
 for command in python3 curl tar; do
@@ -199,4 +199,4 @@ case ":$PATH:" in
   *":$BIN_DIR:"*) ;;
   *) echo "Add $BIN_DIR to PATH, then open a new shell." ;;
 esac
-echo "Next: archiv add ~/Documents"
+echo "Next: archiv ui"
