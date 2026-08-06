@@ -164,9 +164,7 @@ def run(request_path: Path, response_path: Path) -> None:
     except Exception as error:  # noqa: BLE001 - optional engine failures need exact evidence
         with diagnostic_path.open("a", encoding="utf-8") as diagnostic:
             traceback.print_exc(file=diagnostic)
-        raise RuntimeError(
-            f"RapidOCR adapter failed: {type(error).__name__}: {error}"
-        ) from error
+        raise RuntimeError(f"RapidOCR adapter failed: {type(error).__name__}: {error}") from error
 
 
 def main() -> None:
