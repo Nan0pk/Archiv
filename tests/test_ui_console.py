@@ -74,6 +74,14 @@ def test_catalog_comes_from_real_typer_tree() -> None:
     assert search.parameters[2].choices == ("txt", "pdf")
 
 
+def test_real_archiv_catalog_includes_core_commands_and_excludes_ui() -> None:
+    from archiv.cli import app
+
+    names = {command.display_name for command in ui_console.build_command_catalog(app)}
+    assert {"ingest", "source", "model configure"}.issubset(names)
+    assert "ui" not in names
+
+
 def test_run_request_is_an_argument_vector_not_a_shell_command() -> None:
     ingest = ui_console.build_command_catalog(_sample_app())[0]
     source = "/tmp/report; touch /tmp/should-not-run"
