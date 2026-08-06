@@ -25,7 +25,7 @@ dependencies = [
 dev = [
   "pyright>=1.1.390",
   "pytest>=8.3",
-  "reportlab==4.4.9",
+  "reportlab==5.0.0",
   "ruff>=0.9",
 ]
 
