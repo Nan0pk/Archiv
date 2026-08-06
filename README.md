@@ -14,11 +14,12 @@ Archiv combines five deliberately separate layers:
 
 Models propose. Validators decide whether work succeeded.
 
-## Current implemented slice (0.1.0a5)
+## Current implemented slice (0.1.0a6)
 
-Archiv includes a human-facing Fedora command surface, a deterministic environment doctor, native searchable-text ingestion for InPage `.inp` documents, local visual OCR recovery for images and image-only PDF pages, a reproducible multilingual OCR benchmark, explainable natural-language retrieval, bounded source-location verification (`archiv source`), grounded QA over local evidence (`archiv ask`), model-assisted cited report generation (`archiv report`), loopback-only OpenAI-compatible model configuration (`archiv model`), immutable local ingestion, validated SQLite full-text retrieval, independently verified cited DOCX generation, a bounded local MCP server, and a pinned replaceable CoWork-OS workbench integration:
+Archiv includes a minimal native test console, a human-facing Fedora command surface, a deterministic environment doctor, native searchable-text ingestion for InPage `.inp` documents, local visual OCR recovery for images and image-only PDF pages, a reproducible multilingual OCR benchmark, explainable natural-language retrieval, bounded source-location verification (`archiv source`), grounded QA over local evidence (`archiv ask`), model-assisted cited report generation (`archiv report`), loopback-only OpenAI-compatible model configuration (`archiv model`), immutable local ingestion, validated SQLite full-text retrieval, independently verified cited DOCX generation, a bounded local MCP server, and a pinned replaceable CoWork-OS workbench integration:
 
 ```bash
+archiv ui
 archiv add /path/to/documents
 archiv ingest /path/to/urdu-document.inp
 archiv ingest /path/to/scanned-page.png
@@ -29,6 +30,8 @@ archiv ask "What remains unfinished?" --explain-retrieval
 archiv report "Prepare a cited status report with risks and next actions"
 archiv status
 ```
+
+`archiv ui` opens the first product-testing interface. It reads the actual Typer command tree, presents all public commands and their arguments through dropdowns and fields, provides native file/folder pickers, shows live command output and status, and opens structured output files through the desktop default handler. Citation buttons still pass through Archiv's independent bounded source validation before any preserved source is opened. The console executes argument vectors with `shell=False`; it is not a generic shell, document editor, or second execution engine.
 
 The grounded-question journey runs over locally ingested Archiv evidence:
 
@@ -65,7 +68,13 @@ curl -fsSL https://raw.githubusercontent.com/Nan0pk/Archiv/main/tools/install-fe
 
 The installer resolves `main` to one immutable commit, installs that exact source under `~/.local/share/archiv-alpha/versions/`, records the commit and downloaded archive hash in `install.json`, and exposes `archiv` through `~/.local/bin`.
 
-Use the everyday interface:
+Open the initial testing interface:
+
+```bash
+archiv ui
+```
+
+Or use the everyday command interface directly:
 
 ```bash
 archiv sample-vault "$HOME/Archiv-Sample"
@@ -109,6 +118,7 @@ Do not commit private documents, personal data, credentials, model keys, product
 - [Measured multilingual OCR baseline](docs/ocr-benchmark-report.md)
 - [Local search and citations](docs/search.md)
 - [Bounded source location](docs/source-location.md)
+- [Archiv Test Console](docs/test-console.md)
 - [Real-work field-trial method](docs/field-trial.md)
 - [Measured field-trial report](docs/field-trial-report.md)
 - [Cited DOCX reports](docs/reporting.md)
