@@ -26,7 +26,7 @@ if [[ ${ARCHIV_SKIP_SYSTEM_PACKAGES:-0} != 1 ]]; then
     DNF=(sudo dnf)
   fi
   "${DNF[@]}" install -y --setopt=install_weak_deps=False \
-    python3 python3-pip curl bubblewrap time \
+    python3 python3-pip curl bubblewrap time libglvnd-glx \
     tesseract tesseract-langpack-eng tesseract-langpack-ara tesseract-langpack-urd \
     google-noto-sans-fonts google-noto-naskh-arabic-fonts \
     google-noto-nastaliq-urdu-fonts nafees-nastaleeq-fonts
