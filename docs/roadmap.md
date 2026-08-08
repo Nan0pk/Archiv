@@ -93,9 +93,23 @@
 - public-safe field-trial proof retaining only validation booleans;
 - no shell execution, generic file browser, source execution, cloud link, upload, or storage-layout change.
 
+## Minimal local test console (0.1.0a6)
+
+- `archiv ui` native testing interface over the real Typer command tree;
+- command dropdowns and generated controls for public arguments and options;
+- native file and folder selection for path parameters;
+- one shell-free subprocess at a time with exact equivalent CLI display;
+- current action, indeterminate progress, live output, cancellation, and final exit status;
+- structured output paths opened through the desktop default handler;
+- citations independently revalidated through bounded source location before opening;
+- no embedded editor, generic shell, background agent, remote service, or second execution engine.
+
 ## Evidence-derived next work
 
-- complete OpenDocument-family ingestion and truthful local native InPage `.inp` extraction for Urdu and other Perso-Arabic text (issue #38);
-- real image OCR and audio transcription only when local processors and evidence-backed acceptance tests exist.
+- specify and deliver OpenDocument and other open-format compatibility in bounded groups (issue #37);
+- reconstruct native InPage pages, frames, reading order, styles, and geometry without confusing OCR with native parsing (issue #53);
+- extend measured visual recovery to layout analysis, bounded rendering, optional document vision, and searchable PDF derivatives (issue #54);
+- add audio transcription only when lawful local processors and evidence-backed acceptance tests exist;
+- evaluate local face detection and user-confirmed identity search as a separate sensitive subsystem (issue #55).
 
-Collections, synchronization, vector infrastructure, GUI work, and broader provider support remain deferred until measured user work demonstrates that the simpler architecture is insufficient.
+The thin testing console is now available for real workflow feedback. Richer GUI work, collections, synchronization, vector infrastructure, and broader provider support remain deferred until measured user work demonstrates that the simpler architecture is insufficient.
