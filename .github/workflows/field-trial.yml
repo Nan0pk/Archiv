@@ -155,7 +155,7 @@ jobs:
           cache: pip
 
       - name: Set up Node
-        uses: actions/setup-node@12b7ff3796cabd9e0da05c556468eec2f565d246
+        uses: actions/setup-node@ae0d4ed08881f17d1511386f5be3e62356acd4a6
         with:
           node-version: "24"
 
