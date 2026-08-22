@@ -67,6 +67,17 @@ The normalized JSON uses format-native locators such as InPage content stream an
 
 Per-format capability claims — detection, extraction depth, locator shapes, grounded retrieval, rendering/export posture, encryption and macro handling, and known limits — are pinned in the machine-readable, test-verified [format-compatibility matrix](format-compatibility.json) with its [JSON schema](../schemas/format-compatibility-matrix.schema.json). The acceptance suite re-verifies every family against live ingestion runs, so these claims cannot drift from behavior silently.
 
+Read the same matrix from the command line with `archiv formats`:
+
+```
+archiv formats             # every supported type and what is extracted
+archiv formats pdf         # one family in detail, including known limits
+archiv formats notes.odt   # a filename works too
+archiv formats --json      # the committed matrix, verbatim
+```
+
+The command is read-only: it opens no sources, needs no Archiv home, and exits non-zero for unsupported types with the same reason the ingestion path gives.
+
 ### Native InPage searchable-text policy
 
 Archiv accepts `.inp` files as `application/x-inpage`, validates their CFB container locally, preserves the original bytes unchanged, and extracts text into the same normalized and full-text-search pipeline used by other documents.

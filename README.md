@@ -16,10 +16,11 @@ Models propose. Validators decide whether work succeeded.
 
 ## Current implemented slice (0.1.0a6)
 
-Archiv includes a human-facing Fedora command surface, a deterministic environment doctor, native searchable-text ingestion for InPage `.inp` documents, a tested compatibility matrix for every supported open format, local visual OCR recovery for images and image-only PDF pages, a reproducible multilingual OCR benchmark, explainable natural-language retrieval, bounded source-location verification (`archiv source`), grounded QA over local evidence (`archiv ask`), model-assisted cited report generation (`archiv report`), loopback-only OpenAI-compatible model configuration (`archiv model`), immutable local ingestion, validated SQLite full-text retrieval, independently verified cited DOCX generation, a bounded local MCP server, a pinned replaceable CoWork-OS workbench integration, and a minimal local test console (`archiv ui`) that derives its forms from the real command tree:
+Archiv includes a human-facing Fedora command surface, a deterministic environment doctor, native searchable-text ingestion for InPage `.inp` documents, a tested compatibility matrix for every supported open format readable with `archiv formats`, local visual OCR recovery for images and image-only PDF pages, a reproducible multilingual OCR benchmark, explainable natural-language retrieval, bounded source-location verification (`archiv source`), grounded QA over local evidence (`archiv ask`), model-assisted cited report generation (`archiv report`), loopback-only OpenAI-compatible model configuration (`archiv model`), immutable local ingestion, validated SQLite full-text retrieval, independently verified cited DOCX generation, a bounded local MCP server, a pinned replaceable CoWork-OS workbench integration, and a minimal local test console (`archiv ui`) that derives its forms from the real command tree:
 
 ```bash
 archiv add /path/to/documents
+archiv formats
 archiv ingest /path/to/urdu-document.inp
 archiv ingest /path/to/scanned-page.png
 archiv benchmark-ocr --output "$HOME/archiv-ocr-benchmark"

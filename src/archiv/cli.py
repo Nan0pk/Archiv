@@ -15,6 +15,7 @@ from archiv.alpha_cli import register_alpha_commands
 from archiv.contracts import RunStatus
 from archiv.doctor import doctor_report
 from archiv.executor.source_marker import run_source_marker
+from archiv.format_matrix_cli import register_format_matrix_command
 from archiv.ingestion import ingest_file, rebuild_derived
 from archiv.ingestion.formats import SUPPORTED_SUFFIXES
 from archiv.model_cli import model_app
@@ -32,6 +33,7 @@ register_report_commands(app)
 register_alpha_commands(app)
 register_user_commands(app)
 register_source_location_command(app)
+register_format_matrix_command(app)
 register_ocr_benchmark_command(app)
 register_ui_command(app)
 

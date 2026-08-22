@@ -565,6 +565,48 @@ def test_ui_command_fails_clearly_without_desktop_support() -> None:
     assert "python3-tkinter" in result.stderr or "display" in result.stderr.lower()
 
 
+def test_ui_command_reports_missing_tkinter_c_extension() -> None:
+    """A missing ``_tkinter`` extension must guide, not traceback.
+
+    Importing ``tkinter`` raises ``ModuleNotFoundError`` naming the pure Python
+    package when it is absent, but naming ``_tkinter`` when only the compiled
+    extension is missing.  The latter is the common real-world case (Debian
+    without ``python3-tk``, source builds without Tcl/Tk headers), so both
+    names must produce the same actionable message.
+    """
+
+    for missing in ("tkinter", "_tkinter"):
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                (
+                    "import builtins, sys\n"
+                    f"missing = {missing!r}\n"
+                    "real_import = builtins.__import__\n"
+                    "def fake_import(name, *args, **kwargs):\n"
+                    "    if name == 'tkinter' or name.startswith('tkinter.'):\n"
+                    "        raise ModuleNotFoundError(\n"
+                    "            f'No module named {missing!r}', name=missing\n"
+                    "        )\n"
+                    "    return real_import(name, *args, **kwargs)\n"
+                    "builtins.__import__ = fake_import\n"
+                    "for cached in [k for k in sys.modules if k.startswith('tkinter')]:\n"
+                    "    del sys.modules[cached]\n"
+                    "from archiv.cli import app\n"
+                    "app()\n"
+                ),
+                "ui",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        assert result.returncode == 1, result.stderr
+        assert "python3-tkinter" in result.stderr, result.stderr
+        assert "Traceback" not in result.stderr, result.stderr
+
+
 def test_ui_command_is_registered_and_cli_help_unchanged() -> None:
     result = runner.invoke(cli_app, ["--help"])
     assert result.exit_code == 0
