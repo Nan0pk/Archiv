@@ -1,0 +1,240 @@
+{
+  "$defs": {
+    "FormatFamily": {
+      "additionalProperties": false,
+      "description": "Verified behavior for one family of related formats.",
+      "properties": {
+        "detection": {
+          "minLength": 1,
+          "title": "Detection",
+          "type": "string"
+        },
+        "encryption": {
+          "minLength": 1,
+          "title": "Encryption",
+          "type": "string"
+        },
+        "family": {
+          "minLength": 1,
+          "title": "Family",
+          "type": "string"
+        },
+        "grounding": {
+          "title": "Grounding",
+          "type": "boolean"
+        },
+        "immutable_ingestion": {
+          "title": "Immutable Ingestion",
+          "type": "boolean"
+        },
+        "known_limits": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Known Limits",
+          "type": "array"
+        },
+        "locator_shapes": {
+          "default": [],
+          "items": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": "Locator Shapes",
+          "type": "array"
+        },
+        "macros": {
+          "minLength": 1,
+          "title": "Macros",
+          "type": "string"
+        },
+        "media_types": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Media Types",
+          "type": "array"
+        },
+        "preview_render": {
+          "minLength": 1,
+          "title": "Preview Render",
+          "type": "string"
+        },
+        "schema_version": {
+          "default": "1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "structure": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Structure",
+          "type": "array"
+        },
+        "suffixes": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Suffixes",
+          "type": "array"
+        },
+        "text_extraction": {
+          "enum": [
+            "native",
+            "visual_ocr_conditional",
+            "metadata_only"
+          ],
+          "title": "Text Extraction",
+          "type": "string"
+        }
+      },
+      "required": [
+        "family",
+        "suffixes",
+        "media_types",
+        "detection",
+        "immutable_ingestion",
+        "text_extraction",
+        "grounding",
+        "preview_render",
+        "macros",
+        "encryption"
+      ],
+      "title": "FormatFamily",
+      "type": "object"
+    },
+    "OutputFormat": {
+      "additionalProperties": false,
+      "description": "One document format Archiv itself produces through the report workflow.",
+      "properties": {
+        "format": {
+          "minLength": 1,
+          "title": "Format",
+          "type": "string"
+        },
+        "generated": {
+          "title": "Generated",
+          "type": "boolean"
+        },
+        "media_type": {
+          "minLength": 1,
+          "title": "Media Type",
+          "type": "string"
+        },
+        "notes": {
+          "default": "",
+          "title": "Notes",
+          "type": "string"
+        },
+        "schema_version": {
+          "default": "1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "verification": {
+          "minLength": 1,
+          "title": "Verification",
+          "type": "string"
+        }
+      },
+      "required": [
+        "format",
+        "media_type",
+        "generated",
+        "verification"
+      ],
+      "title": "OutputFormat",
+      "type": "object"
+    },
+    "RejectedFormat": {
+      "additionalProperties": false,
+      "description": "One explicitly tested rejection case.",
+      "properties": {
+        "example": {
+          "minLength": 1,
+          "title": "Example",
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "schema_version": {
+          "default": "1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "suffix": {
+          "minLength": 1,
+          "title": "Suffix",
+          "type": "string"
+        }
+      },
+      "required": [
+        "suffix",
+        "example",
+        "reason"
+      ],
+      "title": "RejectedFormat",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Versioned, tested compatibility claims for the ingestion surface.",
+  "properties": {
+    "families": {
+      "items": {
+        "$ref": "#/$defs/FormatFamily"
+      },
+      "minItems": 1,
+      "title": "Families",
+      "type": "array"
+    },
+    "outputs": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/OutputFormat"
+      },
+      "title": "Outputs",
+      "type": "array"
+    },
+    "product_version": {
+      "minLength": 1,
+      "title": "Product Version",
+      "type": "string"
+    },
+    "purpose": {
+      "minLength": 1,
+      "title": "Purpose",
+      "type": "string"
+    },
+    "rejected_examples": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/RejectedFormat"
+      },
+      "title": "Rejected Examples",
+      "type": "array"
+    },
+    "schema_version": {
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "product_version",
+    "purpose",
+    "families"
+  ],
+  "title": "FormatMatrix",
+  "type": "object"
+}

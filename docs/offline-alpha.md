@@ -1,6 +1,6 @@
-# User-ready Fedora alpha (0.1.0a5)
+# User-ready Fedora alpha (0.1.0a6)
 
-Archiv `0.1.0a5` packages explainable natural-language retrieval, bounded source-location verification, grounded questions, and cited-report workflows behind a simple everyday command surface. Installation may download Fedora and Python packages. After installation, adding, searching, asking, reporting, model configuration, verification, backup, and restore require no external network access, cloud login, telemetry endpoint, or online provider model.
+Archiv `0.1.0a6` packages explainable natural-language retrieval, bounded source-location verification, grounded questions, and cited-report workflows behind a simple everyday command surface, plus a minimal local test console (`archiv ui`) for exercising every command without memorizing CLI syntax. The console's desktop dependencies (`python3-tkinter`, `xdg-utils`) are installed by the Fedora installer. Installation may download Fedora and Python packages. After installation, adding, searching, asking, reporting, model configuration, verification, backup, and restore require no external network access, cloud login, telemetry endpoint, or online provider model.
 
 ## One-command Fedora installation
 
