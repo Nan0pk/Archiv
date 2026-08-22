@@ -93,9 +93,24 @@
 - public-safe field-trial proof retaining only validation booleans;
 - no shell execution, generic file browser, source execution, cloud link, upload, or storage-layout change.
 
+## Local test console and tested format matrix (0.1.0a6)
+
+- `archiv ui`: a minimal local test console derived from the real Typer command tree (issue #63);
+- schema-driven command forms with native path pickers, choices, booleans, and validated numbers;
+- one command at a time through shell-free argument vectors; complete retained output; live progress and exit status;
+- verified output opening through the OS default handler only after Archiv-side revalidation;
+- citation opening through the bounded source-location validator, never through arbitrary paths;
+- clear failure when the desktop UI package or display is missing;
+- committed, machine-readable, test-verified open-format compatibility matrix for every supported suffix (issue #37 core);
+- public licence decision recorded and applied: Apache-2.0 (issue #2);
+- no storage-layout, contract, or CLI behavior changes; the console stays replaceable.
+
 ## Evidence-derived next work
 
-- complete OpenDocument-family ingestion and truthful local native InPage `.inp` extraction for Urdu and other Perso-Arabic text (issue #38);
-- real image OCR and audio transcription only when local processors and evidence-backed acceptance tests exist.
+- issue #38 is closed: OpenDocument-family ingestion and truthful native InPage `.inp` searchable-text extraction shipped in 0.1.0a5;
+- InPage layout, frames, styles, and page-geometry reconstruction remain open (issue #53) pending lawful native fixtures and visual ground truth;
+- visual OCR shipped in bounded form; engine evaluation and difficult-layout recovery continue under issue #54 once the local benchmark corpus and target-machine measurements exist;
+- face detection and enrolled identity search (issue #55) require an implemented-and-measured local model baseline before any product slice;
+- audio transcription only when a local processor and evidence-backed acceptance tests exist.
 
-Collections, synchronization, vector infrastructure, GUI work, and broader provider support remain deferred until measured user work demonstrates that the simpler architecture is insufficient.
+Collections, synchronization, vector infrastructure, a product GUI, and broader provider support remain deferred until measured user work demonstrates that the simpler architecture is insufficient.

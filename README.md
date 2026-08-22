@@ -14,9 +14,9 @@ Archiv combines five deliberately separate layers:
 
 Models propose. Validators decide whether work succeeded.
 
-## Current implemented slice (0.1.0a5)
+## Current implemented slice (0.1.0a6)
 
-Archiv includes a human-facing Fedora command surface, a deterministic environment doctor, native searchable-text ingestion for InPage `.inp` documents, local visual OCR recovery for images and image-only PDF pages, a reproducible multilingual OCR benchmark, explainable natural-language retrieval, bounded source-location verification (`archiv source`), grounded QA over local evidence (`archiv ask`), model-assisted cited report generation (`archiv report`), loopback-only OpenAI-compatible model configuration (`archiv model`), immutable local ingestion, validated SQLite full-text retrieval, independently verified cited DOCX generation, a bounded local MCP server, and a pinned replaceable CoWork-OS workbench integration:
+Archiv includes a human-facing Fedora command surface, a deterministic environment doctor, native searchable-text ingestion for InPage `.inp` documents, a tested compatibility matrix for every supported open format, local visual OCR recovery for images and image-only PDF pages, a reproducible multilingual OCR benchmark, explainable natural-language retrieval, bounded source-location verification (`archiv source`), grounded QA over local evidence (`archiv ask`), model-assisted cited report generation (`archiv report`), loopback-only OpenAI-compatible model configuration (`archiv model`), immutable local ingestion, validated SQLite full-text retrieval, independently verified cited DOCX generation, a bounded local MCP server, a pinned replaceable CoWork-OS workbench integration, and a minimal local test console (`archiv ui`) that derives its forms from the real command tree:
 
 ```bash
 archiv add /path/to/documents
@@ -28,6 +28,7 @@ archiv ask "What decisions were made and what remains unresolved?"
 archiv ask "What remains unfinished?" --explain-retrieval
 archiv report "Prepare a cited status report with risks and next actions"
 archiv status
+archiv ui
 ```
 
 The grounded-question journey runs over locally ingested Archiv evidence:
@@ -81,7 +82,7 @@ archiv status
 archiv backup "$HOME/archiv-backup.zip"
 ```
 
-`add` refreshes search automatically. `find` shows readable verified literal matches. `source` locates one independently revalidated preserved original without arbitrary browsing or execution. `ask` runs grounded QA over locally retrieved evidence. `report` creates a cited DOCX report for a user objective and independently verifies it before reporting success. `benchmark-ocr` measures the installed Tesseract language configurations on generated local fixtures and does not change OCR settings. Add `--json` when machine-readable output is required.
+`add` refreshes search automatically. `find` shows readable verified literal matches. `source` locates one independently revalidated preserved original without arbitrary browsing or execution. `ask` runs grounded QA over locally retrieved evidence. `report` creates a cited DOCX report for a user objective and independently verifies it before reporting success. `benchmark-ocr` measures the installed Tesseract language configurations on generated local fixtures and does not change OCR settings. `ui` opens a minimal local test console over the same commands for a desktop session. Add `--json` when machine-readable output is required.
 
 Development setup:
 
@@ -114,6 +115,8 @@ Do not commit private documents, personal data, credentials, model keys, product
 - [Cited DOCX reports](docs/reporting.md)
 - [Bounded local MCP server](docs/mcp.md)
 - [CoWork-OS integration](docs/cowork-os-integration.md)
+- [Local test console](docs/test-console.md)
+- [Tested format-compatibility matrix](docs/format-compatibility.json) ([schema](schemas/format-compatibility-matrix.schema.json))
 - [User-ready Fedora alpha](docs/offline-alpha.md)
 - [Hardware and performance notes](docs/hardware-and-performance.md)
 - [GitHub governance and CI trust boundary](docs/github-governance.md)
@@ -122,6 +125,6 @@ Do not commit private documents, personal data, credentials, model keys, product
 
 ## Licensing
 
-No open-source licence has been selected yet. Until a licence is added, copyright is reserved and the public source is available for inspection only. A licence decision is tracked separately so that publishing the repository does not accidentally grant terms the project has not chosen.
+Archiv is licensed under the [Apache License, Version 2.0](LICENSE). The comparison and rationale, including why MIT, MPL-2.0, GPL-3.0, AGPL-3.0, and source-visible proprietary were not selected, are recorded in [docs/decisions/license-apache-2-0.md](docs/decisions/license-apache-2-0.md). Dependency licences are not copied as Archiv's licence; third-party notices remain separate.
 
 Product work proceeds through pull requests with evidence-producing acceptance checks.

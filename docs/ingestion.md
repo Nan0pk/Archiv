@@ -65,6 +65,8 @@ Archiv supports native InPage INP, UTF-8 TXT/Markdown, PDF, DOCX, XLSX, PPTX, PN
 
 The normalized JSON uses format-native locators such as InPage content stream and byte offset, page, paragraph, sheet/cell, slide/object, drawing page/object, formula/MathML representation and database object type/name. Visual OCR spans use explicit `visual_ocr` origin, page, line, pixel-region, engine, language and confidence locators.
 
+Per-format capability claims — detection, extraction depth, locator shapes, grounded retrieval, rendering/export posture, encryption and macro handling, and known limits — are pinned in the machine-readable, test-verified [format-compatibility matrix](format-compatibility.json) with its [JSON schema](../schemas/format-compatibility-matrix.schema.json). The acceptance suite re-verifies every family against live ingestion runs, so these claims cannot drift from behavior silently.
+
 ### Native InPage searchable-text policy
 
 Archiv accepts `.inp` files as `application/x-inpage`, validates their CFB container locally, preserves the original bytes unchanged, and extracts text into the same normalized and full-text-search pipeline used by other documents.

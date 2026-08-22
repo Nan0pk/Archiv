@@ -5,6 +5,8 @@ import os
 import subprocess
 from pathlib import Path
 
+from archiv import __version__ as ARCHIV_VERSION
+
 REPO_ROOT = Path(__file__).parents[1].resolve()
 INSTALLER = REPO_ROOT / "tools" / "install-fedora.sh"
 
@@ -45,7 +47,7 @@ def test_fedora_installer_local_source_and_upgrade(tmp_path: Path) -> None:
     ver_res = subprocess.run(
         [str(archiv_bin), "version"], capture_output=True, text=True, check=True
     )
-    assert ver_res.stdout.strip() == "0.1.0a5"
+    assert ver_res.stdout.strip() == ARCHIV_VERSION
 
     doc_res = subprocess.run(
         [str(archiv_bin), "doctor", "--json"], capture_output=True, text=True, check=True
@@ -55,11 +57,11 @@ def test_fedora_installer_local_source_and_upgrade(tmp_path: Path) -> None:
     install_json_path = prefix / "install.json"
     assert install_json_path.is_file()
     meta = json.loads(install_json_path.read_text(encoding="utf-8"))
-    assert meta["version"] == "0.1.0a5"
+    assert meta["version"] == ARCHIV_VERSION
     assert "source_commit" in meta
 
     assert (old_version_dir / "marker.txt").is_file()
     assert (old_version_dir / "marker.txt").read_text(encoding="utf-8") == "old-version-marker"
 
     current_symlink = prefix / "current"
-    assert current_symlink.resolve() == (prefix / "versions" / "0.1.0a5").resolve()
+    assert current_symlink.resolve() == (prefix / "versions" / ARCHIV_VERSION).resolve()

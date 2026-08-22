@@ -23,3 +23,7 @@ Never submit real user documents, credentials, model keys, private archives, cus
 Each capability must define what it reads, what it writes, what it is forbidden to change, what evidence it emits, and which independent validator decides success.
 
 Large frameworks, databases, services, and autonomous planning layers require benchmark evidence that the simpler existing design is insufficient.
+
+## Licence
+
+Archiv is licensed under the Apache License, Version 2.0 (see `LICENSE`). By intentionally submitting a contribution you agree to license it under those terms, as described in section 5 of the licence. The decision record is [docs/decisions/license-apache-2-0.md](docs/decisions/license-apache-2-0.md).

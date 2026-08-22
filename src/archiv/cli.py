@@ -22,6 +22,7 @@ from archiv.ocr_benchmark_cli import register_ocr_benchmark_command
 from archiv.report_cli import register_report_commands
 from archiv.search import rebuild_search_index, search_documents
 from archiv.source_location_cli import register_source_location_command
+from archiv.ui_cli import register_ui_command
 from archiv.user_cli import register_user_commands
 
 app = typer.Typer(no_args_is_help=True, help="Archiv local-first knowledge-work core.")
@@ -32,6 +33,7 @@ register_alpha_commands(app)
 register_user_commands(app)
 register_source_location_command(app)
 register_ocr_benchmark_command(app)
+register_ui_command(app)
 
 
 @app.command()
