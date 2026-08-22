@@ -42,6 +42,12 @@ archiv-mcp = "archiv.mcp_server:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/archiv"]
 
+# The compatibility matrix is authored once at docs/format-compatibility.json and
+# shipped into the wheel so `archiv formats` reports the same tested claims from
+# an installed copy. Force-including avoids a second, driftable copy in the tree.
+[tool.hatch.build.targets.wheel.force-include]
+"docs/format-compatibility.json" = "archiv/data/format-compatibility.json"
+
 [tool.pytest.ini_options]
 addopts = "-ra"
 testpaths = ["tests"]

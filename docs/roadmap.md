@@ -105,6 +105,14 @@
 - public licence decision recorded and applied: Apache-2.0 (issue #2);
 - no storage-layout, contract, or CLI behavior changes; the console stays replaceable.
 
+## Readable format reporting and supported-interpreter safety
+
+- `archiv formats`: a read-only human and JSON view of the committed, test-verified compatibility matrix, listing every supported suffix, what is extracted, the citation locators produced, and the known limits;
+- the matrix ships as wheel package data, so an installed Archiv reports the same claims as a checkout;
+- unsupported suffixes fail closed with the same reason the ingestion path gives, never an invented capability;
+- `archiv ui` reports missing desktop support when either the `tkinter` package or the `_tkinter` extension is absent, instead of printing a traceback;
+- the Fedora installer verifies Python >= 3.12 before building a virtual environment, so an unsupported interpreter fails with readable guidance rather than inside pip's resolver.
+
 ## Evidence-derived next work
 
 - issue #38 is closed: OpenDocument-family ingestion and truthful native InPage `.inp` searchable-text extraction shipped in 0.1.0a5;

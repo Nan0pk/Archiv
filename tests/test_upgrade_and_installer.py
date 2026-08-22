@@ -11,6 +11,49 @@ REPO_ROOT = Path(__file__).parents[1].resolve()
 INSTALLER = REPO_ROOT / "tools" / "install-fedora.sh"
 
 
+def test_installer_refuses_python_older_than_the_supported_minimum(tmp_path: Path) -> None:
+    """An unsupported interpreter must fail early with readable guidance.
+
+    Without this check the installer builds a virtual environment and only
+    fails deep inside pip's resolver, where the real cause is buried.
+    """
+
+    # Make the real interpreter report an unsupported version. The guard runs
+    # before any other installer step, so nothing else is disturbed.
+    shim = tmp_path / "shim"
+    shim.mkdir()
+    (shim / "sitecustomize.py").write_text(
+        "import sys\n\nsys.version_info = (3, 11, 2, 'final', 0)\n",
+        encoding="utf-8",
+    )
+
+    env = dict(os.environ)
+    env["PYTHONPATH"] = str(shim)
+
+    result = subprocess.run(
+        [
+            "bash",
+            str(INSTALLER),
+            "--source",
+            str(REPO_ROOT),
+            "--prefix",
+            str(tmp_path / "archiv-alpha"),
+            "--bin-dir",
+            str(tmp_path / "target-bin"),
+            "--skip-system-packages",
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=300,
+    )
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "requires Python 3.12 or newer" in result.stderr
+    # It must fail before creating anything.
+    assert not (tmp_path / "archiv-alpha" / "versions").exists()
+
+
 def test_fedora_installer_local_source_and_upgrade(tmp_path: Path) -> None:
     prefix = tmp_path / "archiv-alpha"
     bin_dir = tmp_path / "bin"

@@ -85,6 +85,26 @@ for command in python3 curl tar; do
   }
 done
 
+# Archiv requires Python >= 3.12 (pyproject `requires-python`).  Check before
+# building a virtual environment so an unsupported interpreter fails here with
+# a readable message instead of deep inside pip's resolver.
+python3 - <<'PY' || exit 1
+import sys
+
+MINIMUM = (3, 12)
+if sys.version_info[:2] < MINIMUM:
+    running = ".".join(str(part) for part in sys.version_info[:3])
+    required = ".".join(str(part) for part in MINIMUM)
+    print(
+        f"Archiv requires Python {required} or newer, but python3 is {running}"
+        f" ({sys.executable}).\n"
+        f"Install a supported interpreter (on Fedora: sudo dnf install python{required})"
+        " and run this installer again.",
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
+PY
+
 PREFIX=$(python3 -c 'import os,sys; print(os.path.abspath(os.path.expanduser(sys.argv[1])))' "$PREFIX")
 BIN_DIR=$(python3 -c 'import os,sys; print(os.path.abspath(os.path.expanduser(sys.argv[1])))' "$BIN_DIR")
 TEMP_DIR=""

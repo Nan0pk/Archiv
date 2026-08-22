@@ -79,6 +79,27 @@ class FormatMatrix(StrictModel):
         raise KeyError(f"no matrix family claims suffix {suffix}")
 
 
+def matrix_path() -> Path:
+    """Locate the committed compatibility matrix.
+
+    The matrix is authored at ``docs/format-compatibility.json`` and shipped into
+    the wheel as package data, so both a repository checkout and an installed
+    Archiv resolve the same claims.  Installed package data is preferred because
+    it is the copy that matches the running code.
+    """
+
+    packaged = Path(__file__).resolve().parent / "data" / "format-compatibility.json"
+    if packaged.is_file():
+        return packaged
+    checkout = Path(__file__).resolve().parents[2] / "docs" / "format-compatibility.json"
+    if checkout.is_file():
+        return checkout
+    raise ValueError(
+        "the format compatibility matrix is not available in this installation; "
+        "expected packaged data at archiv/data/format-compatibility.json"
+    )
+
+
 def load_format_matrix(path: Path) -> FormatMatrix:
     """Load and validate the committed compatibility matrix."""
 
