@@ -80,7 +80,7 @@ RapidOCR code is Apache-2.0. Its project notice attributes OCR model copyright t
 The HP Victus Fedora run remains unresolved. Run:
 
 ```bash
-bash tools/run-ocr-engine-comparison.sh "$HOME/archiv-ocr-victus" /optional/private-corpus
+bash tools/run-ocr-engine-comparison.sh "$HOME/archiv-ocr-benchmark" /optional/private-corpus
 ```
 
 The command installs the Fedora runtime packages, verifies the exact `urd_naw` Git blob, materializes optional models once, then reruns the same matrix inside a bubblewrap network namespace. A lawful private corpus is needed before adopting any specialist route for real documents.

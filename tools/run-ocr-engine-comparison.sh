@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-OUTPUT=${1:-"$HOME/archiv-ocr-victus"}
+OUTPUT=${1:-"$HOME/archiv-ocr-benchmark"}
 PRIVATE_CORPUS=${2:-}
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 VENV="$OUTPUT/benchmark-venv"
