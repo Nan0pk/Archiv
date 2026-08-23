@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import sys
 from pathlib import Path
 
 import pytest
+from PIL import Image
 from reportlab.pdfgen.canvas import Canvas
 
 from archiv.contracts import NormalizedDocument
@@ -165,6 +167,32 @@ def test_image_only_pdf_pages_are_rendered_then_ocrd(
     assert matches[0].citation.source_name == "image-only.pdf"
     assert matches[0].citation.locator["origin"] == "visual_ocr"
     assert matches[0].citation.locator["page"] == 1
+
+
+def test_bubblewrap_sandbox_can_read_original_under_tmp_home(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression: bwrap's --tmpfs /tmp must not mask an ARCHIV_HOME under /tmp."""
+
+    if shutil.which("bwrap") is None or shutil.which("tesseract") is None:
+        pytest.skip("bubblewrap or tesseract not installed")
+
+    monkeypatch.setenv("ARCHIV_OCR", "auto")
+    monkeypatch.delenv("ARCHIV_OCR_SANDBOX", raising=False)
+    monkeypatch.setenv("ARCHIV_OCR_LANGUAGES", "eng")
+
+    home = tmp_path / "archiv-home"
+    source = tmp_path / "scanned-page.png"
+    Image.new("RGB", (200, 80), "white").save(source)
+
+    result = ingest_file(source, home=home)
+    derived = Path(result.derived_root)
+    manifest = json.loads((derived / "ocr" / "status.json").read_text(encoding="utf-8"))
+
+    assert manifest["engine_sandbox"] == "bubblewrap"
+    assert manifest["status"] == "succeeded", manifest.get("reason")
+    assert manifest["pages"][0]["status"] == "succeeded", manifest["pages"]
 
 
 def test_missing_requested_language_skips_without_fabricating_text(

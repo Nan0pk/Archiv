@@ -109,6 +109,7 @@ def _run(
     *,
     root: Path,
     timeout: int,
+    extra_ro_binds: tuple[Path, ...] = (),
 ) -> tuple[str, str, str]:
     mode = _sandbox_mode()
     if mode == "required" and os.name != "posix":
@@ -134,6 +135,14 @@ def _run(
                 "/proc",
                 "--tmpfs",
                 "/tmp",
+            ]
+            # --tmpfs /tmp masks the earlier --ro-bind / / for anything under /tmp,
+            # including inputs whose real path (e.g. ARCHIV_HOME under /tmp) lies
+            # outside the writable root re-bound below. Re-expose those explicitly.
+            for extra in extra_ro_binds:
+                resolved = extra.resolve()
+                wrapped += ["--ro-bind", str(resolved), str(resolved)]
+            wrapped += [
                 "--bind",
                 str(writable),
                 str(writable),
@@ -339,6 +348,7 @@ def _ocr_image(
         ],
         root=root,
         timeout=OCR_TIMEOUT_SECONDS,
+        extra_ro_binds=(image.parent,) if origin == "canonical_original" else (),
     )
     raw_relative = Path("ocr") / f"page-{page:04d}.tsv"
     raw_path = root / raw_relative
@@ -404,6 +414,7 @@ def _render_pdf_page(
         ],
         root=root,
         timeout=OCR_TIMEOUT_SECONDS,
+        extra_ro_binds=(original.parent,),
     )
     if not image.is_file():
         raise VisualOcrError("pdftoppm did not produce the expected page image")
