@@ -33,7 +33,7 @@ Material findings this round:
 |---|----------|---------|--------------------------|
 | A | **High (bug)** | Scanner-watermark PDFs silently lose 100% of their content: a 10-character watermark counts as a "native text layer", so OCR is skipped. 6 of 20 valid PDFs affected. | **New** |
 | B | **High (quality)** | `ask` still ships fabricated affirmative claims under a "Verified Sources" heading. Now reproduced in 2 of 5 runs on one probe. | Previously 3.2 — **still open** |
-| C | **Medium (bug)** | The repo *still* fails its own privacy test at HEAD — the fix commit's own documentation reintroduces the literal it removed. | Previously 3.3 — **still red, new cause** |
+| C | **Medium (bug)** | The username literal is still in the repo — the fix commit's own documentation reintroduced it — and the guardrail meant to catch it is structurally blind in CI, so it passed. | Previously 3.3 — **still leaked, and the detector cannot see it** |
 | D | **Medium (bug)** | An interrupted ingest leaves the archive in a state a plain re-run cannot heal, reported with a message that says the opposite of what is wrong. | **New** |
 | E | Medium (usability) | `report` still fails wholesale on small local models; `--deterministic` is a working, undocumented escape hatch. | Previously 3.4 — **still open, severity reduced** |
 | F | Medium (retrieval) | `find`/`search` apply no per-source diversity cap, so 3 spreadsheets can hold 98 of 100 result slots. Proven by controlled experiment to be the real cause — *not* the test corpus, contrary to the previous report. | Previously 3.5 — **still present, cause corrected** |
@@ -110,24 +110,50 @@ non-empty, the renderer could suppress or visibly qualify the `Verified Sources`
 run 1 above produced a response that contradicted itself in two adjacent fields, and the
 renderer had all the information needed to notice.
 
-### 2.3 [STILL RED — new cause] The repo fails its own privacy test at HEAD
-
-```
-FAILED tests/test_privacy_and_artifacts.py::test_no_private_paths_or_secrets_in_tracked_files
-```
+### 2.3 [STILL LEAKED — and CI cannot detect it] The account-name literal is back
 
 The fix commit correctly parameterized the account-name literal out of the shell tool and the
 two docs that had copy-pasted it. But the *same commit* added a field-notes document that
-describes the leak — and in describing it, writes the literal out again. The guardrail test
-greps all tracked files, so it catches the documentation of its own fix.
+describes the leak — and in describing it, writes the literal out again.
 
 - Offending location: `docs/field-notes-2026-08-23-real-world-corpus.md`, line 34 (one
   occurrence, one file — the literal is deliberately not reproduced here for the same reason).
-- Suggested fix: refer to the account name generically in that sentence, exactly as the
+- Suggested fix: refer to the account name generically in that sentence, exactly as the three
   remediated files now do.
 
-Full suite at HEAD: **250 passed, 1 failed** (previously 248 passed, 2 failed — the other
-previous failure was a PATH artifact and does not recur when the venv's `bin` is on `PATH`).
+**The more important half of this finding is why nobody noticed.**
+`tests/test_privacy_and_artifacts.py::test_no_private_paths_or_secrets_in_tracked_files` derives
+the string it searches for from the *running machine's* `$USER`, and returns early — passing
+vacuously — when that value is empty, shorter than three characters, or one of
+`runner`, `root`, `ubuntu`, `user`, `runneradmin`:
+
+```python
+user_name = os.environ.get("USER", "")
+if (
+    not user_name
+    or len(user_name) < 3
+    or user_name.lower() in {"runner", "root", "ubuntu", "user", "runneradmin"}
+):
+    return
+```
+
+GitHub-hosted runners execute as `runner`. **The check therefore never runs in CI** — it
+short-circuits on every hosted job, on every branch, forever. `Fast checks` has passed on `main`
+continuously, including on the commit that introduced the leak, and would keep passing no matter
+how many usernames were committed.
+
+The only machine on which this guardrail does anything is one whose `$USER` happens to match a
+name already present in the tree — i.e. the developer who leaked it, and only until they change
+machines. That is how the literal survived a commit whose stated purpose was removing it.
+
+So the accurate status is: the repo's tracked files still contain a contributor's account name,
+in a public repository, and the automated control designed to prevent exactly that is inert
+where it matters. Observed here only because this evaluation ran on the affected account.
+
+**Suggested fix**, beyond the one-line doc edit: make the check independent of the runtime
+environment. A committed deny-list of known-private literals, or scanning for a pattern of
+`/home/<name>` and `/Users/<name>` path shapes, would run identically everywhere. As written the
+test's own skip conditions guarantee it can never fail in the one place the project relies on it.
 
 ### 2.4 [STILL OPEN — severity reduced] `report` fails wholesale with small local models
 
@@ -432,7 +458,7 @@ tuning the ranker.
 
 1. `bug(ocr)`: watermark-only text layer suppresses OCR — density threshold + `ARCHIV_OCR=force` (§3.1) — **highest value fix in this report**
 2. `bug(ingest)`: missing derived data is unrecoverable via plain `add`, and the error message misdirects (§3.2)
-3. `bug(ci)`: privacy guardrail still red — the fix commit's own field notes reintroduce the literal (§2.3)
+3. `bug(ci)`: privacy guardrail is inert on hosted runners (self-skips on `$USER == runner`), and the literal it was meant to remove is back in the fix commit's own field notes (§2.3)
 4. `quality(ask)`: fabricated-claim pass-through; consider qualifying `Verified Sources` when `insufficient_evidence` is non-empty (§2.2)
 5. `docs(report)`: document `--deterministic` as the supported path for small local models; persist raw model responses for report runs (§2.4)
 6. `ux(add)`: per-file diagnostics for rejected files; stop bucketing malformed-but-supported files as "unsupported" (§3.3)
