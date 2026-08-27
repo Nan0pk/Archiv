@@ -1,0 +1,10 @@
+{
+  "schema_version": "1",
+  "support_bundle_schema": "1",
+  "product_versions": [">=0.1.0a6,<0.2"],
+  "required_sections": [
+    "product", "platform", "dependencies", "schema_versions", "storage",
+    "ingestion_states", "error_categories", "validation_outcomes"
+  ],
+  "support_guidance": "Interpret aggregate status and version compatibility only; never request a document archive, database, configuration, environment dump, or raw logs."
+}
