@@ -17,7 +17,7 @@ from archiv.contracts import StrictModel
 
 
 class IngestionCounts(StrictModel):
-    """Mutually documented aggregate outcomes; never per-file observations."""
+    """Aggregate observations; degraded and skipped may overlap supported files."""
 
     supported: int = Field(default=0, ge=0)
     rejected: int = Field(default=0, ge=0)
