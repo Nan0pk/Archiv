@@ -300,7 +300,7 @@ packages, and it's worth knowing what each one is for:
 | --- | --- | --- |
 | `libreoffice-writer` | Rendering and validating Word and PDF reports | `archiv report` cannot complete its verification step |
 | `tesseract` + `tesseract-langpack-eng`, `-ara`, `-urd` | Reading scans and photos in English, Arabic, and Urdu | Images ingest and are preserved, but produce no text |
-| `python3-tkinter` | The desktop console | `archiv ui` won't open; every command still works in the terminal |
+| `python3-tkinter` | The desktop application | `archiv ui` won't open; every command still works in the terminal |
 | `xdg-utils`, `bubblewrap` | Desktop integration and sandboxing | reduced integration |
 
 ---
@@ -427,7 +427,7 @@ readable table.
 | `archiv source` | Locate one verified original from a citation or object hash |
 | `archiv report OBJECTIVE` | Generate a cited Word report and verify it before reporting success |
 | `archiv status` | Show what's stored, indexed, and how ingestion went |
-| `archiv ui` | Open the minimal local desktop console |
+| `archiv ui` | Open the task-oriented document library |
 
 #### Files and formats
 
@@ -579,7 +579,7 @@ Also: [Code of Conduct](CODE_OF_CONDUCT.md) ·
 - [Cited DOCX reports](docs/reporting.md)
 - [Bounded local MCP server](docs/mcp.md)
 - [CoWork-OS integration](docs/cowork-os-integration.md)
-- [Local test console](docs/test-console.md)
+- [Diagnostic console](docs/test-console.md)
 
 **Running it**
 - [User-ready Fedora alpha](docs/offline-alpha.md)
