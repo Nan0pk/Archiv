@@ -6,29 +6,54 @@
     {
       "schema_version": "1",
       "family": "plain-text",
-      "suffixes": [".txt", ".md"],
-      "media_types": ["text/plain", "text/markdown"],
+      "suffixes": [
+        ".txt",
+        ".md"
+      ],
+      "media_types": [
+        "text/plain",
+        "text/markdown"
+      ],
       "detection": "suffix plus bounded UTF-8 decoding; undecodable content fails closed",
       "immutable_ingestion": true,
       "text_extraction": "native",
-      "structure": ["lines"],
-      "locator_shapes": [["line"]],
+      "structure": [
+        "lines"
+      ],
+      "locator_shapes": [
+        [
+          "line"
+        ]
+      ],
       "grounding": true,
       "preview_render": "the preserved bytes are the truth; any text viewer can show them",
       "macros": "none; content is never executed",
       "encryption": "no encryption layer exists; bytes are preserved verbatim",
-      "known_limits": ["line locators only; no paragraph or section semantics"]
+      "known_limits": [
+        "line locators only; no paragraph or section semantics"
+      ],
+      "support_level": "full"
     },
     {
       "schema_version": "1",
       "family": "pdf",
-      "suffixes": [".pdf"],
-      "media_types": ["application/pdf"],
+      "suffixes": [
+        ".pdf"
+      ],
+      "media_types": [
+        "application/pdf"
+      ],
       "detection": "suffix plus PDF structure parsing via pypdf; malformed files fail closed",
       "immutable_ingestion": true,
       "text_extraction": "native",
-      "structure": ["pages"],
-      "locator_shapes": [["page"]],
+      "structure": [
+        "pages"
+      ],
+      "locator_shapes": [
+        [
+          "page"
+        ]
+      ],
       "grounding": true,
       "preview_render": "LibreOffice render for report validation; poppler pdftoppm only for bounded OCR rendering of textless pages",
       "macros": "embedded scripts and actions are never executed",
@@ -36,60 +61,114 @@
       "known_limits": [
         "text follows content-stream order, not visual layout",
         "pages without native text yield conditional visual_ocr segments only when local Tesseract and Poppler tools are present (page, line, and pixel-region locators); with tools absent ingestion stays valid with no searchable text"
-      ]
+      ],
+      "support_level": "partial"
     },
     {
       "schema_version": "1",
       "family": "office-word",
-      "suffixes": [".docx"],
-      "media_types": ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
+      "suffixes": [
+        ".docx"
+      ],
+      "media_types": [
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+      ],
       "detection": "suffix plus OOXML package validation via python-docx; renamed or corrupt packages fail closed",
       "immutable_ingestion": true,
       "text_extraction": "native",
-      "structure": ["paragraphs"],
-      "locator_shapes": [["paragraph"]],
+      "structure": [
+        "paragraphs"
+      ],
+      "locator_shapes": [
+        [
+          "paragraph"
+        ]
+      ],
       "grounding": true,
       "preview_render": "LibreOffice render inside the verified report workflow",
       "macros": "macros and active content are never executed",
       "encryption": "encrypted packages fail closed during normalization; no password handling is attempted",
-      "known_limits": ["comments, tracked changes, and header/footer decorations are not separately surfaced as text segments"]
+      "known_limits": [
+        "comments, tracked changes, and header/footer decorations are not separately surfaced as text segments"
+      ],
+      "support_level": "full"
     },
     {
       "schema_version": "1",
       "family": "office-spreadsheet",
-      "suffixes": [".xlsx"],
-      "media_types": ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"],
+      "suffixes": [
+        ".xlsx"
+      ],
+      "media_types": [
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      ],
       "detection": "suffix plus OOXML package validation via openpyxl; renamed or corrupt packages fail closed",
       "immutable_ingestion": true,
       "text_extraction": "native",
-      "structure": ["sheets", "cells"],
-      "locator_shapes": [["sheet"], ["cell", "sheet"]],
+      "structure": [
+        "sheets",
+        "cells"
+      ],
+      "locator_shapes": [
+        [
+          "sheet"
+        ],
+        [
+          "cell",
+          "sheet"
+        ]
+      ],
       "grounding": true,
       "preview_render": "LibreOffice render inside the verified report workflow",
       "macros": "formulas are surfaced as text only and never executed",
       "encryption": "encrypted packages fail closed during normalization; no password handling is attempted",
-      "known_limits": ["formatting, charts, and pivot state are not reconstructed"]
+      "known_limits": [
+        "formatting, charts, and pivot state are not reconstructed",
+        "retrieval indexes each normalized cell or row segment independently; phrases split across cells may not match as one literal phrase"
+      ],
+      "support_level": "partial"
     },
     {
       "schema_version": "1",
       "family": "office-presentation",
-      "suffixes": [".pptx"],
-      "media_types": ["application/vnd.openxmlformats-officedocument.presentationml.presentation"],
+      "suffixes": [
+        ".pptx"
+      ],
+      "media_types": [
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+      ],
       "detection": "suffix plus OOXML package validation via python-pptx; renamed or corrupt packages fail closed",
       "immutable_ingestion": true,
       "text_extraction": "native",
-      "structure": ["slides", "shapes"],
-      "locator_shapes": [["shape", "slide"]],
+      "structure": [
+        "slides",
+        "shapes"
+      ],
+      "locator_shapes": [
+        [
+          "shape",
+          "slide"
+        ]
+      ],
       "grounding": true,
       "preview_render": "LibreOffice render inside the verified report workflow",
       "macros": "embedded content is never executed",
       "encryption": "encrypted packages fail closed during normalization; no password handling is attempted",
-      "known_limits": ["speaker notes timing and animation semantics are not surfaced"]
+      "known_limits": [
+        "speaker notes timing and animation semantics are not surfaced"
+      ],
+      "support_level": "full"
     },
     {
       "schema_version": "1",
       "family": "opendocument-text",
-      "suffixes": [".odt", ".ott", ".odm", ".otm", ".fodt"],
+      "suffixes": [
+        ".odt",
+        ".ott",
+        ".odm",
+        ".otm",
+        ".fodt"
+      ],
       "media_types": [
         "application/vnd.oasis.opendocument.text",
         "application/vnd.oasis.opendocument.text-template",
@@ -100,18 +179,40 @@
       "detection": "suffix plus validated ZIP mimetype entry or flat-XML document mimetype; mismatches fail closed",
       "immutable_ingestion": true,
       "text_extraction": "native",
-      "structure": ["paragraphs", "headings", "tables"],
-      "locator_shapes": [["paragraph"], ["heading"], ["heading", "level"]],
+      "structure": [
+        "paragraphs",
+        "headings",
+        "tables"
+      ],
+      "locator_shapes": [
+        [
+          "paragraph"
+        ],
+        [
+          "heading"
+        ],
+        [
+          "heading",
+          "level"
+        ]
+      ],
       "grounding": true,
       "preview_render": "LibreOffice render inside the verified report workflow",
       "macros": "embedded scripts are never executed; manifest and content are parsed as data only",
       "encryption": "manifest-declared encrypted entries fail closed during normalization",
-      "known_limits": ["tables normalize as structured rows; page geometry, frames, and styles are not reconstructed"]
+      "known_limits": [
+        "tables normalize as structured rows; page geometry, frames, and styles are not reconstructed"
+      ],
+      "support_level": "full"
     },
     {
       "schema_version": "1",
       "family": "opendocument-spreadsheet",
-      "suffixes": [".ods", ".ots", ".fods"],
+      "suffixes": [
+        ".ods",
+        ".ots",
+        ".fods"
+      ],
       "media_types": [
         "application/vnd.oasis.opendocument.spreadsheet",
         "application/vnd.oasis.opendocument.spreadsheet-template",
@@ -120,18 +221,42 @@
       "detection": "suffix plus validated ZIP mimetype entry or flat-XML document mimetype; mismatches fail closed",
       "immutable_ingestion": true,
       "text_extraction": "native",
-      "structure": ["sheets", "rows", "columns"],
-      "locator_shapes": [["column", "row", "sheet"], ["column", "formula", "row", "sheet"]],
+      "structure": [
+        "sheets",
+        "rows",
+        "columns"
+      ],
+      "locator_shapes": [
+        [
+          "column",
+          "row",
+          "sheet"
+        ],
+        [
+          "column",
+          "formula",
+          "row",
+          "sheet"
+        ]
+      ],
       "grounding": true,
       "preview_render": "LibreOffice render inside the verified report workflow",
       "macros": "formulas are surfaced with their expressions and never executed",
       "encryption": "manifest-declared encrypted entries fail closed during normalization",
-      "known_limits": ["charts and pivot state are not reconstructed"]
+      "known_limits": [
+        "charts and pivot state are not reconstructed",
+        "retrieval indexes each normalized cell or row segment independently; phrases split across cells may not match as one literal phrase"
+      ],
+      "support_level": "partial"
     },
     {
       "schema_version": "1",
       "family": "opendocument-presentation",
-      "suffixes": [".odp", ".otp", ".fodp"],
+      "suffixes": [
+        ".odp",
+        ".otp",
+        ".fodp"
+      ],
       "media_types": [
         "application/vnd.oasis.opendocument.presentation",
         "application/vnd.oasis.opendocument.presentation-template",
@@ -140,18 +265,33 @@
       "detection": "suffix plus validated ZIP mimetype entry or flat-XML document mimetype; mismatches fail closed",
       "immutable_ingestion": true,
       "text_extraction": "native",
-      "structure": ["slides", "objects"],
-      "locator_shapes": [["object", "slide"]],
+      "structure": [
+        "slides",
+        "objects"
+      ],
+      "locator_shapes": [
+        [
+          "object",
+          "slide"
+        ]
+      ],
       "grounding": true,
       "preview_render": "LibreOffice render inside the verified report workflow",
       "macros": "embedded content is never executed",
       "encryption": "manifest-declared encrypted entries fail closed during normalization",
-      "known_limits": ["speaker notes are skipped by the segment model; animation semantics are not surfaced"]
+      "known_limits": [
+        "speaker notes are skipped by the segment model; animation semantics are not surfaced"
+      ],
+      "support_level": "partial"
     },
     {
       "schema_version": "1",
       "family": "opendocument-drawing",
-      "suffixes": [".odg", ".otg", ".fodg"],
+      "suffixes": [
+        ".odg",
+        ".otg",
+        ".fodg"
+      ],
       "media_types": [
         "application/vnd.oasis.opendocument.graphics",
         "application/vnd.oasis.opendocument.graphics-template",
@@ -160,56 +300,109 @@
       "detection": "suffix plus validated ZIP mimetype entry or flat-XML document mimetype; mismatches fail closed",
       "immutable_ingestion": true,
       "text_extraction": "native",
-      "structure": ["pages", "objects"],
-      "locator_shapes": [["object", "page"]],
+      "structure": [
+        "pages",
+        "objects"
+      ],
+      "locator_shapes": [
+        [
+          "object",
+          "page"
+        ]
+      ],
       "grounding": true,
       "preview_render": "LibreOffice render inside the verified report workflow",
       "macros": "embedded content is never executed",
       "encryption": "manifest-declared encrypted entries fail closed during normalization",
-      "known_limits": ["vector geometry is not reconstructed; text inside drawing objects is the searchable surface"]
+      "known_limits": [
+        "vector geometry is not reconstructed; text inside drawing objects is the searchable surface"
+      ],
+      "support_level": "full"
     },
     {
       "schema_version": "1",
       "family": "opendocument-formula",
-      "suffixes": [".odf"],
-      "media_types": ["application/vnd.oasis.opendocument.formula"],
+      "suffixes": [
+        ".odf"
+      ],
+      "media_types": [
+        "application/vnd.oasis.opendocument.formula"
+      ],
       "detection": "suffix plus validated ZIP mimetype entry; malformed math markup fails closed",
       "immutable_ingestion": true,
       "text_extraction": "native",
-      "structure": ["formulas"],
-      "locator_shapes": [["formula", "representation"]],
+      "structure": [
+        "formulas"
+      ],
+      "locator_shapes": [
+        [
+          "formula",
+          "representation"
+        ]
+      ],
       "grounding": true,
       "preview_render": "bounded text surface of the MathML source; source bytes preserved with their hash",
       "macros": "formulas are never executed or evaluated",
       "encryption": "not applicable; packages are validated ZIPs parsed as data",
-      "known_limits": ["the MathML source is preserved verbatim with its SHA-256; rendered equation images are not produced"]
+      "known_limits": [
+        "the MathML source is preserved verbatim with its SHA-256; rendered equation images are not produced"
+      ],
+      "support_level": "full"
     },
     {
       "schema_version": "1",
       "family": "opendocument-database",
-      "suffixes": [".odb"],
-      "media_types": ["application/vnd.oasis.opendocument.base"],
+      "suffixes": [
+        ".odb"
+      ],
+      "media_types": [
+        "application/vnd.oasis.opendocument.base"
+      ],
       "detection": "suffix plus validated ZIP mimetype and database content root; unexpected structure fails closed",
       "immutable_ingestion": true,
       "text_extraction": "metadata_only",
-      "structure": ["database object names"],
-      "locator_shapes": [["database_object", "index", "name"]],
+      "structure": [
+        "database object names"
+      ],
+      "locator_shapes": [
+        [
+          "database_object",
+          "index",
+          "name"
+        ]
+      ],
       "grounding": true,
       "preview_render": "no rendering; object names are the inspectable surface",
       "macros": "embedded Firebird or other engine payloads are opaque binary streams that are never parsed or executed",
       "encryption": "not applicable; packages are validated ZIPs parsed as data",
-      "known_limits": ["table contents, queries, and forms are not extracted in this version; only bounded object names are searchable"]
+      "known_limits": [
+        "table contents, queries, and forms are not extracted in this version; only bounded object names are searchable"
+      ],
+      "support_level": "partial"
     },
     {
       "schema_version": "1",
       "family": "inpage",
-      "suffixes": [".inp"],
-      "media_types": ["application/x-inpage"],
+      "suffixes": [
+        ".inp"
+      ],
+      "media_types": [
+        "application/x-inpage"
+      ],
       "detection": "suffix plus native InPage100/InPage300 stream identification inside a bounded CFB container; suffix spoofing and unknown variants fail closed",
       "immutable_ingestion": true,
       "text_extraction": "native",
-      "structure": ["streams", "byte offsets"],
-      "locator_shapes": [["byte_offset", "part", "stream"]],
+      "structure": [
+        "streams",
+        "byte offsets"
+      ],
+      "locator_shapes": [
+        [
+          "byte_offset",
+          "part",
+          "stream"
+        ]
+      ],
       "grounding": true,
       "preview_render": "no rendering; search and citations address extracted text segments",
       "macros": "no embedded execution surface is invoked; the CFB container is parsed as data only",
@@ -217,20 +410,47 @@
       "known_limits": [
         "native searchable-text ingestion only; text_fidelity is searchable_best_effort",
         "page geometry, frames, stories, columns, styles, and pixel-identical layout are explicitly not reconstructed (tracked separately)"
-      ]
+      ],
+      "support_level": "partial"
     },
     {
       "schema_version": "1",
       "family": "image",
-      "suffixes": [".png", ".jpg", ".jpeg"],
-      "media_types": ["image/png", "image/jpeg"],
+      "suffixes": [
+        ".png",
+        ".jpg",
+        ".jpeg"
+      ],
+      "media_types": [
+        "image/png",
+        "image/jpeg"
+      ],
       "detection": "suffix plus image decode validation via Pillow; corrupt images fail closed",
       "immutable_ingestion": true,
       "text_extraction": "visual_ocr_conditional",
-      "structure": ["pages", "lines", "pixel regions"],
+      "structure": [
+        "pages",
+        "lines",
+        "pixel regions"
+      ],
       "locator_shapes": [
-        ["engine", "languages", "line", "origin", "page", "region"],
-        ["confidence", "engine", "languages", "line", "origin", "page", "region"]
+        [
+          "engine",
+          "languages",
+          "line",
+          "origin",
+          "page",
+          "region"
+        ],
+        [
+          "confidence",
+          "engine",
+          "languages",
+          "line",
+          "origin",
+          "page",
+          "region"
+        ]
       ],
       "grounding": true,
       "preview_render": "the preserved image is the truth; OCR attests page/line/pixel-region coordinates when run",
@@ -239,13 +459,18 @@
       "known_limits": [
         "without local Tesseract and language data, ingestion stays valid and produces no text segments (ARCHIV_OCR=off keeps tests deterministic)",
         "OCR output is derived evidence with provenance and never overwrites the original"
-      ]
+      ],
+      "support_level": "partial"
     },
     {
       "schema_version": "1",
       "family": "audio",
-      "suffixes": [".wav"],
-      "media_types": ["audio/wav"],
+      "suffixes": [
+        ".wav"
+      ],
+      "media_types": [
+        "audio/wav"
+      ],
       "detection": "suffix plus RIFF/WAVE header parsing; corrupt audio fails closed",
       "immutable_ingestion": true,
       "text_extraction": "metadata_only",
@@ -258,7 +483,8 @@
       "known_limits": [
         "audio transcription is deferred until a bounded local processor with evidence-backed acceptance tests exists",
         "metadata (channels, sample rate, duration) is recorded for provenance"
-      ]
+      ],
+      "support_level": "partial"
     }
   ],
   "outputs": [
@@ -318,5 +544,54 @@
       "example": "compressed audio",
       "reason": "not a supported suffix; audio support is currently limited to uncompressed WAV metadata"
     }
-  ]
+  ],
+  "field_trial_decision": {
+    "schema_version": "1",
+    "evidence": "benchmarks/field_trial/public-results.json, docs/field-trial-report.md, and docs/field-notes-2026-08-24-test-corpus-quality.md",
+    "method": "Rank only observed or explicitly confirmed gaps; do not add parsers without lawful fixtures and measurable user-work evidence.",
+    "ranked_next_work": [
+      {
+        "rank": 1,
+        "format_or_limitation": "Legacy .doc and .rtf evidence ingestion",
+        "decision": "measure",
+        "reason": "The real-world corpus contained rejected .doc and .rtf files; acquire lawful content-bearing fixtures and measure user-question impact before selecting a sandboxed converter or parser."
+      },
+      {
+        "rank": 2,
+        "format_or_limitation": "Spreadsheet retrieval across cell boundaries",
+        "decision": "measure",
+        "reason": "Field notes confirmed cross-cell phrase misses; benchmark row-aware retrieval before changing normalized-output or locator contracts."
+      },
+      {
+        "rank": 3,
+        "format_or_limitation": "InPage layout, columns, frames, styles, and page geometry",
+        "decision": "defer",
+        "reason": "Native searchable text is available, but the field trial has no lawful visual-ground-truth corpus for layout fidelity."
+      },
+      {
+        "rank": 4,
+        "format_or_limitation": "Difficult Urdu typography and layout OCR",
+        "decision": "measure",
+        "reason": "Conditional OCR exists; select recovery work only after language-specific accuracy and target-machine resource measurements."
+      },
+      {
+        "rank": 5,
+        "format_or_limitation": "WAV transcription and ODB record extraction",
+        "decision": "defer",
+        "reason": "Both formats preserve or expose bounded metadata, but neither has a measured local extraction baseline with acceptance thresholds and resource ceilings."
+      },
+      {
+        "rank": 6,
+        "format_or_limitation": "Macro-enabled .docm ingestion",
+        "decision": "defer",
+        "reason": "No measured field-trial demand exists; any future implementation must prove macros remain inert and validate the OOXML package without execution."
+      },
+      {
+        "rank": 7,
+        "format_or_limitation": "Collections, synchronization, and broad connectors",
+        "decision": "defer",
+        "reason": "These are product workflows rather than parsers, and the field trial did not show that they outrank local ingestion and retrieval defects."
+      }
+    ]
+  }
 }
