@@ -6,53 +6,33 @@
     {
       "schema_version": "1",
       "family": "plain-text",
-      "suffixes": [
-        ".txt",
-        ".md"
-      ],
-      "media_types": [
-        "text/plain",
-        "text/markdown"
-      ],
+      "suffixes": [".txt", ".md"],
+      "media_types": ["text/plain", "text/markdown"],
       "detection": "suffix plus bounded UTF-8 decoding; undecodable content fails closed",
       "immutable_ingestion": true,
       "text_extraction": "native",
-      "structure": [
-        "lines"
-      ],
+      "structure": ["lines"],
       "locator_shapes": [
-        [
-          "line"
-        ]
+        ["line"]
       ],
       "grounding": true,
       "preview_render": "the preserved bytes are the truth; any text viewer can show them",
       "macros": "none; content is never executed",
       "encryption": "no encryption layer exists; bytes are preserved verbatim",
-      "known_limits": [
-        "line locators only; no paragraph or section semantics"
-      ],
+      "known_limits": ["line locators only; no paragraph or section semantics"],
       "support_level": "full"
     },
     {
       "schema_version": "1",
       "family": "pdf",
-      "suffixes": [
-        ".pdf"
-      ],
-      "media_types": [
-        "application/pdf"
-      ],
+      "suffixes": [".pdf"],
+      "media_types": ["application/pdf"],
       "detection": "suffix plus PDF structure parsing via pypdf; malformed files fail closed",
       "immutable_ingestion": true,
       "text_extraction": "native",
-      "structure": [
-        "pages"
-      ],
+      "structure": ["pages"],
       "locator_shapes": [
-        [
-          "page"
-        ]
+        ["page"]
       ],
       "grounding": true,
       "preview_render": "LibreOffice render for report validation; poppler pdftoppm only for bounded OCR rendering of textless pages",
@@ -67,22 +47,14 @@
     {
       "schema_version": "1",
       "family": "office-word",
-      "suffixes": [
-        ".docx"
-      ],
-      "media_types": [
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-      ],
+      "suffixes": [".docx"],
+      "media_types": ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
       "detection": "suffix plus OOXML package validation via python-docx; renamed or corrupt packages fail closed",
       "immutable_ingestion": true,
       "text_extraction": "native",
-      "structure": [
-        "paragraphs"
-      ],
+      "structure": ["paragraphs"],
       "locator_shapes": [
-        [
-          "paragraph"
-        ]
+        ["paragraph"]
       ],
       "grounding": true,
       "preview_render": "LibreOffice render inside the verified report workflow",
@@ -96,27 +68,15 @@
     {
       "schema_version": "1",
       "family": "office-spreadsheet",
-      "suffixes": [
-        ".xlsx"
-      ],
-      "media_types": [
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-      ],
+      "suffixes": [".xlsx"],
+      "media_types": ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"],
       "detection": "suffix plus OOXML package validation via openpyxl; renamed or corrupt packages fail closed",
       "immutable_ingestion": true,
       "text_extraction": "native",
-      "structure": [
-        "sheets",
-        "cells"
-      ],
+      "structure": ["sheets", "cells"],
       "locator_shapes": [
-        [
-          "sheet"
-        ],
-        [
-          "cell",
-          "sheet"
-        ]
+        ["sheet"],
+        ["cell", "sheet"]
       ],
       "grounding": true,
       "preview_render": "LibreOffice render inside the verified report workflow",
@@ -131,44 +91,26 @@
     {
       "schema_version": "1",
       "family": "office-presentation",
-      "suffixes": [
-        ".pptx"
-      ],
-      "media_types": [
-        "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-      ],
+      "suffixes": [".pptx"],
+      "media_types": ["application/vnd.openxmlformats-officedocument.presentationml.presentation"],
       "detection": "suffix plus OOXML package validation via python-pptx; renamed or corrupt packages fail closed",
       "immutable_ingestion": true,
       "text_extraction": "native",
-      "structure": [
-        "slides",
-        "shapes"
-      ],
+      "structure": ["slides", "shapes"],
       "locator_shapes": [
-        [
-          "shape",
-          "slide"
-        ]
+        ["shape", "slide"]
       ],
       "grounding": true,
       "preview_render": "LibreOffice render inside the verified report workflow",
       "macros": "embedded content is never executed",
       "encryption": "encrypted packages fail closed during normalization; no password handling is attempted",
-      "known_limits": [
-        "speaker notes timing and animation semantics are not surfaced"
-      ],
+      "known_limits": ["speaker notes timing and animation semantics are not surfaced"],
       "support_level": "full"
     },
     {
       "schema_version": "1",
       "family": "opendocument-text",
-      "suffixes": [
-        ".odt",
-        ".ott",
-        ".odm",
-        ".otm",
-        ".fodt"
-      ],
+      "suffixes": [".odt", ".ott", ".odm", ".otm", ".fodt"],
       "media_types": [
         "application/vnd.oasis.opendocument.text",
         "application/vnd.oasis.opendocument.text-template",
@@ -179,22 +121,11 @@
       "detection": "suffix plus validated ZIP mimetype entry or flat-XML document mimetype; mismatches fail closed",
       "immutable_ingestion": true,
       "text_extraction": "native",
-      "structure": [
-        "paragraphs",
-        "headings",
-        "tables"
-      ],
+      "structure": ["paragraphs", "headings", "tables"],
       "locator_shapes": [
-        [
-          "paragraph"
-        ],
-        [
-          "heading"
-        ],
-        [
-          "heading",
-          "level"
-        ]
+        ["paragraph"],
+        ["heading"],
+        ["heading", "level"]
       ],
       "grounding": true,
       "preview_render": "LibreOffice render inside the verified report workflow",
@@ -208,11 +139,7 @@
     {
       "schema_version": "1",
       "family": "opendocument-spreadsheet",
-      "suffixes": [
-        ".ods",
-        ".ots",
-        ".fods"
-      ],
+      "suffixes": [".ods", ".ots", ".fods"],
       "media_types": [
         "application/vnd.oasis.opendocument.spreadsheet",
         "application/vnd.oasis.opendocument.spreadsheet-template",
@@ -221,23 +148,10 @@
       "detection": "suffix plus validated ZIP mimetype entry or flat-XML document mimetype; mismatches fail closed",
       "immutable_ingestion": true,
       "text_extraction": "native",
-      "structure": [
-        "sheets",
-        "rows",
-        "columns"
-      ],
+      "structure": ["sheets", "rows", "columns"],
       "locator_shapes": [
-        [
-          "column",
-          "row",
-          "sheet"
-        ],
-        [
-          "column",
-          "formula",
-          "row",
-          "sheet"
-        ]
+        ["column", "row", "sheet"],
+        ["column", "formula", "row", "sheet"]
       ],
       "grounding": true,
       "preview_render": "LibreOffice render inside the verified report workflow",
@@ -252,11 +166,7 @@
     {
       "schema_version": "1",
       "family": "opendocument-presentation",
-      "suffixes": [
-        ".odp",
-        ".otp",
-        ".fodp"
-      ],
+      "suffixes": [".odp", ".otp", ".fodp"],
       "media_types": [
         "application/vnd.oasis.opendocument.presentation",
         "application/vnd.oasis.opendocument.presentation-template",
@@ -265,15 +175,9 @@
       "detection": "suffix plus validated ZIP mimetype entry or flat-XML document mimetype; mismatches fail closed",
       "immutable_ingestion": true,
       "text_extraction": "native",
-      "structure": [
-        "slides",
-        "objects"
-      ],
+      "structure": ["slides", "objects"],
       "locator_shapes": [
-        [
-          "object",
-          "slide"
-        ]
+        ["object", "slide"]
       ],
       "grounding": true,
       "preview_render": "LibreOffice render inside the verified report workflow",
@@ -287,11 +191,7 @@
     {
       "schema_version": "1",
       "family": "opendocument-drawing",
-      "suffixes": [
-        ".odg",
-        ".otg",
-        ".fodg"
-      ],
+      "suffixes": [".odg", ".otg", ".fodg"],
       "media_types": [
         "application/vnd.oasis.opendocument.graphics",
         "application/vnd.oasis.opendocument.graphics-template",
@@ -300,15 +200,9 @@
       "detection": "suffix plus validated ZIP mimetype entry or flat-XML document mimetype; mismatches fail closed",
       "immutable_ingestion": true,
       "text_extraction": "native",
-      "structure": [
-        "pages",
-        "objects"
-      ],
+      "structure": ["pages", "objects"],
       "locator_shapes": [
-        [
-          "object",
-          "page"
-        ]
+        ["object", "page"]
       ],
       "grounding": true,
       "preview_render": "LibreOffice render inside the verified report workflow",
@@ -322,23 +216,14 @@
     {
       "schema_version": "1",
       "family": "opendocument-formula",
-      "suffixes": [
-        ".odf"
-      ],
-      "media_types": [
-        "application/vnd.oasis.opendocument.formula"
-      ],
+      "suffixes": [".odf"],
+      "media_types": ["application/vnd.oasis.opendocument.formula"],
       "detection": "suffix plus validated ZIP mimetype entry; malformed math markup fails closed",
       "immutable_ingestion": true,
       "text_extraction": "native",
-      "structure": [
-        "formulas"
-      ],
+      "structure": ["formulas"],
       "locator_shapes": [
-        [
-          "formula",
-          "representation"
-        ]
+        ["formula", "representation"]
       ],
       "grounding": true,
       "preview_render": "bounded text surface of the MathML source; source bytes preserved with their hash",
@@ -352,24 +237,14 @@
     {
       "schema_version": "1",
       "family": "opendocument-database",
-      "suffixes": [
-        ".odb"
-      ],
-      "media_types": [
-        "application/vnd.oasis.opendocument.base"
-      ],
+      "suffixes": [".odb"],
+      "media_types": ["application/vnd.oasis.opendocument.base"],
       "detection": "suffix plus validated ZIP mimetype and database content root; unexpected structure fails closed",
       "immutable_ingestion": true,
       "text_extraction": "metadata_only",
-      "structure": [
-        "database object names"
-      ],
+      "structure": ["database object names"],
       "locator_shapes": [
-        [
-          "database_object",
-          "index",
-          "name"
-        ]
+        ["database_object", "index", "name"]
       ],
       "grounding": true,
       "preview_render": "no rendering; object names are the inspectable surface",
@@ -383,25 +258,14 @@
     {
       "schema_version": "1",
       "family": "inpage",
-      "suffixes": [
-        ".inp"
-      ],
-      "media_types": [
-        "application/x-inpage"
-      ],
+      "suffixes": [".inp"],
+      "media_types": ["application/x-inpage"],
       "detection": "suffix plus native InPage100/InPage300 stream identification inside a bounded CFB container; suffix spoofing and unknown variants fail closed",
       "immutable_ingestion": true,
       "text_extraction": "native",
-      "structure": [
-        "streams",
-        "byte offsets"
-      ],
+      "structure": ["streams", "byte offsets"],
       "locator_shapes": [
-        [
-          "byte_offset",
-          "part",
-          "stream"
-        ]
+        ["byte_offset", "part", "stream"]
       ],
       "grounding": true,
       "preview_render": "no rendering; search and citations address extracted text segments",
@@ -416,41 +280,15 @@
     {
       "schema_version": "1",
       "family": "image",
-      "suffixes": [
-        ".png",
-        ".jpg",
-        ".jpeg"
-      ],
-      "media_types": [
-        "image/png",
-        "image/jpeg"
-      ],
+      "suffixes": [".png", ".jpg", ".jpeg"],
+      "media_types": ["image/png", "image/jpeg"],
       "detection": "suffix plus image decode validation via Pillow; corrupt images fail closed",
       "immutable_ingestion": true,
       "text_extraction": "visual_ocr_conditional",
-      "structure": [
-        "pages",
-        "lines",
-        "pixel regions"
-      ],
+      "structure": ["pages", "lines", "pixel regions"],
       "locator_shapes": [
-        [
-          "engine",
-          "languages",
-          "line",
-          "origin",
-          "page",
-          "region"
-        ],
-        [
-          "confidence",
-          "engine",
-          "languages",
-          "line",
-          "origin",
-          "page",
-          "region"
-        ]
+        ["engine", "languages", "line", "origin", "page", "region"],
+        ["confidence", "engine", "languages", "line", "origin", "page", "region"]
       ],
       "grounding": true,
       "preview_render": "the preserved image is the truth; OCR attests page/line/pixel-region coordinates when run",
@@ -465,12 +303,8 @@
     {
       "schema_version": "1",
       "family": "audio",
-      "suffixes": [
-        ".wav"
-      ],
-      "media_types": [
-        "audio/wav"
-      ],
+      "suffixes": [".wav"],
+      "media_types": ["audio/wav"],
       "detection": "suffix plus RIFF/WAVE header parsing; corrupt audio fails closed",
       "immutable_ingestion": true,
       "text_extraction": "metadata_only",
