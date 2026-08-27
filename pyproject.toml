@@ -26,7 +26,7 @@ dependencies = [
 dev = [
   "pyright>=1.1.390",
   "pytest>=8.3",
-  "reportlab==5.0.0",
+  "reportlab==5.0.1",
   "ruff>=0.9",
 ]
 ocr-benchmark = [
