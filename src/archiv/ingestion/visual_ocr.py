@@ -15,6 +15,7 @@ from PIL import Image
 
 from archiv.contracts import NormalizedDocument, NormalizedSegment
 from archiv.hashing import sha256_file
+from archiv.ingestion.limits import MAX_CPU_SECONDS, MAX_MEMORY_BYTES, MAX_SUBPROCESSES
 
 OCR_PROCESSOR_VERSION = "1"
 MAX_INPUT_BYTES = 200 * 1024 * 1024
@@ -93,6 +94,9 @@ def _base_manifest(source_sha256: str, source_kind: str) -> dict[str, object]:
             "max_pdf_pages": MAX_PDF_PAGES,
             "page_timeout_seconds": OCR_TIMEOUT_SECONDS,
             "render_dpi": RENDER_DPI,
+            "max_subprocesses": MAX_SUBPROCESSES,
+            "cpu_seconds": MAX_CPU_SECONDS,
+            "memory_bytes": MAX_MEMORY_BYTES,
         },
     }
 
@@ -157,6 +161,14 @@ def _run(
 
     environment = os.environ.copy()
     environment.setdefault("OMP_THREAD_LIMIT", "2")
+
+    def apply_resource_limits() -> None:
+        # Imported only in the POSIX child; ``resource`` is unavailable on Windows.
+        import resource
+
+        resource.setrlimit(resource.RLIMIT_CPU, (MAX_CPU_SECONDS, MAX_CPU_SECONDS))
+        resource.setrlimit(resource.RLIMIT_AS, (MAX_MEMORY_BYTES, MAX_MEMORY_BYTES))
+
     try:
         completed = subprocess.run(
             wrapped,
@@ -167,6 +179,7 @@ def _run(
             env=environment,
             text=True,
             timeout=timeout,
+            preexec_fn=apply_resource_limits if os.name == "posix" else None,
         )
     except subprocess.TimeoutExpired as error:
         raise VisualOcrError(f"processor timed out after {timeout} seconds") from error
