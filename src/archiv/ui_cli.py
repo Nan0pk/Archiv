@@ -1,4 +1,4 @@
-"""Wire the minimal local test console into the Archiv CLI."""
+"""Wire the product interface and retained diagnostic console into the CLI."""
 
 from __future__ import annotations
 
@@ -32,11 +32,18 @@ def register_ui_command(app: typer.Typer) -> Callable[..., None]:
                 help="Archiv home. Defaults to ARCHIV_HOME or the user data directory.",
             ),
         ] = None,
+        diagnostic: Annotated[
+            bool,
+            typer.Option("--diagnostic", help="Open the command-oriented diagnostic console."),
+        ] = False,
     ) -> None:
-        """Open the minimal local test console over all Archiv commands."""
+        """Open Archiv's task-oriented desktop application."""
 
         try:
-            from archiv.ui.tk_console import launch_console
+            if diagnostic:
+                from archiv.ui.tk_console import launch_console as launch
+            else:
+                from archiv.ui.tk_product import launch_product as launch
         except ModuleNotFoundError as error:
             if error.name not in _TKINTER_MODULE_NAMES:
                 raise
@@ -46,7 +53,7 @@ def register_ui_command(app: typer.Typer) -> Callable[..., None]:
                 err=True,
             )
             raise typer.Exit(code=1) from error
-        exit_code = launch_console(home=home)
+        exit_code = launch(home=home)
         if exit_code != 0:
             raise typer.Exit(code=exit_code)
 
