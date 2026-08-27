@@ -1,6 +1,6 @@
 # Security policy
 
-Archiv is pre-alpha software. Do not use it as the sole store for important data and do not expose it to untrusted networks.
+Archiv is alpha software. Do not use it as the sole store for important data and do not expose it to untrusted networks.
 
 ## Reporting a vulnerability
 
