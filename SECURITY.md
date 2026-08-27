@@ -8,6 +8,10 @@ Do not publish exploit details, credentials, private documents, or sensitive log
 
 Use GitHub private vulnerability reporting for this repository when available. If that surface is unavailable, open a minimal public issue stating only that a private security contact channel is required; omit technical exploit details until a private channel is established.
 
+Response targets, dependency triage, signed-release procedure, and the independent-review
+stable gate are documented in [Security maintenance](docs/security/maintenance.md) and the
+[threat model](docs/security/threat-model.md).
+
 The repository owner must verify that private vulnerability reporting is enabled under **Settings → Code security and analysis**. The effective target configuration and incident procedure are recorded in [GitHub governance and CI trust boundary](docs/github-governance.md).
 
 ## Public-repository constraints
