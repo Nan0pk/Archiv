@@ -8,6 +8,7 @@ from pathlib import Path
 from PIL import Image
 
 from archiv.contracts import NormalizedDocument
+from archiv.ingestion.limits import check_image
 
 
 def normalize_image(
@@ -19,6 +20,7 @@ def normalize_image(
     kind: str,
 ) -> NormalizedDocument:
     with Image.open(path) as image:
+        check_image(image.width, image.height)
         image.verify()
     with Image.open(path) as image:
         metadata: dict[str, object] = {

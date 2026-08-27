@@ -11,6 +11,7 @@ from archiv.ingestion.formats import (
     media_type_for,
     suffix_for,
 )
+from archiv.ingestion.limits import check_input
 from archiv.ingestion.normalize_documents import normalize_docx, normalize_pdf, normalize_text
 from archiv.ingestion.normalize_inpage import normalize_inpage
 from archiv.ingestion.normalize_media import normalize_image, normalize_wav
@@ -32,6 +33,7 @@ def normalize(
     kind = suffix.lstrip(".")
     media_type = media_type_for(logical_name)
     try:
+        check_input(path)
         if kind in {"txt", "md"}:
             return normalize_text(
                 path,

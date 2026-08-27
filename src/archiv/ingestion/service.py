@@ -11,6 +11,7 @@ from archiv.contracts import IngestionResult, IngestionStatus, ProcessingEvidenc
 from archiv.hashing import sha256_file
 from archiv.ingestion.derive import derive, reuse_derived
 from archiv.ingestion.ledger import canonical_source_name, now_iso
+from archiv.ingestion.limits import check_input
 from archiv.ingestion.normalizers import media_type_for, normalize, suffix_for
 from archiv.storage.database import ArchivDatabase
 from archiv.storage.layout import ArchivLayout
@@ -109,7 +110,11 @@ def ingest_file(
 ) -> IngestionResult:
     """Validate, content-address, record, and derive one local file."""
 
-    source = source.expanduser().resolve(strict=True)
+    source = source.expanduser()
+    # Inspect the directory entry before resolution so symlink inputs cannot
+    # silently cross the caller's intended trust boundary.
+    check_input(source)
+    source = source.resolve(strict=True)
     if not source.is_file():
         raise ValueError("source must be a regular file")
 
