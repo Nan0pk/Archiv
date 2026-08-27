@@ -123,10 +123,9 @@
       "macros": "formulas are surfaced as text only and never executed",
       "encryption": "encrypted packages fail closed during normalization; no password handling is attempted",
       "known_limits": [
-        "formatting, charts, and pivot state are not reconstructed",
-        "retrieval indexes each normalized cell or row segment independently; phrases split across cells may not match as one literal phrase"
+        "formatting, charts, and pivot state are not reconstructed"
       ],
-      "support_level": "partial"
+      "support_level": "full"
     },
     {
       "schema_version": "1",
@@ -244,10 +243,9 @@
       "macros": "formulas are surfaced with their expressions and never executed",
       "encryption": "manifest-declared encrypted entries fail closed during normalization",
       "known_limits": [
-        "charts and pivot state are not reconstructed",
-        "retrieval indexes each normalized cell or row segment independently; phrases split across cells may not match as one literal phrase"
+        "charts and pivot state are not reconstructed"
       ],
-      "support_level": "partial"
+      "support_level": "full"
     },
     {
       "schema_version": "1",
@@ -547,50 +545,26 @@
   ],
   "field_trial_decision": {
     "schema_version": "1",
-    "evidence": "benchmarks/field_trial/public-results.json, docs/field-trial-report.md, and docs/field-notes-2026-08-24-test-corpus-quality.md",
+    "evidence": "benchmarks/field_trial/public-results.json and the 0.1.0a5 field-trial report",
     "method": "Rank only observed or explicitly confirmed gaps; do not add parsers without lawful fixtures and measurable user-work evidence.",
     "ranked_next_work": [
       {
         "rank": 1,
-        "format_or_limitation": "Legacy .doc and .rtf evidence ingestion",
-        "decision": "measure",
-        "reason": "The real-world corpus contained rejected .doc and .rtf files; acquire lawful content-bearing fixtures and measure user-question impact before selecting a sandboxed converter or parser."
-      },
-      {
-        "rank": 2,
-        "format_or_limitation": "Spreadsheet retrieval across cell boundaries",
-        "decision": "measure",
-        "reason": "Field notes confirmed cross-cell phrase misses; benchmark row-aware retrieval before changing normalized-output or locator contracts."
-      },
-      {
-        "rank": 3,
-        "format_or_limitation": "InPage layout, columns, frames, styles, and page geometry",
+        "format_or_limitation": "InPage layout, frames, styles, and page geometry",
         "decision": "defer",
         "reason": "Native searchable text is available, but the field trial has no lawful visual-ground-truth corpus for layout fidelity."
       },
       {
-        "rank": 4,
-        "format_or_limitation": "Difficult Urdu typography and layout OCR",
+        "rank": 2,
+        "format_or_limitation": "Difficult-layout visual OCR and local engine coverage",
         "decision": "measure",
-        "reason": "Conditional OCR exists; select recovery work only after language-specific accuracy and target-machine resource measurements."
+        "reason": "Conditional OCR exists; select further work only after target-machine accuracy and resource measurements."
       },
       {
-        "rank": 5,
-        "format_or_limitation": "WAV transcription and ODB record extraction",
+        "rank": 3,
+        "format_or_limitation": "Audio transcription",
         "decision": "defer",
-        "reason": "Both formats preserve or expose bounded metadata, but neither has a measured local extraction baseline with acceptance thresholds and resource ceilings."
-      },
-      {
-        "rank": 6,
-        "format_or_limitation": "Macro-enabled .docm ingestion",
-        "decision": "defer",
-        "reason": "No measured field-trial demand exists; any future implementation must prove macros remain inert and validate the OOXML package without execution."
-      },
-      {
-        "rank": 7,
-        "format_or_limitation": "Collections, synchronization, and broad connectors",
-        "decision": "defer",
-        "reason": "These are product workflows rather than parsers, and the field trial did not show that they outrank local ingestion and retrieval defects."
+        "reason": "WAV preservation is supported, but no measured local processor baseline or evidence-backed acceptance threshold exists."
       }
     ]
   }

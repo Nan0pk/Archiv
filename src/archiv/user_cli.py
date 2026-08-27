@@ -21,7 +21,7 @@ from archiv.contracts import (
 from archiv.format_matrix import load_format_matrix, matrix_path
 from archiv.grounding import run_grounded_ask
 from archiv.ingestion import ingest_file
-from archiv.ingestion.formats import SUPPORTED_SUFFIXES, UnsupportedFormatError
+from archiv.ingestion.formats import SUPPORTED_SUFFIXES
 from archiv.ingestion.summary import IngestionCounts, write_summary
 from archiv.model_adapter import load_model_config
 from archiv.search import rebuild_search_index, search_documents
@@ -55,8 +55,11 @@ def _add_sources(
     *,
     home: Path | None,
     rebuild_derived: bool,
-) -> tuple[list[IngestionResult], SearchIndexBuild | None, int, int]:
+) -> tuple[list[IngestionResult], SearchIndexBuild, int, int]:
     candidates, rejected = _candidates(source)
+    if not candidates:
+        raise ValueError("no supported files were found")
+
     results: list[IngestionResult] = []
     failed = 0
     active = source
@@ -67,23 +70,15 @@ def _add_sources(
             rejected += 1
         except (OSError, RuntimeError, ValueError):
             failed += 1
-    index = rebuild_search_index(home=home) if results else None
-    return results, index, rejected, failed
+    if not results:
+        raise ValueError("no supported valid files could be ingested")
+    return results, rebuild_search_index(home=home), rejected, failed
 
 
 def _is_degraded(result: IngestionResult) -> bool:
-    """Report either a partial format contract or a skipped processing stage."""
+    """A successful file is partial when any processor explicitly skipped work."""
 
-    matrix = load_format_matrix(matrix_path())
-    partial_media_types = {
-        media_type
-        for family in matrix.families
-        if family.support_level == "partial"
-        for media_type in family.media_types
-    }
-    return result.media_type in partial_media_types or any(
-        item.status == "skipped" for item in result.processing
-    )
+    return any(item.status == "skipped" for item in result.processing)
 
 
 def _locator_text(locator: dict[str, object]) -> str:
@@ -125,7 +120,6 @@ def _status_payload(home: Path | None) -> dict[str, object]:
         "duplicate_ingestions": 0,
         "failed_ingestions": 0,
         "degraded_objects": 0,
-        "skipped_objects": 0,
     }
     errors: list[str] = []
     if layout.database.is_file():
@@ -150,14 +144,9 @@ def _status_payload(home: Path | None) -> dict[str, object]:
                             AS duplicate_ingestions,
                         (SELECT COUNT(*) FROM ingestions WHERE status = 'failed')
                             AS failed_ingestions,
-                        (SELECT COUNT(*) FROM objects
-                            WHERE source_extension IN ("""
-                    + placeholders
-                    + """)) AS degraded_objects,
                         (SELECT COUNT(DISTINCT object_sha256) FROM processing_runs
-                            WHERE status = 'skipped') AS skipped_objects
-                    """,
-                    partial_suffixes,
+                            WHERE status = 'skipped') AS degraded_objects
+                    """
                 ).fetchone()
             if row is not None:
                 for key in counts:
@@ -215,7 +204,6 @@ def _status_payload(home: Path | None) -> dict[str, object]:
             "duplicates": counts["duplicate_ingestions"],
             "failed": counts["failed_ingestions"],
             "degraded": counts["degraded_objects"],
-            "skipped": counts["skipped_objects"],
         },
         "search_index": {
             "available": index_path.is_file(),
@@ -298,9 +286,19 @@ def register_user_commands(app: typer.Typer) -> tuple[Callable[..., None], ...]:
             "rejected_unsupported": rejected,
             "skipped_unsupported": rejected,
             "failed": failed,
-            "search_index": None if index is None else index.model_dump(mode="json"),
-            "ingestion_summary": counts.model_dump(mode="json"),
+            "search_index": index.model_dump(mode="json"),
         }
+        degraded = sum(_is_degraded(result) for result in results)
+        counts = IngestionCounts(
+            supported=len(results),
+            rejected=rejected,
+            skipped=sum(result.duplicate for result in results),
+            degraded=degraded,
+            failed=failed,
+        )
+        payload["ingestion_summary"] = counts.model_dump(mode="json")
+        if summary_out is not None:
+            write_summary(summary_out, counts)
         if json_output:
             _emit_json(payload)
             if not succeeded:
@@ -552,7 +550,7 @@ def register_user_commands(app: typer.Typer) -> tuple[Callable[..., None], ...]:
         ingestion_values = cast(dict[str, object], payload["ingestions"])
         counts = IngestionCounts(
             supported=cast(int, ingestion_values["successful"]),
-            skipped=cast(int, ingestion_values["skipped"]),
+            skipped=cast(int, ingestion_values["duplicates"]),
             failed=cast(int, ingestion_values["failed"]),
             degraded=cast(int, ingestion_values["degraded"]),
         )
