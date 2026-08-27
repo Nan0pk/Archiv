@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import sys
 import tkinter as tk
 from pathlib import Path
 from tkinter import TclError, filedialog, messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
 
+from archiv.doctor import diagnostics_report, save_diagnostics
 from archiv.ui.product import (
     DesktopState,
     check_prerequisites,
@@ -243,6 +245,36 @@ class ProductApp:
             ttk.Button(self.body, text="Add folder…", command=self._add_folder).pack(
                 anchor=tk.W, pady=12
             )
+            ttk.Button(self.body, text="Export diagnostics…", command=self._diagnostics).pack(
+                anchor=tk.W, pady=4
+            )
+
+    def _diagnostics(self) -> None:
+        report = diagnostics_report(self.state.home)
+        preview = tk.Toplevel(self.root)
+        preview.title("Preview diagnostics — every field")
+        ttk.Label(preview, text="Review every field below before choosing Save.").pack(
+            padx=12, pady=8
+        )
+        text = ScrolledText(preview, width=90, height=30, wrap=tk.NONE)
+        text.insert("1.0", json.dumps(report, indent=2, sort_keys=True))
+        text.configure(state=tk.DISABLED)
+        text.pack(fill=tk.BOTH, expand=True, padx=12)
+
+        def save() -> None:
+            selected = filedialog.asksaveasfilename(parent=preview, defaultextension=".json")
+            if not selected:
+                return
+            try:
+                save_diagnostics(report, Path(selected))
+            except OSError:
+                messagebox.showerror("Not saved", "Choose a new writable filename.", parent=preview)
+                return
+            messagebox.showinfo("Saved", "Diagnostics bundle saved.", parent=preview)
+            preview.destroy()
+
+        ttk.Button(preview, text="Save…", command=save).pack(side=tk.LEFT, padx=12, pady=10)
+        ttk.Button(preview, text="Cancel", command=preview.destroy).pack(side=tk.LEFT, pady=10)
 
     def _add_folder(self) -> None:
         selected = filedialog.askdirectory(title="Add document folder")

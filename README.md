@@ -194,7 +194,11 @@ Version `0.1.0a6`. Every row below is implemented and tested — not planned.
 | **Point at a local model** | Loopback-only setup for Ollama, LocalAI, or vLLM | `archiv model configure` |
 | **Use a window instead** | A document-library desktop for ingesting, finding, asking, and reporting | `archiv ui` |
 | **Check your environment** | A deterministic report on what's installed and working | `archiv doctor` |
+| **Export safe diagnostics** | Preview an aggregate, redacted support bundle before saving | `archiv diagnostics-export support.json` |
 | **Connect a workbench** | A bounded local MCP server, plus a pinned CoWork-OS integration | see [MCP docs](docs/mcp.md) |
+
+Support and privacy guidance: [diagnostics and issue reports](docs/diagnostics.md) ·
+[known issues](docs/known-issues.md) · [release notes](docs/release-notes.md).
 
 ### What Archiv does *not* claim
 
