@@ -1,6 +1,6 @@
 # User-ready Fedora alpha (0.1.0a6)
 
-Archiv `0.1.0a6` packages explainable natural-language retrieval, bounded source-location verification, grounded questions, and cited-report workflows behind a simple everyday command surface, plus a minimal local test console (`archiv ui`) for exercising every command without memorizing CLI syntax. The console's desktop dependencies (`python3-tkinter`, `xdg-utils`) are installed by the Fedora installer. Installation may download Fedora and Python packages. After installation, adding, searching, asking, reporting, model configuration, verification, backup, and restore require no external network access, cloud login, telemetry endpoint, or online provider model.
+Archiv `0.1.0a6` packages explainable natural-language retrieval, bounded source-location verification, grounded questions, and cited-report workflows behind a simple everyday command surface. `archiv ui` opens the task-oriented document-library application for ingestion, search, grounded questions, sources, reports, recovery, and settings. The retained command test console is available to maintainers as `archiv ui --diagnostic`; see [Archiv desktop and diagnostic console](test-console.md). Desktop dependencies (`python3-tkinter`, `xdg-utils`) are installed by the Fedora installer. Installation may download Fedora and Python packages. After installation, adding, searching, asking, reporting, model configuration, verification, backup, and restore require no external network access, cloud login, telemetry endpoint, or online provider model.
 
 ## One-command Fedora installation
 
@@ -51,6 +51,22 @@ Model-assisted `archiv report "objective"` uses the same natural-language retrie
 `archiv status` shows the Archiv home, document and ingestion counts, index state, ask and report run outcomes, and explicit model configuration without changing state.
 
 All everyday commands use readable output by default. Add `--json` for automation.
+
+## Privacy-safe diagnostics
+
+`archiv diagnostics-export archiv-support.json` previews an allow-listed, sanitized support bundle and writes it only after confirmation. It excludes document names, paths, excerpts, prompts, model endpoints, credentials, raw errors, configuration, and environment variables. Review the preview before sharing it; see [Privacy-safe diagnostics and issue reports](diagnostics.md) for the exact fields and reporting guidance.
+
+## Storage integrity and migrations
+
+Archiv checks SQLite integrity and foreign keys, schema compatibility, referenced object hashes, and required derived evidence. Schema migrations are transactional and create a pre-migration database recovery point without replacing an earlier one. Keep that recovery point until the migrated home and a fresh backup have been verified; see [Storage architecture and operational integrity](architecture.md#operational-integrity).
+
+## Bounded ingestion resources
+
+Ingestion applies common fail-closed limits before expensive parsing and additional format-specific bounds. Parser subprocesses also have CPU, memory, and wall-time ceilings; inputs that exceed a limit fail rather than continuing without a bound. See the [enforced resource budget](security/threat-model.md#enforced-resource-budget) and [format-specific ingestion behavior](ingestion.md).
+
+## Private beta trial
+
+Private-corpus beta evidence must follow the frozen [private local-corpus beta trial protocol](trial-protocol-v1.md): use consented or lawful synthetic material, an isolated encrypted Fedora environment, loopback-only models, the prescribed corpus and hardware cells, interruption recovery checks, and a manually reviewed sanitized aggregate. Raw private trial material and per-question evidence are not publishable.
 
 ## Model configuration and safety
 
