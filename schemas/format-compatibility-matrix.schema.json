@@ -1,17 +1,48 @@
 {
   "$defs": {
+    "FieldTrialDecision": {
+      "additionalProperties": false,
+      "description": "Why parser work is selected rather than accumulated speculatively.",
+      "properties": {
+        "schema_version": {
+          "default": "1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "evidence": {
+          "minLength": 1,
+          "title": "Evidence",
+          "type": "string"
+        },
+        "method": {
+          "minLength": 1,
+          "title": "Method",
+          "type": "string"
+        },
+        "ranked_next_work": {
+          "items": {
+            "$ref": "#/$defs/RankedFormatDecision"
+          },
+          "minItems": 1,
+          "title": "Ranked Next Work",
+          "type": "array"
+        }
+      },
+      "required": [
+        "evidence",
+        "method",
+        "ranked_next_work"
+      ],
+      "title": "FieldTrialDecision",
+      "type": "object"
+    },
     "FormatFamily": {
       "additionalProperties": false,
       "description": "Verified behavior for one family of related formats.",
       "properties": {
-        "detection": {
-          "minLength": 1,
-          "title": "Detection",
-          "type": "string"
-        },
-        "encryption": {
-          "minLength": 1,
-          "title": "Encryption",
+        "schema_version": {
+          "default": "1",
+          "title": "Schema Version",
           "type": "string"
         },
         "family": {
@@ -19,20 +50,46 @@
           "title": "Family",
           "type": "string"
         },
-        "grounding": {
-          "title": "Grounding",
-          "type": "boolean"
+        "suffixes": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Suffixes",
+          "type": "array"
+        },
+        "media_types": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Media Types",
+          "type": "array"
+        },
+        "detection": {
+          "minLength": 1,
+          "title": "Detection",
+          "type": "string"
         },
         "immutable_ingestion": {
           "title": "Immutable Ingestion",
           "type": "boolean"
         },
-        "known_limits": {
+        "text_extraction": {
+          "enum": [
+            "native",
+            "visual_ocr_conditional",
+            "metadata_only"
+          ],
+          "title": "Text Extraction",
+          "type": "string"
+        },
+        "structure": {
           "default": [],
           "items": {
             "type": "string"
           },
-          "title": "Known Limits",
+          "title": "Structure",
           "type": "array"
         },
         "locator_shapes": {
@@ -46,52 +103,40 @@
           "title": "Locator Shapes",
           "type": "array"
         },
-        "macros": {
-          "minLength": 1,
-          "title": "Macros",
-          "type": "string"
-        },
-        "media_types": {
-          "items": {
-            "type": "string"
-          },
-          "minItems": 1,
-          "title": "Media Types",
-          "type": "array"
+        "grounding": {
+          "title": "Grounding",
+          "type": "boolean"
         },
         "preview_render": {
           "minLength": 1,
           "title": "Preview Render",
           "type": "string"
         },
-        "schema_version": {
-          "default": "1",
-          "title": "Schema Version",
+        "macros": {
+          "minLength": 1,
+          "title": "Macros",
           "type": "string"
         },
-        "structure": {
+        "encryption": {
+          "minLength": 1,
+          "title": "Encryption",
+          "type": "string"
+        },
+        "known_limits": {
           "default": [],
           "items": {
             "type": "string"
           },
-          "title": "Structure",
+          "title": "Known Limits",
           "type": "array"
         },
-        "suffixes": {
-          "items": {
-            "type": "string"
-          },
-          "minItems": 1,
-          "title": "Suffixes",
-          "type": "array"
-        },
-        "text_extraction": {
+        "support_level": {
+          "default": "full",
           "enum": [
-            "native",
-            "visual_ocr_conditional",
-            "metadata_only"
+            "full",
+            "partial"
           ],
-          "title": "Text Extraction",
+          "title": "Support Level",
           "type": "string"
         }
       },
@@ -114,33 +159,33 @@
       "additionalProperties": false,
       "description": "One document format Archiv itself produces through the report workflow.",
       "properties": {
+        "schema_version": {
+          "default": "1",
+          "title": "Schema Version",
+          "type": "string"
+        },
         "format": {
           "minLength": 1,
           "title": "Format",
           "type": "string"
-        },
-        "generated": {
-          "title": "Generated",
-          "type": "boolean"
         },
         "media_type": {
           "minLength": 1,
           "title": "Media Type",
           "type": "string"
         },
-        "notes": {
-          "default": "",
-          "title": "Notes",
-          "type": "string"
-        },
-        "schema_version": {
-          "default": "1",
-          "title": "Schema Version",
-          "type": "string"
+        "generated": {
+          "title": "Generated",
+          "type": "boolean"
         },
         "verification": {
           "minLength": 1,
           "title": "Verification",
+          "type": "string"
+        },
+        "notes": {
+          "default": "",
+          "title": "Notes",
           "type": "string"
         }
       },
@@ -153,20 +198,48 @@
       "title": "OutputFormat",
       "type": "object"
     },
-    "RejectedFormat": {
+    "RankedFormatDecision": {
       "additionalProperties": false,
-      "description": "One explicitly tested rejection case.",
+      "description": "Evidence-ranked format or extraction limitation.",
       "properties": {
-        "example": {
+        "rank": {
+          "minimum": 1,
+          "title": "Rank",
+          "type": "integer"
+        },
+        "format_or_limitation": {
           "minLength": 1,
-          "title": "Example",
+          "title": "Format Or Limitation",
+          "type": "string"
+        },
+        "decision": {
+          "enum": [
+            "implement",
+            "measure",
+            "defer"
+          ],
+          "title": "Decision",
           "type": "string"
         },
         "reason": {
           "minLength": 1,
           "title": "Reason",
           "type": "string"
-        },
+        }
+      },
+      "required": [
+        "rank",
+        "format_or_limitation",
+        "decision",
+        "reason"
+      ],
+      "title": "RankedFormatDecision",
+      "type": "object"
+    },
+    "RejectedFormat": {
+      "additionalProperties": false,
+      "description": "One explicitly tested rejection case.",
+      "properties": {
         "schema_version": {
           "default": "1",
           "title": "Schema Version",
@@ -175,6 +248,16 @@
         "suffix": {
           "minLength": 1,
           "title": "Suffix",
+          "type": "string"
+        },
+        "example": {
+          "minLength": 1,
+          "title": "Example",
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
           "type": "string"
         }
       },
@@ -190,6 +273,21 @@
   "additionalProperties": false,
   "description": "Versioned, tested compatibility claims for the ingestion surface.",
   "properties": {
+    "schema_version": {
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "product_version": {
+      "minLength": 1,
+      "title": "Product Version",
+      "type": "string"
+    },
+    "purpose": {
+      "minLength": 1,
+      "title": "Purpose",
+      "type": "string"
+    },
     "families": {
       "items": {
         "$ref": "#/$defs/FormatFamily"
@@ -206,16 +304,6 @@
       "title": "Outputs",
       "type": "array"
     },
-    "product_version": {
-      "minLength": 1,
-      "title": "Product Version",
-      "type": "string"
-    },
-    "purpose": {
-      "minLength": 1,
-      "title": "Purpose",
-      "type": "string"
-    },
     "rejected_examples": {
       "default": [],
       "items": {
@@ -224,16 +312,15 @@
       "title": "Rejected Examples",
       "type": "array"
     },
-    "schema_version": {
-      "default": "1",
-      "title": "Schema Version",
-      "type": "string"
+    "field_trial_decision": {
+      "$ref": "#/$defs/FieldTrialDecision"
     }
   },
   "required": [
     "product_version",
     "purpose",
-    "families"
+    "families",
+    "field_trial_decision"
   ],
   "title": "FormatMatrix",
   "type": "object"

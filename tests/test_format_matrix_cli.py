@@ -72,6 +72,28 @@ def test_formats_metadata_only_family_does_not_claim_document_text() -> None:
     assert "Grounded answers and citations: no" in result.output
 
 
+def test_formats_labels_spreadsheet_cross_cell_support_as_partial() -> None:
+    result = runner.invoke(app, ["formats", "xlsx"])
+    assert result.exit_code == 0, result.output
+    assert "Support: partial" in result.output
+    assert "phrases split across cells" in result.output
+
+
+def test_shared_xml_media_type_does_not_spread_partial_support() -> None:
+    assert "Support: full" in runner.invoke(app, ["formats", "fodt"]).output
+    assert "Support: partial" in runner.invoke(app, ["formats", "fodp"]).output
+
+
+def test_field_trial_decision_accounts_for_confirmed_major_gaps() -> None:
+    decision = load_format_matrix(matrix_path()).field_trial_decision
+    ranked = " ".join(item.format_or_limitation for item in decision.ranked_next_work)
+
+    assert [item.rank for item in decision.ranked_next_work] == list(range(1, 8))
+    for expected in (".doc", ".rtf", "Spreadsheet", "InPage", "Urdu", "WAV", "ODB", ".docm"):
+        assert expected in ranked
+    assert "Collections" in ranked
+
+
 def test_formats_rejects_unsupported_suffix_with_the_tested_reason() -> None:
     """A rejected example must fail non-zero and explain itself honestly."""
 

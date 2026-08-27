@@ -44,6 +44,7 @@ def _family_lines(family: FormatFamily) -> list[str]:
 
     lines = [
         f"Family: {family.family}",
+        f"  Support: {family.support_level}",
         f"  Suffixes: {' '.join(family.suffixes)}",
         f"  Media types: {', '.join(family.media_types)}",
         f"  Detection: {family.detection}",
@@ -73,7 +74,8 @@ def _summary_lines(matrix: FormatMatrix) -> list[str]:
     for family in matrix.families:
         suffixes = " ".join(family.suffixes)
         extraction = _EXTRACTION_TEXT.get(family.text_extraction, family.text_extraction)
-        lines.append(f"{family.family:<28} {suffixes:<26} {extraction}")
+        label = "PARTIAL" if family.support_level == "partial" else "FULL"
+        lines.append(f"{family.family:<28} {suffixes:<26} {label:<7} {extraction}")
     return lines
 
 

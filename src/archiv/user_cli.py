@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from collections.abc import Callable
+from functools import cache
 from pathlib import Path
 from typing import Annotated, cast
 from uuid import uuid4
@@ -18,9 +19,11 @@ from archiv.contracts import (
     RunStatus,
     SearchIndexBuild,
 )
+from archiv.format_matrix import load_format_matrix, matrix_path
 from archiv.grounding import run_grounded_ask
 from archiv.ingestion import ingest_file
-from archiv.ingestion.formats import SUPPORTED_SUFFIXES
+from archiv.ingestion.formats import SUPPORTED_SUFFIXES, UnsupportedFormatError
+from archiv.ingestion.summary import IngestionCounts, write_summary
 from archiv.model_adapter import load_model_config
 from archiv.search import rebuild_search_index, search_documents
 from archiv.search.index import search_index_path
@@ -48,26 +51,53 @@ def _candidates(source: Path) -> tuple[list[Path], int]:
     return supported, len(files) - len(supported)
 
 
+@cache
+def _partial_suffixes() -> frozenset[str]:
+    """Load the immutable packaged support classification once per process."""
+
+    return frozenset(
+        suffix
+        for family in load_format_matrix(matrix_path()).families
+        if family.support_level == "partial"
+        for suffix in family.suffixes
+    )
+
+
 def _add_sources(
     source: Path,
     *,
     home: Path | None,
     rebuild_derived: bool,
-) -> tuple[list[IngestionResult], SearchIndexBuild, int]:
-    candidates, skipped = _candidates(source)
-    if not candidates:
-        raise ValueError("no supported files were found")
-
+) -> tuple[list[IngestionResult], SearchIndexBuild | None, IngestionCounts]:
+    candidates, rejected = _candidates(source)
     results: list[IngestionResult] = []
+    failed = 0
+    degraded = 0
+    skipped = 0
     active = source
     for active in candidates:
         try:
-            results.append(ingest_file(active, home=home, rebuild_derived=rebuild_derived))
+            result = ingest_file(active, home=home, rebuild_derived=rebuild_derived)
+            results.append(result)
+            processor_skipped = any(item.status == "skipped" for item in result.processing)
+            skipped += processor_skipped
+            degraded += active.suffix.lower() in _partial_suffixes() or processor_skipped
+        except UnsupportedFormatError:
+            rejected += 1
         except (OSError, RuntimeError, ValueError):
-            skipped += 1
-    if not results:
-        raise ValueError("no supported valid files could be ingested")
-    return results, rebuild_search_index(home=home), skipped
+            failed += 1
+    index = rebuild_search_index(home=home) if results else None
+    return (
+        results,
+        index,
+        IngestionCounts(
+            supported=len(results),
+            rejected=rejected,
+            skipped=skipped,
+            degraded=degraded,
+            failed=failed,
+        ),
+    )
 
 
 def _locator_text(locator: dict[str, object]) -> str:
@@ -108,10 +138,14 @@ def _status_payload(home: Path | None) -> dict[str, object]:
         "successful_ingestions": 0,
         "duplicate_ingestions": 0,
         "failed_ingestions": 0,
+        "degraded_objects": 0,
+        "skipped_objects": 0,
     }
     errors: list[str] = []
     if layout.database.is_file():
         try:
+            partial_suffixes = tuple(sorted(_partial_suffixes()))
+            placeholders = ", ".join("?" for _ in partial_suffixes)
             with sqlite3.connect(layout.database) as connection:
                 connection.row_factory = sqlite3.Row
                 row = connection.execute(
@@ -124,8 +158,15 @@ def _status_payload(home: Path | None) -> dict[str, object]:
                             WHERE status = 'succeeded' AND duplicate = 1)
                             AS duplicate_ingestions,
                         (SELECT COUNT(*) FROM ingestions WHERE status = 'failed')
-                            AS failed_ingestions
-                    """
+                            AS failed_ingestions,
+                        (SELECT COUNT(*) FROM objects
+                            WHERE source_extension IN ("""
+                    + placeholders
+                    + """)) AS degraded_objects,
+                        (SELECT COUNT(DISTINCT object_sha256) FROM processing_runs
+                            WHERE status = 'skipped') AS skipped_objects
+                    """,
+                    partial_suffixes,
                 ).fetchone()
             if row is not None:
                 for key in counts:
@@ -182,6 +223,8 @@ def _status_payload(home: Path | None) -> dict[str, object]:
             "successful": counts["successful_ingestions"],
             "duplicates": counts["duplicate_ingestions"],
             "failed": counts["failed_ingestions"],
+            "degraded": counts["degraded_objects"],
+            "skipped": counts["skipped_objects"],
         },
         "search_index": {
             "available": index_path.is_file(),
@@ -223,11 +266,15 @@ def register_user_commands(app: typer.Typer) -> tuple[Callable[..., None], ...]:
             ),
         ] = False,
         json_output: Annotated[bool, typer.Option("--json")] = False,
+        summary_out: Annotated[
+            Path | None,
+            typer.Option("--summary-out", help="Write local aggregate counts only as JSON."),
+        ] = None,
     ) -> None:
         """Add supported files and immediately refresh the local search index."""
 
         try:
-            results, index, skipped = _add_sources(
+            results, index, counts = _add_sources(
                 source,
                 home=home,
                 rebuild_derived=rebuild_derived,
@@ -236,26 +283,55 @@ def register_user_commands(app: typer.Typer) -> tuple[Callable[..., None], ...]:
             typer.echo(f"add failed: {error}", err=True)
             raise typer.Exit(code=1) from error
 
+        rejected = counts.rejected
+        failed = counts.failed
+        degraded = counts.degraded
+        if summary_out is not None:
+            write_summary(summary_out, counts)
+
+        succeeded = bool(results)
         payload = {
             "schema_version": "1",
-            "status": "succeeded",
+            "status": "succeeded" if succeeded else "failed",
             "source": str(source),
             "added": [result.model_dump(mode="json") for result in results],
             "new_originals": sum(not result.duplicate for result in results),
             "duplicates": sum(result.duplicate for result in results),
-            "skipped_unsupported": skipped,
-            "search_index": index.model_dump(mode="json"),
+            "rejected_unsupported": rejected,
+            "skipped_unsupported": rejected,
+            "failed": failed,
+            "search_index": None if index is None else index.model_dump(mode="json"),
+            "ingestion_summary": counts.model_dump(mode="json"),
         }
         if json_output:
             _emit_json(payload)
+            if not succeeded:
+                raise typer.Exit(code=1)
             return
+
+        if not succeeded:
+            typer.echo("add failed: no supported valid files could be ingested", err=True)
+            if rejected:
+                typer.echo(f"Rejected unsupported: {rejected}", err=True)
+            if failed:
+                typer.echo(f"Failed validation or extraction: {failed}", err=True)
+            if summary_out is not None:
+                typer.echo(f"Private aggregate summary: {summary_out}")
+            raise typer.Exit(code=1)
+        assert index is not None
 
         typer.echo(
             f"Added: {len(results)} file(s) "
             f"({payload['new_originals']} new, {payload['duplicates']} duplicate)"
         )
-        if skipped:
-            typer.echo(f"Skipped unsupported: {skipped}")
+        if rejected:
+            typer.echo(f"Rejected unsupported: {rejected}")
+        if failed:
+            typer.echo(f"Failed validation or extraction: {failed}")
+        if degraded:
+            typer.echo(f"Partially searchable (degraded): {degraded}")
+        if summary_out is not None:
+            typer.echo(f"Private aggregate summary: {summary_out}")
         typer.echo(f"Indexed: {index.object_count} document(s), {index.segment_count} passage(s)")
         typer.echo(f"Archiv home: {ArchivLayout.resolve(home).root}")
 
@@ -467,10 +543,24 @@ def register_user_commands(app: typer.Typer) -> tuple[Callable[..., None], ...]:
             typer.Option("--home", file_okay=False, resolve_path=True),
         ] = None,
         json_output: Annotated[bool, typer.Option("--json")] = False,
+        summary_out: Annotated[
+            Path | None,
+            typer.Option("--summary-out", help="Write local aggregate ingestion counts as JSON."),
+        ] = None,
     ) -> None:
         """Show the useful state of the local archive without changing it."""
 
         payload = _status_payload(home)
+        ingestion_values = cast(dict[str, object], payload["ingestions"])
+        counts = IngestionCounts(
+            supported=cast(int, ingestion_values["successful"]),
+            skipped=cast(int, ingestion_values["skipped"]),
+            failed=cast(int, ingestion_values["failed"]),
+            degraded=cast(int, ingestion_values["degraded"]),
+        )
+        payload["ingestion_summary"] = counts.model_dump(mode="json")
+        if summary_out is not None:
+            write_summary(summary_out, counts)
         if json_output:
             _emit_json(payload)
             return
@@ -486,7 +576,8 @@ def register_user_commands(app: typer.Typer) -> tuple[Callable[..., None], ...]:
             "Ingestions: "
             f"{ingestions['successful']} succeeded, "
             f"{ingestions['duplicates']} duplicate, "
-            f"{ingestions['failed']} failed"
+            f"{ingestions['failed']} failed, "
+            f"{ingestions['degraded']} partially searchable"
         )
         if index["available"]:
             typer.echo(
@@ -503,6 +594,8 @@ def register_user_commands(app: typer.Typer) -> tuple[Callable[..., None], ...]:
             f"{sum(ask_runs.values()) - ask_runs.get('succeeded', 0)} other"
         )
         typer.echo(f"Model: {model['adapter']}")
+        if summary_out is not None:
+            typer.echo(f"Private aggregate summary: {summary_out}")
         for error in cast(list[str], payload["errors"]):
             typer.echo(f"Warning: {error}", err=True)
 

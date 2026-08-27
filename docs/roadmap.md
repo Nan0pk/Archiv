@@ -115,6 +115,30 @@
 
 ## Evidence-derived next work
 
+The public field trial and real-world corpus notes rank gaps instead of treating every
+document specification as a parser backlog. The committed machine-readable decision
+is in `docs/format-compatibility.json`:
+
+1. **Legacy `.doc` and `.rtf` ingestion — measure.** They occurred in the real-world
+   corpus; acquire lawful content-bearing fixtures and quantify question impact first.
+2. **Spreadsheet cross-cell retrieval — measure.** Field notes confirmed literal
+   phrase misses across cell boundaries; benchmark row-aware retrieval before changing
+   normalized output or citation locators.
+3. **InPage layout, columns, frames, styles, and page geometry — defer** pending a
+   lawful visual-ground-truth fixture set.
+4. **Difficult Urdu typography/layout OCR — measure** for accuracy, language coverage,
+   latency, and memory on target machines.
+5. **WAV transcription and ODB record extraction — defer** pending measured bounded
+   local processors, native locators, and acceptance thresholds.
+6. **Macro-enabled `.docm` — defer** without measured demand and proof that macros stay
+   inert; `.docm`, `.doc`, and `.rtf` remain explicit fail-closed rejections today.
+7. **Collections, synchronization, and broad connectors — defer.** These are product
+   workflows, not parsers, and did not outrank local ingestion/retrieval defects.
+
+Every selected implementation must add lawful fixtures with provenance, explicit
+parser bounds, a normalized-output contract, the best native locator available,
+malformed-input tests, resource ceilings, and before/after source-hash validation.
+
 - issue #38 is closed: OpenDocument-family ingestion and truthful native InPage `.inp` searchable-text extraction shipped in 0.1.0a5;
 - InPage layout, frames, styles, and page-geometry reconstruction remain open (issue #53) pending lawful native fixtures and visual ground truth;
 - visual OCR shipped in bounded form; engine evaluation and difficult-layout recovery continue under issue #54 once the local benchmark corpus and target-machine measurements exist;
