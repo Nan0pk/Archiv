@@ -95,7 +95,10 @@
 
 ## Local test console and tested format matrix (0.1.0a6)
 
-- `archiv ui`: a minimal local test console derived from the real Typer command tree (issue #63);
+The console remains available as `archiv ui --diagnostic`; it is distinct from
+the user-oriented document-library application now launched by `archiv ui`.
+
+- `archiv ui --diagnostic`: a minimal local test console derived from the real Typer command tree (issue #63);
 - schema-driven command forms with native path pickers, choices, booleans, and validated numbers;
 - one command at a time through shell-free argument vectors; complete retained output; live progress and exit status;
 - verified output opening through the OS default handler only after Archiv-side revalidation;
@@ -140,4 +143,4 @@ malformed-input tests, resource limits, and before/after source-hash validation.
 - face detection and enrolled identity search (issue #55) require an implemented-and-measured local model baseline before any product slice;
 - audio transcription only when a local processor and evidence-backed acceptance tests exist.
 
-Collections, synchronization, vector infrastructure, a product GUI, and broader provider support remain deferred until measured user work demonstrates that the simpler architecture is insufficient.
+Collections, synchronization, vector infrastructure, richer product workflows, and broader provider support remain deferred until measured user work demonstrates that the simpler architecture is insufficient.

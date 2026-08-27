@@ -1,4 +1,4 @@
-"""Minimal local test console over the real Archiv command tree.
+"""Desktop application and diagnostic console over Archiv's bounded services.
 
 The console derives its command and argument schema from the installed Typer
 application, never from a hand-maintained copy.  It builds argument vectors

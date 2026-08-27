@@ -1,13 +1,18 @@
-# Local test console (`archiv ui`)
+# Archiv desktop and diagnostic console
 
-`archiv ui` is the smallest useful human interface for exercising Archiv
-without memorizing CLI syntax (issue #63). It is a **testing console over the
-existing command layer** — not a second product engine, not an Office editor,
-not a chat product.
+`archiv ui` opens the user-oriented desktop application. It is organized around
+the library, ingestion progress, search, grounded questions, sources, reports,
+recovery, and settings. First run chooses an Archiv home and initial folder and
+checks optional OCR and LibreOffice support. Long operations can be cancelled,
+and keyboard shortcuts include Ctrl+K for search and Ctrl+Q for questions.
+
+The original command-oriented test console is retained for maintainers as
+`archiv ui --diagnostic`. It remains a **diagnostic console over the existing
+command layer**, not the product interface.
 
 ## Behavior
 
-- launches locally with `archiv ui`;
+- launches locally with `archiv ui --diagnostic`;
 - derives the available commands and arguments from Archiv's real Typer
   command tree at startup, so the console can never drift from the CLI;
 - presents a command dropdown and generates only the argument controls that
