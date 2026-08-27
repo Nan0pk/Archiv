@@ -1,0 +1,4 @@
+{
+  "checkpoints": ["after_copy", "during_derivation", "during_index_rebuild"],
+  "expected": ["integrity_valid", "no_duplicate_logical_records", "clean_manifest_parity"]
+}

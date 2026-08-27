@@ -1,0 +1,15 @@
+{
+  "schema_version": "1",
+  "license": "CC0-1.0",
+  "provenance": "Lawful synthetic equivalents; no private corpus content or metadata.",
+  "cases": [
+    {"id": "watermark-scan", "files": ["watermark-scan-equivalent.md"], "expectation": "a sparse watermark must not suppress OCR of the scan body"},
+    {"id": "duplicate-revision", "files": ["revision-current.md", "revision-superseded.md"], "expectation": "current revision wins unless superseded is requested"},
+    {"id": "source-crowding-table", "files": ["crowding-table.csv", "required-source.txt"], "expectation": "required source remains retrievable despite repeated table cells"},
+    {"id": "malformed-container", "files": ["malformed.docx"], "expectation": "fail closed and classify malformed, without aborting the batch"},
+    {"id": "multilingual-rtl", "files": ["multilingual.txt"], "expectation": "preserve searchable English, Arabic, and Urdu text"},
+    {"id": "long-document", "files": ["long-document.md"], "expectation": "content near the end remains searchable"},
+    {"id": "unsupported-claim", "files": ["negative-question.json"], "expectation": "absence of evidence produces an honest refusal, never a cited affirmative claim"},
+    {"id": "interrupted-ingest", "files": ["interruption-plan.json"], "expectation": "rerun heals interruption checkpoints and matches a clean logical manifest"}
+  ]
+}
