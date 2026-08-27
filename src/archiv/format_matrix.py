@@ -40,6 +40,7 @@ class FormatFamily(StrictModel):
     macros: str = Field(min_length=1)
     encryption: str = Field(min_length=1)
     known_limits: tuple[str, ...] = ()
+    support_level: Literal["full", "partial"] = "full"
 
 
 class RejectedFormat(StrictModel):
@@ -62,6 +63,24 @@ class OutputFormat(StrictModel):
     notes: str = ""
 
 
+class RankedFormatDecision(StrictModel):
+    """Evidence-ranked format or extraction limitation."""
+
+    rank: int = Field(ge=1)
+    format_or_limitation: str = Field(min_length=1)
+    decision: Literal["implement", "measure", "defer"]
+    reason: str = Field(min_length=1)
+
+
+class FieldTrialDecision(StrictModel):
+    """Why parser work is selected rather than accumulated speculatively."""
+
+    schema_version: str = "1"
+    evidence: str = Field(min_length=1)
+    method: str = Field(min_length=1)
+    ranked_next_work: tuple[RankedFormatDecision, ...] = Field(min_length=1)
+
+
 class FormatMatrix(StrictModel):
     """Versioned, tested compatibility claims for the ingestion surface."""
 
@@ -71,6 +90,7 @@ class FormatMatrix(StrictModel):
     families: tuple[FormatFamily, ...] = Field(min_length=1)
     outputs: tuple[OutputFormat, ...] = ()
     rejected_examples: tuple[RejectedFormat, ...] = ()
+    field_trial_decision: FieldTrialDecision
 
     def family_for_suffix(self, suffix: str) -> FormatFamily:
         for family in self.families:

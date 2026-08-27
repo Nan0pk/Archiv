@@ -115,6 +115,25 @@
 
 ## Evidence-derived next work
 
+The 0.1.0a5 public field trial ranks extraction work instead of treating every
+document specification as a parser backlog.  The committed, machine-readable
+decision is in `docs/format-compatibility.json` and uses this order:
+
+1. **InPage layout, frames, styles, and page geometry — defer.** Searchable
+   native text is shipped, but no lawful visual-ground-truth fixture set measured
+   layout fidelity.  Acquire that evidence before extending the bounded parser.
+2. **Difficult-layout visual OCR and local engine coverage — measure.** Conditional
+   bounded OCR is shipped.  Rank specific recovery work only from accuracy,
+   language, latency, and memory results on target machines.
+3. **Audio transcription — defer.** WAV originals are preserved, but a local
+   transcription processor needs lawful fixtures, native timestamp locators,
+   malformed-input coverage, resource ceilings, and measured acceptance criteria.
+
+This ranking intentionally selects limitations, not new format promises.  A
+selected implementation must include a lawful fixture with provenance, explicit
+parser bounds, a normalized-output contract, the best native locator available,
+malformed-input tests, resource limits, and before/after source-hash validation.
+
 - issue #38 is closed: OpenDocument-family ingestion and truthful native InPage `.inp` searchable-text extraction shipped in 0.1.0a5;
 - InPage layout, frames, styles, and page-geometry reconstruction remain open (issue #53) pending lawful native fixtures and visual ground truth;
 - visual OCR shipped in bounded form; engine evaluation and difficult-layout recovery continue under issue #54 once the local benchmark corpus and target-machine measurements exist;
