@@ -1,6 +1,6 @@
 # GitHub governance and CI trust boundary
 
-Archiv is public, pre-alpha, and maintained by one primary owner. Repository controls must protect `main` without creating an approval rule that the solo maintainer cannot satisfy.
+Archiv is public, alpha, and maintained by one primary owner. Repository controls must protect `main` without creating an approval rule that the solo maintainer cannot satisfy.
 
 ## Effective code-enforced controls
 
