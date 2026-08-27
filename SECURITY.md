@@ -18,3 +18,19 @@ The repository owner must verify that private vulnerability reporting is enabled
 - Test data must be synthetic or explicitly redistributable.
 - Local model files, user archives, keys, databases, and run ledgers must remain outside Git.
 - A model's statement of success is never accepted as validation evidence.
+
+## Diagnostics export privacy boundary
+
+`archiv diagnostics-export SUPPORT.json` is user-invoked and shows the complete JSON
+payload before asking permission to save it. The exporter uses an allow list: product,
+Python and OS versions; installed dependency versions; schema versions; database
+readability; aggregate ingestion/processing states; fixed error categories; and aggregate
+validation outcomes. It never reads or emits environment values or configuration, and it
+never emits document names, paths, hashes/identifiers, excerpts, questions, answers, model
+prompts/responses/endpoints, credentials, timestamps, or raw error messages.
+
+Residual risks remain: uncommon platform/dependency version strings may fingerprint a
+machine; counts can reveal library size and failure patterns; and a future dependency or
+schema change could introduce a defect. Users must inspect the on-screen preview and may
+decline saving or sharing it. Support must not ask for the archive, database, configuration,
+logs, screenshots containing documents, or environment dumps.

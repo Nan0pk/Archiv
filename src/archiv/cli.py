@@ -13,7 +13,7 @@ from rich.table import Table
 from archiv import __version__
 from archiv.alpha_cli import register_alpha_commands
 from archiv.contracts import RunStatus
-from archiv.doctor import doctor_report
+from archiv.doctor import diagnostics_report, doctor_report, save_diagnostics
 from archiv.executor.source_marker import run_source_marker
 from archiv.format_matrix_cli import register_format_matrix_command
 from archiv.ingestion import ingest_file, rebuild_derived
@@ -69,6 +69,30 @@ def doctor(
 
     if report["status"] != "ok":
         raise typer.Exit(code=1)
+
+
+@app.command("diagnostics-export")
+def diagnostics_export(
+    destination: Annotated[Path, typer.Argument(help="New JSON support-bundle file.")],
+    home: Annotated[Path | None, typer.Option("--home", file_okay=False)] = None,
+    yes: Annotated[
+        bool, typer.Option("--yes", help="Save after printing the full preview.")
+    ] = False,
+) -> None:
+    """Preview every diagnostics field, then optionally save the support bundle."""
+
+    report = diagnostics_report(home)
+    typer.echo("Diagnostics preview (this is exactly what will be saved):")
+    typer.echo(json.dumps(report, indent=2, sort_keys=True))
+    if not yes and not typer.confirm("Save this diagnostics bundle?"):
+        typer.echo("Not saved.")
+        return
+    try:
+        save_diagnostics(report, destination)
+    except OSError as error:
+        typer.echo(f"diagnostics export failed: {type(error).__name__}", err=True)
+        raise typer.Exit(code=1) from error
+    typer.echo("Saved diagnostics bundle.")
 
 
 @app.command("source-marker")
