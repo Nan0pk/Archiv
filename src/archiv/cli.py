@@ -48,10 +48,11 @@ def version() -> None:
 @app.command()
 def doctor(
     json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
+    home: Annotated[Path | None, typer.Option("--home", file_okay=False)] = None,
 ) -> None:
     """Check the deterministic minimum development environment."""
 
-    report = doctor_report()
+    report = doctor_report(home)
     if json_output:
         typer.echo(json.dumps(report, indent=2, sort_keys=True))
     else:

@@ -123,11 +123,12 @@ def register_alpha_commands(app: typer.Typer) -> tuple[Callable[..., None], ...]
         ],
         home: Annotated[Path, typer.Option("--home", file_okay=False, resolve_path=True)],
         json_output: Annotated[bool, typer.Option("--json")] = False,
+        replace: Annotated[bool, typer.Option("--replace")] = False,
     ) -> None:
         """Restore durable state into an empty home and rebuild search indexes."""
 
         _emit_restore(
-            restore_archive(archive_path, home=home),
+            restore_archive(archive_path, home=home, replace=replace),
             json_output=json_output,
         )
 

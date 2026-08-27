@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Literal, TypedDict
 
 from archiv import __version__
+from archiv.storage.integrity import inspect_home
 from archiv.storage.layout import ArchivLayout
 
 SUPPORT_BUNDLE_SCHEMA_VERSION = "1"
@@ -84,16 +85,26 @@ def _writable_workspace_check() -> CheckResult:
         return CheckResult("writable_workspace", False, str(error))
 
 
-def collect_checks() -> list[CheckResult]:
+def collect_checks(home: Path | None = None) -> list[CheckResult]:
     """Return all checks without mutating persistent user state."""
 
-    return [_python_check(), _sqlite_fts5_check(), _writable_workspace_check()]
+    checks = [_python_check(), _sqlite_fts5_check(), _writable_workspace_check()]
+    if home is not None:
+        integrity = inspect_home(home)
+        checks.append(
+            CheckResult(
+                "archiv_home_integrity",
+                integrity["ok"],
+                "; ".join(integrity["errors"]) or "ok",
+            )
+        )
+    return checks
 
 
-def doctor_report() -> DoctorReport:
+def doctor_report(home: Path | None = None) -> DoctorReport:
     """Return a machine-readable doctor report."""
 
-    checks = collect_checks()
+    checks = collect_checks(home)
     payload: list[CheckPayload] = [
         {"name": check.name, "passed": check.passed, "detail": check.detail} for check in checks
     ]
