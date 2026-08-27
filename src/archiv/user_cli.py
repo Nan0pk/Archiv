@@ -28,6 +28,7 @@ from archiv.model_adapter import load_model_config
 from archiv.search import rebuild_search_index, search_documents
 from archiv.search.index import search_index_path
 from archiv.search.schema import connect_index
+from archiv.storage.integrity import inspect_home
 from archiv.storage.layout import ArchivLayout
 from archiv.task_contracts import TaskRunResult
 from archiv.tasks import run_task, verify_task_run
@@ -215,6 +216,8 @@ def _status_payload(home: Path | None) -> dict[str, object]:
                 continue
 
     model = load_model_config(layout.root)
+    integrity = inspect_home(layout.root)
+    errors.extend(integrity["errors"])
     return {
         "schema_version": "1",
         "home": str(layout.root),
@@ -234,6 +237,7 @@ def _status_payload(home: Path | None) -> dict[str, object]:
         "reports": run_counts,
         "ask_runs": ask_counts,
         "model": model.model_dump(mode="json"),
+        "integrity": integrity,
         "errors": errors,
     }
 

@@ -18,6 +18,7 @@ from archiv.contracts import StrictModel
 from archiv.hashing import sha256_bytes, sha256_file
 from archiv.search import rebuild_search_index
 from archiv.storage.database import ArchivDatabase
+from archiv.storage.integrity import inspect_home
 from archiv.storage.layout import ArchivLayout
 
 ARCHIVE_MANIFEST = "archive-manifest.json"
@@ -88,7 +89,10 @@ def _checkpoint_database(layout: ArchivLayout, destination: Path) -> None:
 
 
 def _durable_files(layout: ArchivLayout, database_snapshot: Path) -> list[tuple[str, Path]]:
-    files: list[tuple[str, Path]] = [("archiv.sqlite3", database_snapshot)]
+    files: list[tuple[str, Path]] = [
+        ("archiv.sqlite3", database_snapshot),
+        ("layout-version", layout.version_file),
+    ]
     for directory_name in DURABLE_DIRECTORIES:
         root = layout.root / directory_name
         if not root.exists():
@@ -113,6 +117,19 @@ def create_archive(
     if output.suffix.lower() != ".zip":
         raise ValueError("Archiv archives must use the .zip extension")
     output.parent.mkdir(parents=True, exist_ok=True)
+    integrity = inspect_home(layout.root)
+    if not integrity["ok"]:
+        raise ValueError(
+            "backup refused because ARCHIV_HOME integrity failed: " + "; ".join(integrity["errors"])
+        )
+    required = sum(
+        path.stat().st_size
+        for name in ("originals", "derived", "runs", "outputs", "config")
+        for path in (layout.root / name).rglob("*")
+        if path.is_file()
+    ) + (layout.database.stat().st_size if layout.database.exists() else 0)
+    if shutil.disk_usage(output.parent).free < required:
+        raise OSError(f"insufficient disk space for backup: need at least {required} bytes")
 
     with tempfile.TemporaryDirectory(prefix="archiv-archive-") as directory:
         snapshot = Path(directory) / "archiv.sqlite3"
@@ -153,7 +170,7 @@ def _safe_member(name: str) -> Path:
         raise ValueError(f"unsafe archive member: {name}")
     if name == ARCHIVE_MANIFEST:
         raise ValueError("manifest cannot be restored as durable state")
-    if candidate.parts[0] not in {*DURABLE_DIRECTORIES, "archiv.sqlite3"}:
+    if candidate.parts[0] not in {*DURABLE_DIRECTORIES, "archiv.sqlite3", "layout-version"}:
         raise ValueError(f"archive contains unsupported state path: {name}")
     return Path(*candidate.parts)
 
@@ -191,13 +208,24 @@ def restore_archive(
     archive_path: Path,
     *,
     home: Path | None = None,
+    replace: bool = False,
 ) -> RestoreResult:
     """Restore verified durable state into an empty Archiv home and rebuild indexes."""
 
     archive_path = archive_path.expanduser().resolve(strict=True)
     layout = ArchivLayout.resolve(home)
-    if layout.root.exists() and any(layout.root.iterdir()):
-        raise FileExistsError("restore target must be absent or empty")
+    populated = layout.root.exists() and any(layout.root.iterdir())
+    if populated and not replace:
+        raise FileExistsError(
+            "restore target is populated; retry with --replace after making a backup"
+        )
+    if shutil.disk_usage(layout.root.parent).free < archive_path.stat().st_size * 2:
+        raise OSError("insufficient disk space to stage and verify restore")
+    recovery = layout.root.with_name(f".{layout.root.name}.pre-restore")
+    if populated:
+        if recovery.exists():
+            raise FileExistsError(f"restore recovery point already exists: {recovery}")
+        os.replace(layout.root, recovery)
     layout.root.mkdir(parents=True, exist_ok=True)
 
     manifest: ArchiveManifest
@@ -224,6 +252,8 @@ def restore_archive(
                 destination.write_bytes(data)
     except Exception:
         shutil.rmtree(layout.root, ignore_errors=True)
+        if populated and recovery.exists():
+            os.replace(recovery, layout.root)
         raise
 
     _rewrite_json_paths(layout.root, manifest.source_root, str(layout.root))
@@ -232,6 +262,14 @@ def restore_archive(
         if original.is_file():
             os.chmod(original, 0o444)
     rebuild_search_index(home=layout.root)
+    integrity = inspect_home(layout.root)
+    if not integrity["ok"]:
+        shutil.rmtree(layout.root, ignore_errors=True)
+        if populated and recovery.exists():
+            os.replace(recovery, layout.root)
+        raise ValueError(
+            "restored state failed integrity checks: " + "; ".join(integrity["errors"])
+        )
     return RestoreResult(
         archive_path=str(archive_path),
         archive_sha256=sha256_file(archive_path),
