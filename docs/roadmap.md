@@ -1,5 +1,26 @@
 # Roadmap
 
+## Status at a glance
+
+### Shipped
+
+- Desktop product;
+- privacy-safe diagnostics;
+- durable storage migrations;
+- explicit ingestion limits.
+
+### In validation
+
+- Private beta trials;
+- independent security review.
+
+### Deferred
+
+- Unsupported formats;
+- synchronization;
+- broad connectors;
+- broader platforms.
+
 ## Foundation
 
 - product charter and public trust boundary;
