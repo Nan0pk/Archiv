@@ -88,9 +88,22 @@ def test_diagnostics_bundle_excludes_private_values(
                 "b",
             ),
         )
+        connection.execute(
+            "INSERT INTO ingestion_failures VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                "rejected-attempt",
+                secrets[0],
+                secrets[1],
+                None,
+                "PermissionError: " + secrets[3],
+                "2026-01-01",
+            ),
+        )
     serialized = json.dumps(diagnostics_report(home), sort_keys=True)
     assert all(secret not in serialized for secret in secrets)
-    assert '"permission": 1' in serialized
+    assert (
+        '"permission": 2' in serialized
+    )  # existing ingestions row + the new ingestion_failures row
     assert '"timeout": 1' in serialized
 
     output = tmp_path / "support.json"
@@ -100,3 +113,18 @@ def test_diagnostics_bundle_excludes_private_values(
     assert all(
         secret not in result.stdout and secret not in output.read_text() for secret in secrets
     )
+
+
+def test_diagnostics_counts_pre_storage_failures(tmp_path: Path) -> None:
+    """A file rejected before storage has no ingestions row; diagnostics must still see it."""
+
+    home = tmp_path / "home"
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    vault.joinpath("broken.docx").write_bytes(b"not a real docx package")
+
+    added = runner.invoke(app, ["add", str(vault), "--home", str(home), "--json"])
+    assert added.exit_code == 1, added.output  # nothing ingestible; add fails closed
+
+    serialized = json.dumps(diagnostics_report(home), sort_keys=True)
+    assert '"ingestion_states": {"failed": 1}' in serialized

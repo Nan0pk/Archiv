@@ -141,3 +141,31 @@ def test_report_fails_closed_without_model_or_deterministic_flag(tmp_path: Path)
     )
     assert res.exit_code != 0
     assert "hidden fallback is forbidden" in res.output
+
+
+def test_add_persists_failures_so_status_and_diagnostics_can_see_them(tmp_path: Path) -> None:
+    """A file that fails ingestion must not vanish from every downstream diagnostic."""
+
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    vault.joinpath("good.txt").write_text("a readable fixture", encoding="utf-8")
+    vault.joinpath("broken.docx").write_bytes(b"not a real docx package")
+
+    home = tmp_path / "home"
+    added = runner.invoke(app, ["add", str(vault), "--home", str(home), "--json"])
+    assert added.exit_code == 0, added.output
+    add_payload = json.loads(added.output)
+    assert add_payload["failed"] == 1
+
+    status = runner.invoke(app, ["status", "--home", str(home), "--json"])
+    assert status.exit_code == 0, status.output
+    status_payload = json.loads(status.output)
+    assert status_payload["ingestions"]["failed"] == 1
+    assert status_payload["ingestion_summary"]["failed"] == 1
+
+    from archiv.ui.product import list_documents
+
+    failures = list_documents(home, failures=True)
+    assert len(failures) == 1
+    assert failures[0].name == "broken.docx"
+    assert failures[0].error

@@ -55,8 +55,16 @@ def test_persistent_document_and_failure_views_use_ledger(tmp_path: Path) -> Non
                 "INSERT INTO ingestions VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (ident, "a" * 64, f"/{ident}.txt", f"{ident}.txt", "2026-01-01", 0, status, error),
             )
+        # The common failure case never reaches `ingestions` at all -- it was
+        # rejected before storage (see ingestion/service.py::_record_ingestion_failure)
+        # -- and it happened later than "bad.txt" above, so it must rank first.
+        connection.execute(
+            "INSERT INTO ingestion_failures VALUES (?, ?, ?, ?, ?, ?)",
+            ("rejected", "/rejected.docx", "rejected.docx", None, "malformed", "2026-01-02"),
+        )
         connection.commit()
     assert [row.name for row in list_documents(tmp_path)] == ["ok.txt"]
     failures = list_documents(tmp_path, failures=True)
-    assert failures[0].name == "bad.txt"
-    assert failures[0].error == "denied"
+    assert [row.name for row in failures] == ["rejected.docx", "bad.txt"]
+    assert failures[0].error == "malformed"
+    assert failures[1].error == "denied"

@@ -102,6 +102,34 @@ def _finish_ingestion(
         connection.commit()
 
 
+def _record_ingestion_failure(
+    database: ArchivDatabase, *, source: Path, digest: str | None, error: Exception
+) -> None:
+    """Durably record a file that was rejected before it ever reached storage.
+
+    No ``objects``/``ingestions`` row exists for a rejected file by design (see
+    ``_migration_1_to_2``), so this is the only place the attempt is remembered.
+    """
+
+    with database.connect() as connection:
+        connection.execute(
+            """
+            INSERT INTO ingestion_failures (
+                failure_id, source_path, source_name, object_sha256, error, attempted_at
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                uuid4().hex,
+                str(source),
+                source.name,
+                digest,
+                f"{type(error).__name__}: {error}",
+                now_iso(),
+            ),
+        )
+        connection.commit()
+
+
 def ingest_file(
     source: Path,
     *,
@@ -111,20 +139,36 @@ def ingest_file(
     """Validate, content-address, record, and derive one local file."""
 
     source = source.expanduser()
-    # Inspect the directory entry before resolution so symlink inputs cannot
-    # silently cross the caller's intended trust boundary.
-    check_input(source)
-    source = source.resolve(strict=True)
-    if not source.is_file():
-        raise ValueError("source must be a regular file")
-
-    digest = sha256_file(source)
-    source_name = source.name
-    media_type = media_type_for(source_name)
-    source_extension = suffix_for(source_name)
-    normalize(source, digest, source_name=source_name)
-
     layout = ArchivLayout.resolve(home)
+    # A rejected file must not conjure an archive home into existence (see
+    # test_malformed_input_fails_before_archive_creation) -- but once a home is
+    # real, every attempt against it is worth remembering, so only skip the
+    # durable failure record in the narrow case where nothing has used this
+    # home yet.
+    home_already_exists = layout.root.exists()
+
+    digest: str | None = None
+    try:
+        # Inspect the directory entry before resolution so symlink inputs cannot
+        # silently cross the caller's intended trust boundary.
+        check_input(source)
+        source = source.resolve(strict=True)
+        if not source.is_file():
+            raise ValueError("source must be a regular file")
+
+        digest = sha256_file(source)
+        source_name = source.name
+        media_type = media_type_for(source_name)
+        source_extension = suffix_for(source_name)
+        normalize(source, digest, source_name=source_name)
+    except Exception as error:
+        if home_already_exists:
+            layout.ensure()
+            database = ArchivDatabase(layout.database)
+            database.initialize()
+            _record_ingestion_failure(database, source=source, digest=digest, error=error)
+        raise
+
     layout.ensure()
     database = ArchivDatabase(layout.database)
     database.initialize()

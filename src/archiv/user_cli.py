@@ -71,6 +71,10 @@ def _add_sources(
     rebuild_derived: bool,
 ) -> tuple[list[IngestionResult], SearchIndexBuild | None, IngestionCounts]:
     candidates, rejected = _candidates(source)
+    # `add` always means to populate this home, unlike a single ingest_file() call
+    # (which must not create a home for one rejected file) -- so a failure on the
+    # very first candidate is still durably recorded, regardless of candidate order.
+    ArchivLayout.resolve(home).ensure()
     results: list[IngestionResult] = []
     failed = 0
     degraded = 0
@@ -159,6 +163,7 @@ def _status_payload(home: Path | None) -> dict[str, object]:
                             WHERE status = 'succeeded' AND duplicate = 1)
                             AS duplicate_ingestions,
                         (SELECT COUNT(*) FROM ingestions WHERE status = 'failed')
+                            + (SELECT COUNT(*) FROM ingestion_failures)
                             AS failed_ingestions,
                         (SELECT COUNT(*) FROM objects
                             WHERE source_extension IN ("""
