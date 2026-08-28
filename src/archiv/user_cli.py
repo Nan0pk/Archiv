@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import sqlite3
 from collections.abc import Callable
-from functools import cache
 from pathlib import Path
 from typing import Annotated, cast
 from uuid import uuid4
@@ -19,7 +18,6 @@ from archiv.contracts import (
     RunStatus,
     SearchIndexBuild,
 )
-from archiv.format_matrix import load_format_matrix, matrix_path
 from archiv.grounding import run_grounded_ask
 from archiv.ingestion import ingest_file
 from archiv.ingestion.formats import SUPPORTED_SUFFIXES, UnsupportedFormatError
@@ -52,18 +50,6 @@ def _candidates(source: Path) -> tuple[list[Path], int]:
     return supported, len(files) - len(supported)
 
 
-@cache
-def _partial_suffixes() -> frozenset[str]:
-    """Load the immutable packaged support classification once per process."""
-
-    return frozenset(
-        suffix
-        for family in load_format_matrix(matrix_path()).families
-        if family.support_level == "partial"
-        for suffix in family.suffixes
-    )
-
-
 def _add_sources(
     source: Path,
     *,
@@ -86,7 +72,10 @@ def _add_sources(
             results.append(result)
             processor_skipped = any(item.status == "skipped" for item in result.processing)
             skipped += processor_skipped
-            degraded += active.suffix.lower() in _partial_suffixes() or processor_skipped
+            # Family-level "partial" support (declared once in the format matrix) is not
+            # the same claim as "this file's extraction was incomplete" -- most files in
+            # a partial-support family still extract in full. Count only the latter.
+            degraded += processor_skipped
         except UnsupportedFormatError:
             rejected += 1
         except (OSError, RuntimeError, ValueError):
@@ -149,8 +138,6 @@ def _status_payload(home: Path | None) -> dict[str, object]:
     errors: list[str] = []
     if layout.database.is_file():
         try:
-            partial_suffixes = tuple(sorted(_partial_suffixes()))
-            placeholders = ", ".join("?" for _ in partial_suffixes)
             with sqlite3.connect(layout.database) as connection:
                 connection.row_factory = sqlite3.Row
                 row = connection.execute(
@@ -165,14 +152,17 @@ def _status_payload(home: Path | None) -> dict[str, object]:
                         (SELECT COUNT(*) FROM ingestions WHERE status = 'failed')
                             + (SELECT COUNT(*) FROM ingestion_failures)
                             AS failed_ingestions,
-                        (SELECT COUNT(*) FROM objects
-                            WHERE source_extension IN ("""
-                    + placeholders
-                    + """)) AS degraded_objects,
+                        -- "degraded" means this file's own extraction left something out,
+                        -- not that its format family is merely capable of that in general
+                        -- (see add's identical processor_skipped criterion). That makes
+                        -- this subquery identical to skipped_objects below by construction
+                        -- -- both now mean "at least one processing step was skipped" --
+                        -- kept as two field names for API compatibility, not two concepts.
+                        (SELECT COUNT(DISTINCT object_sha256) FROM processing_runs
+                            WHERE status = 'skipped') AS degraded_objects,
                         (SELECT COUNT(DISTINCT object_sha256) FROM processing_runs
                             WHERE status = 'skipped') AS skipped_objects
-                    """,
-                    partial_suffixes,
+                    """
                 ).fetchone()
             if row is not None:
                 for key in counts:
@@ -307,6 +297,9 @@ def register_user_commands(app: typer.Typer) -> tuple[Callable[..., None], ...]:
             "new_originals": sum(not result.duplicate for result in results),
             "duplicates": sum(result.duplicate for result in results),
             "rejected_unsupported": rejected,
+            # Deprecated alias, kept for compatibility with existing readers of this
+            # field name; always equal to "rejected_unsupported" above. New code
+            # should read "rejected_unsupported" or "ingestion_summary.rejected".
             "skipped_unsupported": rejected,
             "failed": failed,
             "search_index": None if index is None else index.model_dump(mode="json"),
