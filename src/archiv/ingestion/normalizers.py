@@ -11,7 +11,7 @@ from archiv.ingestion.formats import (
     media_type_for,
     suffix_for,
 )
-from archiv.ingestion.limits import check_input
+from archiv.ingestion.limits import NativeResourceLimitError, check_input
 from archiv.ingestion.normalize_documents import normalize_docx, normalize_pdf, normalize_text
 from archiv.ingestion.normalize_inpage import normalize_inpage
 from archiv.ingestion.normalize_media import normalize_image, normalize_wav
@@ -82,6 +82,10 @@ def normalize(
             )
         if kind == "wav":
             return normalize_wav(path, digest, source_name=logical_name, media_type=media_type)
+    except NativeResourceLimitError:
+        # A benign resource bound on well-formed content, not a parsing failure —
+        # reporting it as malformed would tell the user their good file is broken.
+        raise
     except Exception as error:
         raise MalformedInputError(f"{type(error).__name__}: {error}") from error
 

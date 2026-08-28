@@ -8,7 +8,7 @@ from docx import Document
 from pypdf import PdfReader
 
 from archiv.contracts import NormalizedDocument, NormalizedSegment
-from archiv.ingestion.limits import check_pages
+from archiv.ingestion.limits import check_native_pages
 
 
 def normalize_text(
@@ -43,7 +43,7 @@ def normalize_pdf(
     media_type: str,
 ) -> NormalizedDocument:
     reader = PdfReader(path, strict=True)
-    check_pages(len(reader.pages))
+    check_native_pages(len(reader.pages))
     segments = [
         NormalizedSegment(
             locator={"page": index},
