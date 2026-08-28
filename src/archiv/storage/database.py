@@ -9,7 +9,7 @@ from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from pathlib import Path
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 MIN_SUPPORTED_SCHEMA_VERSION = 0
 
 SCHEMA = """
@@ -33,6 +33,11 @@ CREATE TABLE IF NOT EXISTS processing_runs (
 );
 CREATE INDEX IF NOT EXISTS ingestions_object_idx ON ingestions(object_sha256);
 CREATE INDEX IF NOT EXISTS processing_object_idx ON processing_runs(object_sha256);
+CREATE TABLE IF NOT EXISTS ingestion_failures (
+    failure_id TEXT PRIMARY KEY, source_path TEXT NOT NULL, source_name TEXT NOT NULL,
+    object_sha256 TEXT, error TEXT NOT NULL, attempted_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ingestion_failures_time_idx ON ingestion_failures(attempted_at);
 """
 
 
@@ -46,7 +51,32 @@ def _migration_0_to_1(connection: sqlite3.Connection) -> None:
             connection.execute(statement)
 
 
-MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {0: _migration_0_to_1}
+def _migration_1_to_2(connection: sqlite3.Connection) -> None:
+    """Add a ledger for validation failures that never reach the ingestions table.
+
+    A file rejected before storage (malformed input, an oversized document) leaves
+    no row in ``objects`` or ``ingestions`` by design -- that keeps a rejected file
+    from ever appearing to have been partially archived. This table is the only
+    durable record that the attempt happened at all.
+    """
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS ingestion_failures (
+            failure_id TEXT PRIMARY KEY, source_path TEXT NOT NULL, source_name TEXT NOT NULL,
+            object_sha256 TEXT, error TEXT NOT NULL, attempted_at TEXT NOT NULL
+        )
+        """
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS ingestion_failures_time_idx ON ingestion_failures(attempted_at)"
+    )
+
+
+MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
+    0: _migration_0_to_1,
+    1: _migration_1_to_2,
+}
 
 
 class ArchivDatabase:

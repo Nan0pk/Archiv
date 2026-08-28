@@ -1,4 +1,4 @@
-# Archiv 0.1.0a6 — Third field evaluation on a real-world corpus
+# Archiv 0.1.0a6 — Third field evaluation, plus five fixes, on a real-world corpus
 
 > **Status: nascent / informal.** A third ad hoc run against the same real-world corpus as
 > [`field-notes-2026-08-23-real-world-corpus.md`](field-notes-2026-08-23-real-world-corpus.md)
@@ -6,7 +6,11 @@
 > Not the frozen, CI-measured benchmark in [`field-trial-report.md`](field-trial-report.md).
 > Single machine, single pass, and a test corpus with its own quality issues (see
 > [`field-notes-2026-08-24-test-corpus-quality.md`](field-notes-2026-08-24-test-corpus-quality.md)).
-> Treat as a triage list, not a certified result.
+> Treat as a triage list, not a certified result. This report was updated after the initial
+> pass: five bugs found below were fixed in this same branch (test-driven, one commit each),
+> and the corpus was re-ingested from a fresh archive home to verify them. Section 0 covers the
+> fixes; every other section is left as originally written, with fixed findings marked inline
+> and re-measured numbers added alongside the originals so the two runs stay distinguishable.
 
 **Tested:** `Nan0pk/Archiv` @ `3e0703d` (`main`, 21 commits past the previous evaluation's `a31bd0f`; the repository squash-merges, so each is a landed PR), branch cut from `origin/main`, dependencies reinstalled to match `pyproject.toml` at that commit (`pypdf` 6.16.2, `reportlab` 5.0.1)
 **Platform:** Fedora (x86_64, kernel 7.1.8), Python 3.13.14 (uv venv), SQLite 3.53.1 with FTS5, tesseract 5.5.3 (`ara eng urd`), bubblewrap 0.11.0, LibreOffice 26.2.5.2
@@ -14,6 +18,74 @@
 **Model backend:** none configured — `ask` and `report` were **not** exercised this round
 **Archive home:** a fresh, empty directory on persistent disk (`/home`), deliberately not under `/tmp`
 **OCR:** `ARCHIV_OCR` left at `auto`; visual OCR ran (136 manifests succeeded, 10 skipped). The `ocr-benchmark` extras (`onnxruntime`, `rapidocr`) were **not** installed, so `archiv benchmark-ocr` was not exercised.
+
+---
+
+## 0. Fixes applied in this branch
+
+Five of the findings below were fixed here, test-driven (a failing test written before each
+fix, `git stash` used at one point to confirm a new test genuinely failed against the old code).
+Each is one commit on `field-notes/2026-08-28-corpus-run`, on top of `3e0703d`:
+
+| Commit | Fixes | Finding |
+|---|---|---|
+| `d467f72` | The 250-page cap now applies only to OCR rendering; native text extraction gets its own 10,000-page runaway guard (`MAX_NATIVE_PAGES`, a conservative round number chosen for this fix, not a maintainer-set value) that fails as a limit, not as `MalformedInputError` | §3.1 |
+| `5a3aa86` | Ingestion failures are now persisted to a new `ingestion_failures` table (schema bump to 2, migration included) and read back by `status`, `diagnostics-export`, and the desktop UI's "Needs attention" pane | §3.2 |
+| `9124df4` | `degraded` is now counted from `processor_skipped` alone in both `add` and `status`, which also reconciles their previously disagreeing definitions | §3.3, §3.4b |
+| `3e5054b` | The privacy guardrail now matches this machine's actual home-directory path via `git ls-files`, instead of a bare account-name token with a CI skip-list | §2.4 |
+
+(`skipped_unsupported`, §3.4a, was documented as a deprecated alias rather than removed or
+schema-bumped — a JSON field removal is a bigger decision than this PR should make alone.)
+
+All five gate commands pass clean after every commit: `archiv doctor`, `ruff format --check .`,
+`ruff check .`, `pyright` (strict), `pytest` — **298 passed, 0 failed**, the first fully green run
+in this report's history (the privacy-guardrail failure that opened every prior run is gone).
+
+**Re-verification: a fresh full-corpus ingest into a new archive home**, dependencies
+reinstalled against the fixed commit:
+
+| | Before (this doc, §4/§5, at `3e0703d`) | After (all 5 fixes) |
+|---|---|---|
+| `add` exit / failed | 0 / **10** | 0 / **9** (the 511-page PDF now ingests) |
+| `add` degraded | 174 | **23** |
+| `status` failed / degraded | 0 / 169 *(disagreed with `add`)* | **9 / 23** *(now agrees with `add`)* |
+| Indexed objects / passages | 2,056 / 441,298 | **2,057 / 441,809** |
+| Wall time | 5m25s | 5m49s |
+| Schema version | 1 | **2** |
+
+441,809 passages exactly matches the very first clean baseline (`a31bd0f`, before this doc's
+own regression was introduced) — the 511-page PDF's 511 pages are back. Degraded rose from a
+predicted 22 to 23: the same PDF, once it ingests, gets one `visual-ocr` step correctly marked
+skipped ("native text is available for every PDF page") like every other native PDF, which is
+exactly the accounting §3.3 describes and does not further fix (see "known gap" below).
+
+**The UI fix was verified against the real desktop application, not just the CLI.** The Tk
+`ProductApp` was instantiated headless (`root.withdraw()`) against the fixed archive home and
+driven exactly as a user would — `app._show("Needs attention")` — then its actual widget tree
+was read back. Before the fix this pane rendered "Nothing needs attention" regardless of how
+many files failed, because nothing had ever written a row it could read; its only existing test
+proved the query worked by hand-inserting a row the real pipeline could never produce. After the
+fix it renders one label per real failure, each with the actual filename and exception text,
+e.g. `<redacted-name>.jpg — MalformedInputError: UnidentifiedImageError: cannot identify
+image file '...'` (filename redacted here per the public-data rule; the real UI shows the actual
+name). The "Library" view was checked the same way and renders 2,057 documents.
+
+**Known gap, deliberately not fixed:** `processor_skipped` still conflates OCR skipped because
+it wasn't needed (fully searchable), OCR skipped by the user's own `ARCHIV_OCR=off`, a
+duplicate's derived data being reused rather than recomputed (nothing was skipped), and genuine
+incomplete coverage. Two tests pin this as current, intentional behavior
+(`test_add_still_flags_a_native_text_pdf_as_degraded`,
+`test_add_still_flags_a_duplicate_as_degraded`) rather than leaving it latent. See tracker item
+10.
+
+**Known gap, deliberately not fixed:** the rewritten privacy guardrail only detects a leaked
+full home-directory path. The original 2026-08-15 leak it exists to catch
+(`a31bd0f`/#78) was a *bare* account name used as a script default with no path context — a
+token-based rule strict enough to catch that reintroduces the exact word-collision problem this
+fix removes. See tracker item 11.
+
+**Not pushed.** These fixes live on the local branch alongside this doc; nothing has been sent
+to `origin`.
 
 ---
 
@@ -40,13 +112,13 @@ Material findings this round:
 
 | # | Severity | Finding | Status vs. previous run |
 |---|----------|---------|--------------------------|
-| A | **High (regression — content loss)** | The 250-page cap introduced by #94 is enforced on the **native PDF text path**, not just OCR fallback. One 511-page, 3.4 MB real PDF that ingested successfully at `a31bd0f` is now hard-rejected. No override flag. `docs/visual-ocr.md` still describes the cap as OCR-only. | **New** |
-| B | **High (diagnosability)** | Ingestion failures are counted in-process and never persisted. `add` reports `failed: 10` with no path, error, or reason; `status` and `diagnostics-export` then report `failed: 0` and `error_categories: {}`. The `ingestions` table already has `status` and `error` columns and no failed row is ever written. | **New** |
-| C | Medium (false statement about the archive) | "Partially searchable (degraded)" is assigned from format-family classification alone. 152 of the 174 files flagged degraded had **no** skipped processor — their extraction was complete. | **New** |
-| D | Medium (JSON contract) | `rejected_unsupported` and `skipped_unsupported` are emitted with the same value; `skipped_unsupported` silently changed meaning (35 → 26) between commits. `degraded` has two different definitions, giving 174 from `add` and 169 from `status` for the same archive. | **New** |
+| A | **High (regression — content loss)** | The 250-page cap introduced by #94 is enforced on the **native PDF text path**, not just OCR fallback. One 511-page, 3.4 MB real PDF that ingested successfully at `a31bd0f` is now hard-rejected. No override flag. `docs/visual-ocr.md` still describes the cap as OCR-only. | **New — fixed in this branch (§0, §3.1)** |
+| B | **High (diagnosability)** | Ingestion failures are counted in-process and never persisted. `add` reports `failed: 10` with no path, error, or reason; `status` and `diagnostics-export` then report `failed: 0` and `error_categories: {}`. The `ingestions` table already has `status` and `error` columns and no failed row is ever written. | **New — fixed in this branch (§0, §3.2)** |
+| C | Medium (false statement about the archive) | "Partially searchable (degraded)" is assigned from format-family classification alone. 152 of the 174 files flagged degraded had **no** skipped processor — their extraction was complete. | **New — fixed in this branch (§0, §3.3)** |
+| D | Medium (JSON contract) | `rejected_unsupported` and `skipped_unsupported` are emitted with the same value; `skipped_unsupported` silently changed meaning (35 → 26) between commits. `degraded` has two different definitions, giving 174 from `add` and 169 from `status` for the same archive. | **New — (b) fixed, (a) documented as a deprecated alias (§0, §3.4)** |
 | E | **High (quality)** | Scanner-watermark PDFs still lose 100% of their content — 6 of 19 valid PDFs, at exactly 10 characters per page. | Previously 3.1 — **still open, unchanged** |
 | F | Medium (retrieval) | `find`/`search` still apply no per-source diversity cap: one source took 9 of 20 result slots. | Previously 2.5/F — **still open** |
-| G | Medium (test design) | The privacy guardrail is structurally unpassable for some contributor account names, scans untracked files, and still self-skips on hosted runners. | Previously 2.3/C — **unchanged** |
+| G | Medium (test design) | The privacy guardrail is structurally unpassable for some contributor account names, scans untracked files, and still self-skips on hosted runners. | Previously 2.3/C — **fixed in this branch (§0, §2.4)** |
 | H | Low (JSON contract) | Every command now emits machine-readable output, but by two different conventions, and the array-shaped payloads carry no `schema_version` envelope. | Previously 2.6/H — **substantially resolved** |
 
 ### Fixed and verified
@@ -118,7 +190,7 @@ A 10-character scanner watermark is still accepted as a native text layer, so OC
 the scanned content is never recovered. Unchanged from the previous round (6 of 20 valid PDFs
 then, 6 of 19 now — the denominator moved only because of §3.1).
 
-### 2.4 [STILL OPEN — unchanged] The privacy guardrail is unpassable for some account names
+### 2.4 [FIXED IN THIS BRANCH — was: unchanged] The privacy guardrail was unpassable for some account names
 
 `tests/test_privacy_and_artifacts.py::test_no_private_paths_or_secrets_in_tracked_files` fails.
 This is the *only* failing test, and the failure is byte-identical in substance to the one logged
@@ -140,6 +212,15 @@ Three separate problems in one test:
 
 Suggested shape for a fix: derive the file list from `git ls-files`, and compare against the
 *path* of the contributor's home directory rather than the bare account-name token.
+
+**Fixed in `3e5054b` (§0).** The rewritten test matches `Path.home()` via `git ls-files`, closing
+all three problems at once: it needs no skip-list (a hosted runner's own home is exactly as real
+a leak there as a contributor's is locally, so nothing needs exempting), it passes on this
+machine (the word "Victus" never matches the *path form* of the account's home directory), and it can no longer see an
+untracked file. Verified by monkeypatching `Path.home()` to a runner-shaped path and confirming
+the test both runs (not skipped) and still catches a planted leak in a scratch git repo.
+Tradeoff: it no longer catches a bare account-name value with no path context, which was the
+shape of the original `a31bd0f`/#78 leak (see tracker item 11).
 
 ### 2.5 [STILL OPEN] `find`/`search` have no per-source diversity cap
 
@@ -193,7 +274,7 @@ Also not exercised, and therefore not re-confirmed from the previous round:
 
 ## 3. New findings
 
-### 3.1 [HIGH — regression, content loss] The 250-page cap now rejects native PDF text extraction
+### 3.1 [FIXED IN THIS BRANCH] The 250-page cap rejected native PDF text extraction
 
 **One object regressed out of the archive between `a31bd0f` and `3e0703d`, and this is it.**
 
@@ -261,7 +342,15 @@ a separate, much higher bound for native extraction, or keep the cap and add an 
 plus a distinct error class that does not claim malformation. Either way `docs/visual-ocr.md`
 needs to match the code.
 
-### 3.2 [HIGH — diagnosability] Ingestion failures are counted and then discarded
+**Fixed in `d467f72` (§0).** Native extraction now calls `check_native_pages()` (a new
+`MAX_NATIVE_PAGES = 10,000` runaway guard, chosen as a conservative round number for this fix —
+not something the maintainer has signed off on) instead of the OCR-only `check_pages()`. Its
+`LimitExceededError` subtype (`NativeResourceLimitError`) propagates unwrapped instead of being
+relabeled `MalformedInputError`, so a rejection (past 10,000 pages) no longer claims the file is
+broken. The re-ingested corpus's segment count returned to 441,809 — exactly the pre-regression
+baseline — confirming the 511-page PDF is the only object this ever affected.
+
+### 3.2 [FIXED IN THIS BRANCH] Ingestion failures were counted and then discarded
 
 `add` now correctly reports **that** files failed (§2.1). It reports nothing about **which** or
 **why**, and the information is destroyed rather than merely unshown.
@@ -321,7 +410,20 @@ that way would abort the whole batch rather than be counted. No corpus file did 
 `AttributeError` above arrives wrapped as `MalformedInputError`, a `ValueError` subclass — so
 this is a reading of the handler, not observed behaviour.
 
-### 3.3 [MEDIUM] "Partially searchable (degraded)" is decided by file extension, not by what happened
+**Fixed in `5a3aa86` (§0).** A new `ingestion_failures` table (schema bump 1→2, migration
+included) durably records every pre-storage rejection with its path, name, and exact error text
+— deliberately decoupled from `objects`/`ingestions` (no foreign key) so a rejected file still
+never appears to have been partially stored, preserving the existing
+`test_malformed_input_fails_before_archive_creation` guarantee that a single doomed
+`archiv ingest` call creates nothing. `add`, by contrast, always means to populate its home, so
+it now ensures that home exists before its candidate loop — durably recording a failure even
+when the very first file in a batch is the one that fails. `status`, `diagnostics-export`, and
+the desktop UI's `list_documents(failures=True)` all now read from it (the UI unions it with the
+rare case that still uses `ingestions.status = 'failed'`). Verified with a real
+`add → backup → restore → status` round trip: the failure survives because `backup` is a
+full-file SQLite snapshot, not a table-by-table export.
+
+### 3.3 [FIXED IN THIS BRANCH] "Partially searchable (degraded)" was decided by file extension, not by what happened
 
 `archiv add` printed `Partially searchable (degraded): 174`. Of those 174 files, **152 had no
 skipped processor at all** — their extraction ran to completion with nothing degraded about it.
@@ -355,7 +457,17 @@ The distinction is already available: `processor_skipped` is computed on the lin
 `processor_skipped` alone, and if the family classification is worth surfacing, surface it under
 its own name.
 
-### 3.4 [MEDIUM] Two JSON contract defects in the new counters
+**Fixed in `9124df4` (§0).** `degraded` in both `add` and `status` now comes solely from
+`processor_skipped`; the now-dead `_partial_suffixes()` family-classification helper was
+removed. On the re-ingested corpus this dropped `degraded` from 174 to 23 (§0). **Not fully
+closed**, and deliberately so: `processor_skipped` itself still conflates OCR skipped because it
+wasn't needed, OCR skipped by choice (`ARCHIV_OCR=off`), a duplicate's reused derived data, and
+genuine incomplete coverage — two of the corpus's 19 native PDFs and its 5 duplicate files are
+still counted degraded under this fix, for reasons that are not actually degradation. Pinned by
+`test_add_still_flags_a_native_text_pdf_as_degraded` and
+`test_add_still_flags_a_duplicate_as_degraded` rather than left latent. See tracker item 10.
+
+### 3.4 [PARTIALLY FIXED IN THIS BRANCH] Two JSON contract defects in the new counters
 
 **(a) `rejected_unsupported` and `skipped_unsupported` are the same value.** `user_cli.py:304-305`:
 
@@ -369,6 +481,11 @@ value changed meaning between commits: it was 35 at `a31bd0f` (unsupported + mal
 26 here (unsupported only). A consumer reading that key sees the number move by 9 with no schema
 change to signal it, while the genuinely-skipped count (22) is reachable only through the new
 `ingestion_summary` object. Either drop the alias or make it a real deprecation.
+
+**(a) not fixed — documented instead, in `9124df4` (§0).** Removing a public JSON field is a
+breaking change this PR shouldn't make unilaterally; the field is now marked deprecated in a
+code comment pointing readers at `rejected_unsupported`/`ingestion_summary.rejected` instead.
+No schema version bump, since the value itself did not change.
 
 **(b) `degraded` has two definitions, and they disagree on the same archive.** `add` reported
 174; `status` reports 169 for the identical archive, seconds later. They are computed
@@ -385,15 +502,26 @@ objects, plus the 2 files that were skipped-only without a partial suffix — 16
 Both numbers are internally consistent and neither is wrong on its own terms; they simply cannot
 both be called `degraded` in a field named `ingestion_summary.degraded` with `schema_version: 1`.
 
+**(b) fixed in `9124df4` (§0).** `status`'s SQL now counts distinct objects with a skipped
+processing run — the same rule `add` uses, and the same subquery `status` already used for its
+own `skipped_objects` field. The two field names are kept (existing consumers may read either),
+now with identical values by construction; the duplication is a deliberate compatibility choice,
+documented inline in the SQL rather than left unexplained.
+
 ## 4. What works — verified by measurement
 
+*The counts below are from the original, pre-fix pass at `3e0703d`. §0 has the re-measured
+numbers after all five fixes; both are kept so the two runs stay comparable.*
+
 - **The acceptance gate.** `archiv doctor` 3/3, `ruff format --check .` clean over 213 files,
-  `ruff check .` clean, `pyright` strict with 0 errors. Test count has grown from 251 to 286.
+  `ruff check .` clean, `pyright` strict with 0 errors. Test count has grown from 251 to 286
+  (298 after this branch's own fixes add 12 more, §0).
 - **Full-corpus ingest:** 2,097 files → 2,061 ingested, 5 duplicates (the true content-duplicate
   count among ingestible files, independently verified by hashing), 26 correctly rejected as
-  unsupported, 10 failed (9 malformed fixtures + §3.1). 2,056 objects / 441,298 passages.
+  unsupported, 10 failed (9 malformed fixtures + §3.1, since fixed — 9 after the fix). 2,056
+  objects / 441,298 passages (2,057 / 441,809 after §3.1's fix).
   **5m25s**, peak RSS 1.20 GB — statistically indistinguishable from the previous clean run's
-  5m23s / 1.06 GB.
+  5m23s / 1.06 GB (5m49s after all fixes, still consistent with run-to-run variance).
 - **The new integrity framework (#92) reports a clean archive.** `status --json` →
   `integrity.ok: true`, 2,056 canonical objects checked with **0 corrupt**, 2,348 evidence
   records checked with **0 invalid**, `database: "ok"`, no orphaned temporaries.
@@ -406,13 +534,22 @@ both be called `degraded` in a field named `ingestion_summary.degraded` with `sc
   versions, platform strings, schema versions and aggregate counters — and **no** paths, no home
   directory, no hostname, no account name, no filenames, no hashes, no content. Verified by
   scanning the output for the account-name literal: zero hits. The preview-then-confirm gate
-  works: without `--yes` the preview prints and **no file is created**.
+  works: without `--yes` the preview prints and **no file is created**. Re-verified after §3.2's
+  fix added a table full of paths and error text feeding this same report: extended
+  `test_diagnostics_bundle_excludes_private_values` to insert a secret path into
+  `ingestion_failures` and confirmed it still never serializes.
 - **`add --summary-out` (#86) honours its contract.** `privacy: "aggregate_counts_only"`,
   `local_only: true`, five integers, nothing else. Written atomically and confirmed on disk at
   mode `0600` — stricter than the `diagnostics-export` bundle, which lands at `0644`.
 - **`archiv ui` degrades correctly when headless.** With no display available:
   `archiv ui: no graphical display is available; use a local desktop session`, exit 1 — a clear
   message rather than a traceback or a hang.
+- **The desktop UI itself was driven directly, not just its headless logic layer** (§0). Before
+  §3.2's fix, its "Needs attention" pane rendered "Nothing needs attention" no matter how many
+  files failed — the only test covering it proved the query worked by hand-inserting a row the
+  real pipeline could never write. After the fix, instantiating the real `ProductApp` against
+  the fixed archive home and reading its actual widget tree shows one label per real failure
+  (filename and exact exception text); its "Library" view shows all 2,057 indexed documents.
 - **The `FULL`/`PARTIAL` support column** added to `archiv formats` (#90) is a real improvement
   in honesty over the previous round's output, which stated only the extraction method.
 - **Format coverage confirmed in bulk:** DOCX (1,869 files), native PDF, XLSX, PPTX including a
@@ -423,32 +560,37 @@ both be called `degraded` in a field named `ingestion_summary.degraded` with `sc
 
 | Operation | Wall | Peak RSS | Notes |
 |-----------|------|----------|-------|
-| Full-corpus `add` (2,097 files, 498 MB) | 5m25s | 1.20 GB | 2,056 objects / 441,298 passages; OCR active |
+| Full-corpus `add`, at `3e0703d` | 5m25s | 1.20 GB | 2,056 objects / 441,298 passages; OCR active |
+| Full-corpus `add`, after all 5 fixes | 5m49s | 1.03 GB | 2,057 objects / 441,809 passages; OCR active |
 | `rebuild-search-index` | 10.8 s | 424 MB | byte-identical output |
-| `pytest` (286 tests) | 55.8 s | — | 1 pre-existing failure |
+| `pytest`, at `3e0703d` | 55.8 s | — | 286 tests, 1 pre-existing failure |
+| `pytest`, after all 5 fixes | 46.4 s | — | 298 tests, **0 failures** |
 | `status --json` (incl. full integrity check) | 1.2 s | 217 MB | 2,056 objects + 2,348 evidence records verified |
 
-Single machine, single pass, thermal state uncontrolled. Not a benchmark.
+Single machine, single pass, thermal state uncontrolled. Not a benchmark. The two `add` runs
+differ by 24s / 2,057 objects worth of extra text (~24k characters over the run) — consistent
+with normal variance, not a performance regression from the fixes.
 
 ## 6. Suggested tracker items
 
-1. `fix(ingestion)`: **scope `MAX_PAGES` to the OCR path it is documented for**, or add an
-   opt-out and a distinct non-malformation error class. Update `docs/visual-ocr.md:105`, which
-   still describes the cap as OCR-only. Highest priority — this is silent content loss on a
-   legitimate document (§3.1).
-2. `fix(ingestion)`: **persist failures.** Write a row with `status = 'failed'` and the exception
-   text into the existing `ingestions.error` column, and surface path + reason in `add`'s output.
-   Lights up `status`, `diagnostics-export`, and the already-written `failed_ingestions` query
-   in one change (§3.2).
-3. `fix(cli)`: count `degraded` from `processor_skipped` alone; surface partial-family
-   classification, if wanted, under its own name (§3.3).
-4. `fix(cli)`: reconcile the two `degraded` definitions, and either drop or formally deprecate
-   the `skipped_unsupported` alias (§3.4).
+Items 1, 2, 3, and 6 below were fixed in this branch (§0) and are kept here, marked, so the
+tracker shows what shipped and cites the commit rather than needing a separate item removed and
+re-added.
+
+1. ~~`fix(ingestion)`: scope `MAX_PAGES` to the OCR path~~ **Fixed in `d467f72` (§3.1).**
+2. ~~`fix(ingestion)`: persist failures~~ **Fixed in `5a3aa86` (§3.2).**
+3. ~~`fix(cli)`: count `degraded` from `processor_skipped` alone~~ **Fixed in `9124df4` (§3.3, §3.4b).**
+4. `fix(cli)`: **not done** — `rejected_unsupported`/`skipped_unsupported` remain two fields for
+   one value; `skipped_unsupported` is now marked deprecated in a code comment only. Actually
+   removing it, or bumping the JSON schema version to signal the deprecation formally, needs a
+   maintainer call on breaking existing consumers (§3.4a).
 5. `fix(ingestion)`: treat a native text layer below a per-page character threshold as absent, so
-   scanner-watermark PDFs fall through to OCR (§2.3) — still the largest content-quality gap.
-6. `fix(tests)`: rebuild the privacy guardrail on `git ls-files` and on the contributor's **home
-   directory path** rather than the bare account-name token, and make it run on hosted runners
-   instead of self-skipping (§2.4).
+   scanner-watermark PDFs fall through to OCR (§2.3) — still the largest content-quality gap, and
+   still not attempted: choosing a threshold risks re-breaking these 6 PDFs or sending real
+   text-layer PDFs through OCR unnecessarily, which reads as a maintainer design call rather than
+   a bugfix.
+6. ~~`fix(tests)`: rebuild the privacy guardrail on `git ls-files` and the home-directory path~~
+   **Fixed in `3e5054b` (§2.4).**
 7. `feat(search)`: apply a per-source slot cap to `find`/`search` (§2.5).
 8. `chore(cli)`: settle on one JSON convention — either give every command a `--json` flag or
    document which ones emit JSON unconditionally — and wrap the array-shaped payloads in an
@@ -456,8 +598,25 @@ Single machine, single pass, thermal state uncontrolled. Not a benchmark.
 9. `chore(ci)`: the CodeQL workflow has been failing at startup since 2026-07-30 for a reason
    already diagnosed as a repository-settings issue, not a code issue. Out of scope for this
    report; noted so it is not rediscovered.
+10. `fix(cli)`: **new.** `processor_skipped` still conflates four distinct meanings (OCR skipped
+    as unnecessary, OCR skipped by user choice, a duplicate's reused derived data, and genuine
+    incomplete coverage), so a fully-searchable native-text PDF and every duplicate are still
+    counted `degraded` after item 3's fix. The per-step manifest already carries a `reason`
+    string; promoting it to a first-class, structured signal (rather than free text) would let
+    `degraded` mean only the last of those four. Pinned as current behavior by
+    `test_add_still_flags_a_native_text_pdf_as_degraded` and
+    `test_add_still_flags_a_duplicate_as_degraded` (§3.3).
+11. `fix(tests)`: **new.** The rewritten privacy guardrail (item 6) only detects a leaked full
+    home-directory path; it cannot detect a bare account-name value used as a plain default with
+    no path context — the actual shape of the original `a31bd0f`/#78 leak
+    (`tools/run-ocr-engine-comparison.sh`). A token-based rule strict enough to catch that
+    reintroduces the exact word-collision unpassability this fix removed; closing this gap needs
+    a context-aware rule (e.g. only inside path-like or assignment-like text), which is more
+    machinery than this PR attempted (§2.4).
 
 ## 7. Reproduction
+
+**Original findings, at `3e0703d`** (before any fix in this branch):
 
 ```sh
 git checkout 3e0703d
@@ -471,3 +630,18 @@ archiv rebuild-search-index                        # compare index_sha256 with a
 
 For §3.1, any PDF with more than 250 pages reproduces the rejection; for §3.3, any folder of
 fully-extractable native PDFs reproduces the mislabelling.
+
+**Fixes, on `field-notes/2026-08-28-corpus-run`** (5 commits past `3e0703d`; §0):
+
+```sh
+git checkout field-notes/2026-08-28-corpus-run
+uv pip install -e '.[dev]'                             # dependencies unchanged, reinstall picks up the code
+archiv doctor && ruff format --check . && ruff check . && pyright && pytest   # 298 passed, 0 failed
+export ARCHIV_HOME=~/archiv-home-fixed                 # fresh home; do not reuse the one above
+/usr/bin/time -v archiv add /path/to/corpus --json --summary-out summary.json > add.json
+archiv status --json                                   # now agrees with add.json's failed/degraded
+```
+
+To see the UI fix directly: run `archiv ui` against the fixed home (needs a display; `DISPLAY`
+under X11 or a Wayland session), open "Needs attention", and it lists the real rejected files
+with their errors instead of "Nothing needs attention".

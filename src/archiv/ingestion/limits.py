@@ -11,7 +11,11 @@ MAX_ARCHIVE_ENTRIES = 4_096
 MAX_ARCHIVE_MEMBER_BYTES = 32 * 1024 * 1024
 MAX_EXPANDED_BYTES = 128 * 1024 * 1024
 MAX_EXPANSION_RATIO = 200
+# Rendering every page is the expensive, attackable operation, so OCR keeps the tight
+# bound (visual_ocr.MAX_PDF_PAGES). Native text extraction renders nothing: its cost is
+# linear in a file already capped at MAX_INPUT_BYTES, so it only needs a runaway guard.
 MAX_PAGES = 250
+MAX_NATIVE_PAGES = 10_000
 MAX_IMAGE_PIXELS = 80_000_000
 MAX_RECURSION_DEPTH = 8
 MAX_SUBPROCESSES = 1
@@ -22,6 +26,15 @@ MAX_TIMEOUT_SECONDS = 60
 
 class LimitExceededError(ValueError):
     """A named ingestion safety boundary was exceeded."""
+
+
+class NativeResourceLimitError(LimitExceededError):
+    """A resource bound was reached on an otherwise well-formed input.
+
+    Distinct from LimitExceededError's other raisers (hostile archive structure,
+    oversized inputs) so callers can tell "this document is too big" apart from
+    "this document is dangerous" without inspecting the error message.
+    """
 
 
 def _fail(name: str, actual: int, maximum: int) -> None:
@@ -89,6 +102,13 @@ def check_zip(path: Path) -> None:
 def check_pages(count: int) -> None:
     if count > MAX_PAGES:
         _fail("pages", count, MAX_PAGES)
+
+
+def check_native_pages(count: int) -> None:
+    """Bound page-structure work that extracts text without rendering anything."""
+
+    if count > MAX_NATIVE_PAGES:
+        raise NativeResourceLimitError(f"native pages limit exceeded: {count} > {MAX_NATIVE_PAGES}")
 
 
 def check_image(width: int, height: int) -> None:

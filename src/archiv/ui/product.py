@@ -129,13 +129,26 @@ def list_documents(home: Path, *, failures: bool = False) -> tuple[DocumentRow, 
     database = ArchivLayout.resolve(home).database
     if not database.is_file():
         return ()
-    where = "WHERE i.status = 'failed'" if failures else "WHERE i.status = 'succeeded'"
+    if not failures:
+        query = """SELECT source_name, source_path, status, imported_at, error
+                    FROM ingestions WHERE status = 'succeeded' ORDER BY imported_at DESC"""
+    else:
+        # Two distinct failure populations: a rare post-storage failure keeps its
+        # ingestions row (status='failed'); a file rejected before storage -- the
+        # common case -- has no ingestions row at all and lives only in
+        # ingestion_failures (see ingestion/service.py::_record_ingestion_failure).
+        # Both belong in this view, so union them.
+        query = """
+            SELECT source_name, source_path, status, imported_at, error
+                FROM ingestions WHERE status = 'failed'
+            UNION ALL
+            SELECT source_name, source_path, 'failed', attempted_at, error
+                FROM ingestion_failures
+            ORDER BY imported_at DESC
+        """
     try:
         with sqlite3.connect(f"file:{database}?mode=ro", uri=True) as connection:
-            rows = connection.execute(
-                f"""SELECT i.source_name, i.source_path, i.status, i.imported_at, i.error
-                    FROM ingestions i {where} ORDER BY i.imported_at DESC"""  # noqa: S608
-            ).fetchall()
+            rows = connection.execute(query).fetchall()  # noqa: S608
     except sqlite3.Error:
         return ()
     return tuple(DocumentRow(*row) for row in rows)

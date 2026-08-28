@@ -163,6 +163,12 @@ def diagnostics_report(home: Path | None = None) -> dict[str, object]:
                 ingestion.update(
                     str(row[0]) for row in connection.execute("SELECT status FROM ingestions")
                 )
+                # Rejected-before-storage attempts never reach the ingestions table (see
+                # ingestion/service.py::_record_ingestion_failure); count them as "failed"
+                # here so this report and archiv status agree on the same total.
+                ingestion.update(
+                    "failed" for _ in connection.execute("SELECT 1 FROM ingestion_failures")
+                )
                 processing.update(
                     str(row[0]) for row in connection.execute("SELECT status FROM processing_runs")
                 )
@@ -177,6 +183,10 @@ def diagnostics_report(home: Path | None = None) -> dict[str, object]:
                     for row in connection.execute(
                         "SELECT error FROM processing_runs WHERE error IS NOT NULL"
                     )
+                )
+                errors.update(
+                    _category(row[0])
+                    for row in connection.execute("SELECT error FROM ingestion_failures")
                 )
         except sqlite3.Error:
             database_status = "unreadable"

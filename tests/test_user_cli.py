@@ -141,3 +141,110 @@ def test_report_fails_closed_without_model_or_deterministic_flag(tmp_path: Path)
     )
     assert res.exit_code != 0
     assert "hidden fallback is forbidden" in res.output
+
+
+def test_add_persists_failures_so_status_and_diagnostics_can_see_them(tmp_path: Path) -> None:
+    """A file that fails ingestion must not vanish from every downstream diagnostic."""
+
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    vault.joinpath("good.txt").write_text("a readable fixture", encoding="utf-8")
+    vault.joinpath("broken.docx").write_bytes(b"not a real docx package")
+
+    home = tmp_path / "home"
+    added = runner.invoke(app, ["add", str(vault), "--home", str(home), "--json"])
+    assert added.exit_code == 0, added.output
+    add_payload = json.loads(added.output)
+    assert add_payload["failed"] == 1
+
+    status = runner.invoke(app, ["status", "--home", str(home), "--json"])
+    assert status.exit_code == 0, status.output
+    status_payload = json.loads(status.output)
+    assert status_payload["ingestions"]["failed"] == 1
+    assert status_payload["ingestion_summary"]["failed"] == 1
+
+    from archiv.ui.product import list_documents
+
+    failures = list_documents(home, failures=True)
+    assert len(failures) == 1
+    assert failures[0].name == "broken.docx"
+    assert failures[0].error
+
+
+def test_add_does_not_flag_a_fully_extracted_file_as_degraded(tmp_path: Path) -> None:
+    """A "partial-support" format family is still FULL for any one file that fully extracted.
+
+    office-spreadsheet is classified "partial" at the family level (some sheet features
+    are unsupported), but this particular file has nothing skipped -- flagging it
+    "Partially searchable" would be a false statement about this document.
+    """
+
+    from format_matrix_support import build_xlsx
+
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    vault.joinpath("clean.xlsx").write_bytes(build_xlsx())
+
+    home = tmp_path / "home"
+    added = runner.invoke(app, ["add", str(vault), "--home", str(home), "--json"])
+    assert added.exit_code == 0, added.output
+    payload = json.loads(added.output)
+    assert payload["ingestion_summary"]["degraded"] == 0
+
+
+def test_status_does_not_flag_a_fully_extracted_file_as_degraded(tmp_path: Path) -> None:
+    """`status` must agree with `add`: family-level "partial" support is not per-file outcome."""
+
+    from format_matrix_support import build_xlsx
+
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    vault.joinpath("clean.xlsx").write_bytes(build_xlsx())
+
+    home = tmp_path / "home"
+    runner.invoke(app, ["add", str(vault), "--home", str(home), "--json"])
+
+    status = runner.invoke(app, ["status", "--home", str(home), "--json"])
+    assert status.exit_code == 0, status.output
+    assert json.loads(status.output)["ingestions"]["degraded"] == 0
+
+
+def test_add_still_flags_a_native_text_pdf_as_degraded(tmp_path: Path) -> None:
+    """Pins a known remaining gap: OCR is correctly skipped as unneeded, but the
+    per-ingestion "skipped" signal does not yet distinguish that from a real gap in
+    coverage, so a fully-searchable native-text PDF is still counted "degraded".
+    Not fixed here -- see the tracker item on what "skipped" conflates.
+    """
+
+    from format_matrix_support import build_pdf
+
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    vault.joinpath("clean.pdf").write_bytes(build_pdf())
+
+    home = tmp_path / "home"
+    added = runner.invoke(app, ["add", str(vault), "--home", str(home), "--json"])
+    assert added.exit_code == 0, added.output
+    assert json.loads(added.output)["ingestion_summary"]["degraded"] == 1
+
+
+def test_add_still_flags_a_duplicate_as_degraded(tmp_path: Path) -> None:
+    """Pins the same known gap for reuse: a duplicate's derived data is reused rather
+    than recomputed (archiv.derive status="skipped" in reuse_derived), which is a
+    reuse-efficiency skip, not lost content -- also not distinguished yet.
+    """
+
+    from format_matrix_support import build_xlsx
+
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    payload = build_xlsx()
+    vault.joinpath("first.xlsx").write_bytes(payload)
+    vault.joinpath("second.xlsx").write_bytes(payload)
+
+    home = tmp_path / "home"
+    added = runner.invoke(app, ["add", str(vault), "--home", str(home), "--json"])
+    assert added.exit_code == 0, added.output
+    payload_json = json.loads(added.output)
+    assert payload_json["duplicates"] == 1
+    assert payload_json["ingestion_summary"]["degraded"] == 1
