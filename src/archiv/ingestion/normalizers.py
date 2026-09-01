@@ -14,7 +14,7 @@ from archiv.ingestion.formats import (
 from archiv.ingestion.limits import NativeResourceLimitError, check_input
 from archiv.ingestion.normalize_documents import normalize_docx, normalize_pdf, normalize_text
 from archiv.ingestion.normalize_inpage import normalize_inpage
-from archiv.ingestion.normalize_legacy_office import normalize_xls
+from archiv.ingestion.normalize_legacy_office import normalize_doc, normalize_ppt, normalize_xls
 from archiv.ingestion.normalize_media import normalize_image, normalize_wav
 from archiv.ingestion.normalize_odb import normalize_odb
 from archiv.ingestion.normalize_odf import ODF_MIMETYPES, normalize_odf
@@ -45,12 +45,16 @@ def normalize(
             )
         if kind == "pdf":
             return normalize_pdf(path, digest, source_name=logical_name, media_type=media_type)
+        if kind == "doc":
+            return normalize_doc(path, digest, source_name=logical_name, media_type=media_type)
         if kind == "docx":
             return normalize_docx(path, digest, source_name=logical_name, media_type=media_type)
         if kind == "xls":
             return normalize_xls(path, digest, source_name=logical_name, media_type=media_type)
         if kind == "xlsx":
             return normalize_xlsx(path, digest, source_name=logical_name, media_type=media_type)
+        if kind == "ppt":
+            return normalize_ppt(path, digest, source_name=logical_name, media_type=media_type)
         if kind == "pptx":
             return normalize_pptx(path, digest, source_name=logical_name, media_type=media_type)
         if kind == "inp":
