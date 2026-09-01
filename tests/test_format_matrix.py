@@ -27,6 +27,7 @@ from format_matrix_support import (
     build_png,
     build_ppt,
     build_pptx,
+    build_rtf,
     build_text,
     build_wav,
     build_xls,
@@ -84,6 +85,8 @@ def _write_fixture(directory: Path, suffix: str) -> Path:
         path.write_bytes(build_pdf())
     elif bare == "doc":
         path.write_bytes(build_doc())
+    elif bare == "rtf":
+        path.write_bytes(build_rtf())
     elif bare == "docx":
         path.write_bytes(build_docx())
     elif bare == "xls":
@@ -156,6 +159,7 @@ def _ingest(tmp_path: Path, suffix: str) -> tuple[IngestionResult, list[dict[str
         ".md",
         ".pdf",
         ".doc",
+        ".rtf",
         ".docx",
         ".xls",
         ".xlsx",

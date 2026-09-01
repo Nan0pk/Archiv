@@ -125,6 +125,37 @@
     },
     {
       "schema_version": "1",
+      "family": "legacy-rtf",
+      "suffixes": [
+        ".rtf"
+      ],
+      "media_types": [
+        "application/rtf"
+      ],
+      "detection": "suffix plus the {\\rtf1 control-word magic; missing or malformed control structure fails closed",
+      "immutable_ingestion": true,
+      "text_extraction": "native",
+      "structure": [
+        "paragraphs"
+      ],
+      "locator_shapes": [
+        [
+          "paragraph"
+        ]
+      ],
+      "grounding": true,
+      "preview_render": "no rendering; search and citations address extracted text segments",
+      "macros": "this is a bounded plain-text control-word walk; embedded \\pict and \\object/\\objdata payloads are skipped as opaque data and never decoded or activated",
+      "encryption": "RTF has no native encryption concept; nothing is decrypted or password-handled",
+      "known_limits": [
+        "font/colour/style tables, document info, headers/footers, footnotes, field codes, and index/TOC entries are treated as non-body and dropped",
+        "character formatting, tables, and embedded objects are not reconstructed",
+        "a \\uN Unicode escape's replacement run is only correctly skipped when it is a plain character or \\'hh escape, not a nested control word"
+      ],
+      "support_level": "partial"
+    },
+    {
+      "schema_version": "1",
       "family": "office-spreadsheet",
       "suffixes": [
         ".xlsx"
@@ -611,12 +642,6 @@
   "rejected_examples": [
     {
       "schema_version": "1",
-      "suffix": ".rtf",
-      "example": "rich text format",
-      "reason": "not a supported suffix; rejected before any parsing is attempted"
-    },
-    {
-      "schema_version": "1",
       "suffix": ".docm",
       "example": "macro-enabled Word document",
       "reason": "not a supported suffix; rejected before any parsing is attempted"
@@ -648,8 +673,8 @@
       {
         "rank": 2,
         "format_or_limitation": "Legacy .rtf evidence ingestion",
-        "decision": "measure",
-        "reason": "The real-world corpus contained rejected .rtf files; acquire lawful content-bearing fixtures and measure user-question impact before selecting a sandboxed converter or parser."
+        "decision": "implement",
+        "reason": "The real-world corpus contained rejected .rtf files. A bounded control-word plain-text parser (no sandboxed converter) is implemented and verified against lawful synthetic fixtures; real-world-corpus user-question impact has not yet been separately measured."
       },
       {
         "rank": 3,
