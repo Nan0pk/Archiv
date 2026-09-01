@@ -73,6 +73,14 @@ def build_docx() -> bytes:
     return raw.getvalue()
 
 
+def build_rtf() -> bytes:
+    return (
+        r"{\rtf1\ansi\ansicpg1252\deff0"
+        r"{\fonttbl{\f0 Calibri;}}"
+        r"\f0 Archiv matrix RTF fixture\par " + MARKER + r"\par}"
+    ).encode("ascii")
+
+
 def build_xlsx() -> bytes:
     workbook = Workbook()
     sheet = workbook.active

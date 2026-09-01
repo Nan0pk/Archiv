@@ -143,11 +143,10 @@ The public field trial and real-world corpus notes rank gaps instead of treating
 document specification as a parser backlog. The committed machine-readable decision
 is in `docs/format-compatibility.json`:
 
-1. **Legacy `.doc` ingestion — implemented.** A bounded native FIB/Clx parser (no
-   sandboxed converter) ships and is verified against lawful synthetic fixtures;
-   real-world-corpus user-question impact has not yet been separately measured.
-   **Legacy `.rtf` ingestion — measure.** It occurred in the real-world corpus;
-   acquire lawful content-bearing fixtures and quantify question impact first.
+1. **Legacy `.doc` and `.rtf` ingestion — implemented.** A bounded native FIB/Clx
+   parser and a bounded control-word plain-text parser (no sandboxed converter)
+   ship and are verified against lawful synthetic fixtures; real-world-corpus
+   user-question impact has not yet been separately measured for either.
 2. **Spreadsheet cross-cell retrieval — measure.** Field notes confirmed literal
    phrase misses across cell boundaries; benchmark row-aware retrieval before changing
    normalized output or citation locators.
@@ -158,7 +157,7 @@ is in `docs/format-compatibility.json`:
 5. **WAV transcription and ODB record extraction — defer** pending measured bounded
    local processors, native locators, and acceptance thresholds.
 6. **Macro-enabled `.docm` — defer** without measured demand and proof that macros stay
-   inert; `.docm` and `.rtf` remain explicit fail-closed rejections today (`.doc`, `.xls`,
+   inert; `.docm` remains an explicit fail-closed rejection today (`.doc`, `.rtf`, `.xls`,
    and `.ppt` are now implemented, per items above and the compatibility matrix).
 7. **Collections, synchronization, and broad connectors — defer.** These are product
    workflows, not parsers, and did not outrank local ingestion/retrieval defects.

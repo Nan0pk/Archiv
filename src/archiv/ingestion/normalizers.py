@@ -19,6 +19,7 @@ from archiv.ingestion.normalize_media import normalize_image, normalize_wav
 from archiv.ingestion.normalize_odb import normalize_odb
 from archiv.ingestion.normalize_odf import ODF_MIMETYPES, normalize_odf
 from archiv.ingestion.normalize_office import normalize_pptx, normalize_xlsx
+from archiv.ingestion.normalize_rtf import normalize_rtf
 
 
 def normalize(
@@ -47,6 +48,8 @@ def normalize(
             return normalize_pdf(path, digest, source_name=logical_name, media_type=media_type)
         if kind == "doc":
             return normalize_doc(path, digest, source_name=logical_name, media_type=media_type)
+        if kind == "rtf":
+            return normalize_rtf(path, digest, source_name=logical_name, media_type=media_type)
         if kind == "docx":
             return normalize_docx(path, digest, source_name=logical_name, media_type=media_type)
         if kind == "xls":
