@@ -27,6 +27,7 @@ from format_matrix_support import (
     build_pptx,
     build_text,
     build_wav,
+    build_xls,
     build_xlsx,
 )
 
@@ -81,6 +82,8 @@ def _write_fixture(directory: Path, suffix: str) -> Path:
         path.write_bytes(build_pdf())
     elif bare == "docx":
         path.write_bytes(build_docx())
+    elif bare == "xls":
+        path.write_bytes(build_xls())
     elif bare == "xlsx":
         path.write_bytes(build_xlsx())
     elif bare == "pptx":
@@ -147,6 +150,7 @@ def _ingest(tmp_path: Path, suffix: str) -> tuple[IngestionResult, list[dict[str
         ".md",
         ".pdf",
         ".docx",
+        ".xls",
         ".xlsx",
         ".pptx",
         ".odt",

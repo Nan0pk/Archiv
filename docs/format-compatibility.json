@@ -130,6 +130,39 @@
     },
     {
       "schema_version": "1",
+      "family": "legacy-office-spreadsheet",
+      "suffixes": [
+        ".xls"
+      ],
+      "media_types": [
+        "application/vnd.ms-excel"
+      ],
+      "detection": "suffix plus BIFF8 structure validation via xlrd; malformed workbooks fail closed",
+      "immutable_ingestion": true,
+      "text_extraction": "native",
+      "structure": [
+        "sheets",
+        "cells"
+      ],
+      "locator_shapes": [
+        [
+          "cell",
+          "sheet"
+        ]
+      ],
+      "grounding": true,
+      "preview_render": "no rendering; search and citations address extracted cell text",
+      "macros": "xlrd parses the BIFF record stream directly and never opens a VBA project storage; macros are never executed",
+      "encryption": "RC4/XOR-obfuscated workbooks fail closed during normalization (xlrd rejects the FILEPASS record); no password handling is attempted",
+      "known_limits": [
+        "formula source text is not decompiled from BIFF tokens; only the last calculated (cached) value is extracted",
+        "formatting, charts, and pivot state are not reconstructed",
+        "retrieval indexes each normalized cell independently; phrases split across cells may not match as one literal phrase"
+      ],
+      "support_level": "partial"
+    },
+    {
+      "schema_version": "1",
       "family": "office-presentation",
       "suffixes": [
         ".pptx"
