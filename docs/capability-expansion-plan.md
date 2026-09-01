@@ -86,13 +86,13 @@ Replace it with a registry of declared extractors:
 @dataclass(frozen=True)
 class Extractor:
     name: str
-    version: str                  # bumped => derived data is stale => rebuild
+    version: str  # bumped => derived data is stale => rebuild
     suffixes: frozenset[str]
     media_types: frozenset[str]
-    magic: tuple[bytes, ...]      # content signatures, checked before suffix
-    kind: str                     # normalized document kind
+    magic: tuple[bytes, ...]  # content signatures, checked before suffix
+    kind: str  # normalized document kind
     normalize: Callable[..., NormalizedDocument]
-    cost: Literal["fast", "deep"] # which tier (see 1b)
+    cost: Literal["fast", "deep"]  # which tier (see 1b)
 ```
 
 Detection becomes: **signature first, suffix second, disagreement is an explicit,
