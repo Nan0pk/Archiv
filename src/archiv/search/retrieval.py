@@ -3,19 +3,25 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
+import sqlite3
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Final
+from typing import Final, cast
 
 from archiv.contracts import (
+    Citation,
     EvidenceRetrieval,
     RetrievalDiagnostics,
     RetrievalQueryVariant,
     RetrievalSelection,
     SearchResult,
 )
-from archiv.search.service import search_documents
+from archiv.search.index import search_index_path
+from archiv.search.schema import connect_index
+from archiv.search.service import search_documents, validate_citation
+from archiv.storage.layout import ArchivLayout
 
 _TOKEN_RE: Final[re.Pattern[str]] = re.compile(
     r"[^\W_]+(?:['’.-][^\W_]+)*|\d+(?:[.,:/-]\d+)*",
@@ -245,6 +251,134 @@ def derive_query_variants(objective: str) -> tuple[list[_QuerySpec], list[str], 
     return variants[:24], derived_terms, triggered_concepts
 
 
+_SPREADSHEET_KINDS: Final[frozenset[str]] = frozenset({"xlsx", "xls", "ods", "ots", "fods"})
+_A1_CELL_RE: Final[re.Pattern[str]] = re.compile(r"^([A-Za-z]+)(\d+)$")
+_ROW_AWARE_PHRASE_KIND: Final[str] = "row-aware-phrase"
+_ROW_AWARE_PHRASE_WEIGHT: Final[int] = 70
+
+
+def _column_index_from_letters(letters: str) -> int:
+    index = 0
+    for char in letters.upper():
+        index = index * 26 + (ord(char) - ord("A") + 1)
+    return index
+
+
+def _row_position(locator: dict[str, object], kind: str) -> tuple[str, int, int] | None:
+    """Return (sheet, row_number, column_index) for a spreadsheet cell, else None.
+
+    Handles both locator shapes this project's spreadsheet normalizers emit:
+    xlsx/xls use A1 notation (``{"sheet", "cell"}``); ods/ots/fods use numeric
+    coordinates (``{"sheet", "row", "column"}``, sometimes plus ``"formula"``).
+    """
+
+    if kind not in _SPREADSHEET_KINDS:
+        return None
+    sheet = locator.get("sheet")
+    if not isinstance(sheet, str):
+        return None
+    cell = locator.get("cell")
+    if isinstance(cell, str):
+        match = _A1_CELL_RE.match(cell)
+        if not match:
+            return None
+        return sheet, int(match.group(2)), _column_index_from_letters(match.group(1))
+    row, column = locator.get("row"), locator.get("column")
+    if isinstance(row, int) and isinstance(column, int):
+        return sheet, row, column
+    return None
+
+
+def _document_spreadsheet_segments(
+    object_sha256: str, kind: str, *, home: Path | None
+) -> list[sqlite3.Row]:
+    layout = ArchivLayout.resolve(home)
+    path = search_index_path(layout)
+    with connect_index(path) as connection:
+        return connection.execute(
+            "SELECT * FROM segments WHERE object_sha256 = ? AND kind = ?",
+            (object_sha256, kind),
+        ).fetchall()
+
+
+def _row_aware_phrase_matches(
+    phrase: str,
+    *,
+    home: Path | None,
+    limit: int,
+) -> list[SearchResult]:
+    """Find a phrase that spans adjacent spreadsheet cells within one row.
+
+    ``search_documents`` (used by ``archiv find``) indexes each normalized
+    cell independently and is never modified here. This looks only at
+    documents an ordinary single-word search already surfaced, reconstructs
+    each candidate row from the segments already in the index (never from
+    ``NormalizedTable.rows``, whose blank-row skipping breaks any relationship
+    to a segment), and cites the individual cell within a matching row with
+    the strongest word overlap -- never a cell whose own text does not
+    contain what it is cited for.
+    """
+
+    words = [word for word in phrase.casefold().split() if word]
+    if len(words) < 2:
+        return []
+
+    candidate_documents: dict[tuple[str, str], None] = {}
+    for word in words:
+        for result in search_documents(word, home=home, limit=limit):
+            citation = result.citation
+            if _row_position(citation.locator, citation.kind) is not None:
+                candidate_documents.setdefault((citation.object_sha256, citation.kind), None)
+
+    matches: list[SearchResult] = []
+    seen_segment_ids: set[str] = set()
+    for object_sha256, kind in candidate_documents:
+        rows: dict[tuple[str, int], list[tuple[int, sqlite3.Row]]] = {}
+        for row in _document_spreadsheet_segments(object_sha256, kind, home=home):
+            locator = cast(dict[str, object], json.loads(str(row["locator_json"])))
+            position = _row_position(locator, kind)
+            if position is None:
+                continue
+            sheet, row_number, column_index = position
+            rows.setdefault((sheet, row_number), []).append((column_index, row))
+
+        for cells in rows.values():
+            if len(cells) < 2:
+                continue
+            cells.sort(key=lambda entry: entry[0])
+            row_text = " ".join(str(cell_row["text"]) for _, cell_row in cells).casefold()
+            if phrase not in row_text:
+                continue
+            _, best_row = max(
+                cells,
+                key=lambda entry: (
+                    sum(1 for word in words if word in str(entry[1]["text"]).casefold()),
+                    -entry[0],
+                ),
+            )
+            if str(best_row["segment_id"]) in seen_segment_ids:
+                continue
+            citation = Citation(
+                segment_id=str(best_row["segment_id"]),
+                segment_index=int(best_row["segment_index"]),
+                object_sha256=str(best_row["object_sha256"]),
+                source_name=str(best_row["source_name"]),
+                media_type=str(best_row["media_type"]),
+                kind=str(best_row["kind"]),
+                locator=cast(dict[str, object], json.loads(str(best_row["locator_json"]))),
+                normalized_path=str(best_row["normalized_path"]),
+                normalized_sha256=str(best_row["normalized_sha256"]),
+                text_sha256=str(best_row["text_sha256"]),
+            )
+            if not validate_citation(citation, home=home).valid:
+                continue
+            seen_segment_ids.add(citation.segment_id)
+            matches.append(SearchResult(text=str(best_row["text"]), rank=0.0, citation=citation))
+            if len(matches) >= limit:
+                return matches
+    return matches
+
+
 def retrieve_evidence(
     objective: str,
     *,
@@ -264,8 +398,27 @@ def retrieve_evidence(
     candidate_segments: set[str] = set()
     recorded_variants: list[RetrievalQueryVariant] = []
 
+    query_results: list[tuple[_QuerySpec, list[SearchResult]]] = []
     for spec in variants:
         results = search_documents(spec.query, home=home, limit=per_query_limit)
+        query_results.append((spec, results))
+        if spec.kind.endswith("-term-phrase") and not results:
+            row_aware_results = _row_aware_phrase_matches(
+                spec.query, home=home, limit=per_query_limit
+            )
+            if row_aware_results:
+                query_results.append(
+                    (
+                        _QuerySpec(
+                            kind=_ROW_AWARE_PHRASE_KIND,
+                            query=spec.query,
+                            weight=_ROW_AWARE_PHRASE_WEIGHT,
+                        ),
+                        row_aware_results,
+                    )
+                )
+
+    for spec, results in query_results:
         recorded_variants.append(
             RetrievalQueryVariant(
                 kind=spec.kind,
