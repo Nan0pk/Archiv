@@ -20,6 +20,7 @@ from PIL import Image
 from pptx import Presentation
 from pptx.util import Emu
 from reportlab.pdfgen.canvas import Canvas
+from xlwt import Workbook as LegacyWorkbook
 
 MARKER = "ARCHIV-MATRIX-MARKER"
 
@@ -79,6 +80,16 @@ def build_xlsx() -> bytes:
     sheet.title = "Evidence"
     sheet["A1"] = "Archiv matrix XLSX fixture"
     sheet["B2"] = MARKER
+    raw = BytesIO()
+    workbook.save(raw)
+    return raw.getvalue()
+
+
+def build_xls() -> bytes:
+    workbook = LegacyWorkbook(encoding="utf-8")
+    sheet = workbook.add_sheet("Evidence")
+    sheet.write(0, 0, "Archiv matrix XLS fixture")
+    sheet.write(1, 1, MARKER)
     raw = BytesIO()
     workbook.save(raw)
     return raw.getvalue()
