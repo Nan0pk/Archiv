@@ -143,7 +143,9 @@ def _doc_streams(*, text: str, encrypted: bool = False) -> dict[str, bytes]:
     return {"WordDocument": bytes(word_document), "0Table": clx}
 
 
-def _write_doc(path: Path, *, text: str = f"Archiv DOC ingestion fixture {LEGACY_MARKER}\r") -> None:
+def _write_doc(
+    path: Path, *, text: str = f"Archiv DOC ingestion fixture {LEGACY_MARKER}\r"
+) -> None:
     path.write_bytes(_cfb_container(_doc_streams(text=text)))
 
 
