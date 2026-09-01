@@ -88,7 +88,7 @@ def test_field_trial_decision_accounts_for_confirmed_major_gaps() -> None:
     decision = load_format_matrix(matrix_path()).field_trial_decision
     ranked = " ".join(item.format_or_limitation for item in decision.ranked_next_work)
 
-    assert [item.rank for item in decision.ranked_next_work] == list(range(1, 8))
+    assert [item.rank for item in decision.ranked_next_work] == [1, 2, 3, 4, 5, 6, 7, 8]
     for expected in (".doc", ".rtf", "Spreadsheet", "InPage", "Urdu", "WAV", "ODB", ".docm"):
         assert expected in ranked
     assert "Collections" in ranked

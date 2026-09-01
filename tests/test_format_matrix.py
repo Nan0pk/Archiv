@@ -15,6 +15,7 @@ import pytest
 from format_matrix_support import (
     MARKER,
     build_blank_pdf,
+    build_doc,
     build_docx,
     build_inpage300,
     build_jpeg,
@@ -24,6 +25,7 @@ from format_matrix_support import (
     build_odf_package,
     build_pdf,
     build_png,
+    build_ppt,
     build_pptx,
     build_text,
     build_wav,
@@ -79,10 +81,14 @@ def _write_fixture(directory: Path, suffix: str) -> Path:
         path.write_bytes(build_text())
     elif bare == "pdf":
         path.write_bytes(build_pdf())
+    elif bare == "doc":
+        path.write_bytes(build_doc())
     elif bare == "docx":
         path.write_bytes(build_docx())
     elif bare == "xlsx":
         path.write_bytes(build_xlsx())
+    elif bare == "ppt":
+        path.write_bytes(build_ppt())
     elif bare == "pptx":
         path.write_bytes(build_pptx())
     elif bare == "png":
@@ -146,8 +152,10 @@ def _ingest(tmp_path: Path, suffix: str) -> tuple[IngestionResult, list[dict[str
         ".txt",
         ".md",
         ".pdf",
+        ".doc",
         ".docx",
         ".xlsx",
+        ".ppt",
         ".pptx",
         ".odt",
         ".ott",

@@ -72,7 +72,7 @@ def test_add_exports_counts_without_source_identifiers(tmp_path: Path) -> None:
 
 
 def test_add_exports_rejections_even_when_nothing_is_ingested(tmp_path: Path) -> None:
-    source = tmp_path / "private.doc"
+    source = tmp_path / "private.rtf"
     source.write_bytes(b"generated unsupported fixture")
     summary = tmp_path / "summary.json"
 
@@ -80,7 +80,7 @@ def test_add_exports_rejections_even_when_nothing_is_ingested(tmp_path: Path) ->
 
     assert result.exit_code == 1
     assert validate_summary(summary).counts == IngestionCounts(rejected=1)
-    assert "private.doc" not in summary.read_text(encoding="utf-8")
+    assert "private.rtf" not in summary.read_text(encoding="utf-8")
 
 
 def test_add_exports_malformed_failures_even_when_nothing_is_ingested(tmp_path: Path) -> None:

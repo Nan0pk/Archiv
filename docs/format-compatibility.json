@@ -95,6 +95,36 @@
     },
     {
       "schema_version": "1",
+      "family": "legacy-office-word",
+      "suffixes": [
+        ".doc"
+      ],
+      "media_types": [
+        "application/msword"
+      ],
+      "detection": "suffix plus FIB (File Information Block) validation of the WordDocument stream; malformed or unsupported FIB versions fail closed",
+      "immutable_ingestion": true,
+      "text_extraction": "native",
+      "structure": [
+        "paragraphs"
+      ],
+      "locator_shapes": [
+        [
+          "paragraph"
+        ]
+      ],
+      "grounding": true,
+      "preview_render": "no rendering; search and citations address extracted text segments",
+      "macros": "only the WordDocument and table (0Table/1Table) streams are ever opened; a VBA project storage is never read",
+      "encryption": "documents with the FIB fEncrypted flag set fail closed during normalization; no password handling is attempted",
+      "known_limits": [
+        "character formatting, styles, fields, comments, tracked changes, and embedded objects are not extracted",
+        "table cell structure is not reconstructed; cell text is emitted as plain paragraph text"
+      ],
+      "support_level": "partial"
+    },
+    {
+      "schema_version": "1",
       "family": "office-spreadsheet",
       "suffixes": [
         ".xlsx"
@@ -158,6 +188,38 @@
         "speaker notes timing and animation semantics are not surfaced"
       ],
       "support_level": "full"
+    },
+    {
+      "schema_version": "1",
+      "family": "legacy-office-presentation",
+      "suffixes": [
+        ".ppt"
+      ],
+      "media_types": [
+        "application/vnd.ms-powerpoint"
+      ],
+      "detection": "suffix plus bounded record-tree validation of the PowerPoint Document stream; malformed or truncated records fail closed",
+      "immutable_ingestion": true,
+      "text_extraction": "native",
+      "structure": [
+        "slides",
+        "shapes"
+      ],
+      "locator_shapes": [
+        [
+          "shape",
+          "slide"
+        ]
+      ],
+      "grounding": true,
+      "preview_render": "no rendering; search and citations address extracted text segments",
+      "macros": "only the PowerPoint Document stream is ever opened; a VBA project storage is never read",
+      "encryption": "a CryptSession10Container record anywhere in the stream fails closed during normalization; no password handling is attempted",
+      "known_limits": [
+        "slide and shape numbers follow record-encounter order, not resolved SlideListWithText persist IDs, so numbering may not exactly match the authoring application's slide order for edited/reordered decks",
+        "speaker notes, animation, and layout/master formatting are not extracted"
+      ],
+      "support_level": "partial"
     },
     {
       "schema_version": "1",
@@ -516,12 +578,6 @@
   "rejected_examples": [
     {
       "schema_version": "1",
-      "suffix": ".doc",
-      "example": "legacy binary Word document",
-      "reason": "not a supported suffix; rejected before any parsing is attempted"
-    },
-    {
-      "schema_version": "1",
       "suffix": ".rtf",
       "example": "rich text format",
       "reason": "not a supported suffix; rejected before any parsing is attempted"
@@ -552,42 +608,48 @@
     "ranked_next_work": [
       {
         "rank": 1,
-        "format_or_limitation": "Legacy .doc and .rtf evidence ingestion",
-        "decision": "measure",
-        "reason": "The real-world corpus contained rejected .doc and .rtf files; acquire lawful content-bearing fixtures and measure user-question impact before selecting a sandboxed converter or parser."
+        "format_or_limitation": "Legacy .doc evidence ingestion",
+        "decision": "implement",
+        "reason": "The real-world corpus contained rejected .doc files. A bounded native FIB/Clx parser (no sandboxed converter) is implemented and verified against lawful synthetic fixtures; real-world-corpus user-question impact has not yet been separately measured."
       },
       {
         "rank": 2,
+        "format_or_limitation": "Legacy .rtf evidence ingestion",
+        "decision": "measure",
+        "reason": "The real-world corpus contained rejected .rtf files; acquire lawful content-bearing fixtures and measure user-question impact before selecting a sandboxed converter or parser."
+      },
+      {
+        "rank": 3,
         "format_or_limitation": "Spreadsheet retrieval across cell boundaries",
         "decision": "measure",
         "reason": "Field notes confirmed cross-cell phrase misses; benchmark row-aware retrieval before changing normalized-output or locator contracts."
       },
       {
-        "rank": 3,
+        "rank": 4,
         "format_or_limitation": "InPage layout, columns, frames, styles, and page geometry",
         "decision": "defer",
         "reason": "Native searchable text is available, but the field trial has no lawful visual-ground-truth corpus for layout fidelity."
       },
       {
-        "rank": 4,
+        "rank": 5,
         "format_or_limitation": "Difficult Urdu typography and layout OCR",
         "decision": "measure",
         "reason": "Conditional OCR exists; select recovery work only after language-specific accuracy and target-machine resource measurements."
       },
       {
-        "rank": 5,
+        "rank": 6,
         "format_or_limitation": "WAV transcription and ODB record extraction",
         "decision": "defer",
         "reason": "Both formats preserve or expose bounded metadata, but neither has a measured local extraction baseline with acceptance thresholds and resource ceilings."
       },
       {
-        "rank": 6,
+        "rank": 7,
         "format_or_limitation": "Macro-enabled .docm ingestion",
         "decision": "defer",
         "reason": "No measured field-trial demand exists; any future implementation must prove macros remain inert and validate the OOXML package without execution."
       },
       {
-        "rank": 7,
+        "rank": 8,
         "format_or_limitation": "Collections, synchronization, and broad connectors",
         "decision": "defer",
         "reason": "These are product workflows rather than parsers, and the field trial did not show that they outrank local ingestion and retrieval defects."

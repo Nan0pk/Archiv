@@ -289,6 +289,97 @@ def build_inpage300(path: Path) -> None:
     path.write_bytes(bytes(header + body))
 
 
+def _cfb_container(streams: dict[str, bytes]) -> bytes:
+    """Build a minimal multi-stream CFB container (root + up to 3 sibling streams)."""
+
+    assert 1 <= len(streams) <= 3
+    padded = {
+        name: (data if len(data) >= 4096 else data + b"\x00" * (4096 - len(data)))
+        for name, data in streams.items()
+    }
+    header = bytearray(512)
+    header[:8] = bytes.fromhex("D0CF11E0A1B11AE1")
+    struct.pack_into("<HHHH", header, 24, 0x003E, 3, 0xFFFE, 9)
+    struct.pack_into("<H", header, 32, 6)
+    struct.pack_into("<I", header, 44, 1)
+    struct.pack_into("<I", header, 48, 0)
+    struct.pack_into("<I", header, 56, 4096)
+    struct.pack_into("<I", header, 60, ENDOFCHAIN)
+    struct.pack_into("<I", header, 68, ENDOFCHAIN)
+    struct.pack_into("<109I", header, 76, 1, *([FREESECT] * 108))
+
+    directory = bytearray(512)
+    directory[:128] = _cfb_entry("Root Entry", object_type=5, child=1)
+    sector = 2
+    body = bytearray()
+    names = list(padded)
+    for index, name in enumerate(names, start=1):
+        data = padded[name]
+        sectors = len(data) // 512
+        right = index + 1 if index < len(names) else FREESECT
+        # Declared size must be >= the mini-stream cutoff (4096) or the CFB reader
+        # expects mini-FAT allocation instead of the regular FAT chain below.
+        directory[index * 128 : (index + 1) * 128] = _cfb_entry(
+            name, object_type=2, right=right, start=sector, size=len(data)
+        )
+        body.extend(data)
+        sector += sectors
+
+    fat_len = ((sector + 127) // 128) * 128
+    fat = [FREESECT] * fat_len
+    fat[0] = ENDOFCHAIN
+    fat[1] = FATSECT
+    cursor = 2
+    for name in names:
+        sectors = len(padded[name]) // 512
+        for offset in range(sectors):
+            fat[cursor + offset] = cursor + offset + 1 if offset < sectors - 1 else ENDOFCHAIN
+        cursor += sectors
+
+    return bytes(header + directory + struct.pack(f"<{fat_len}I", *fat) + body)
+
+
+def build_doc() -> bytes:
+    """A minimal but spec-accurate Word 97 (.doc) fixture: FIB + Clx + one text piece."""
+
+    text = f"Archiv matrix DOC fixture {MARKER}\r"
+    text_bytes = text.encode("utf-16-le")
+
+    word_document = bytearray(1024)
+    struct.pack_into("<H", word_document, 0, 0xA5EC)  # wIdent
+    struct.pack_into("<H", word_document, 2, 0x00C1)  # nFib = Word 97
+    struct.pack_into("<H", word_document, 32, 14)  # csw
+    struct.pack_into("<H", word_document, 62, 22)  # cslw
+    struct.pack_into("<H", word_document, 152, 34)  # cbRgFcLcb
+    text_offset = 512
+    word_document[text_offset : text_offset + len(text_bytes)] = text_bytes
+
+    cp_values = struct.pack("<II", 0, len(text))  # one piece: CP[0]=0, CP[1]=char count
+    pcd = struct.pack("<HIH", 0, text_offset, 0)  # flags, FcCompressed(fCompressed=0), prm
+    plc_pcd = cp_values + pcd
+    clx = bytes([0x02]) + struct.pack("<I", len(plc_pcd)) + plc_pcd
+
+    fc_clx_offset = 154 + 33 * 8
+    struct.pack_into("<II", word_document, fc_clx_offset, 0, len(clx))  # fcClx=0 in "0Table"
+
+    return _cfb_container({"WordDocument": bytes(word_document), "0Table": clx})
+
+
+def build_ppt() -> bytes:
+    """A minimal PowerPoint 97 (.ppt) fixture: one slide with one text run."""
+
+    def record(rec_type: int, payload: bytes, *, container: bool = False) -> bytes:
+        ver_instance = 0x000F if container else 0x0000
+        return struct.pack("<HHI", ver_instance, rec_type, len(payload)) + payload
+
+    text = f"Archiv matrix PPT fixture {MARKER}"
+    text_atom = record(0x0FA0, text.encode("utf-16-le"))
+    slide = record(0x03EE, text_atom, container=True)
+    document = record(0x03E8, slide, container=True)
+
+    return _cfb_container({"PowerPoint Document": document})
+
+
 def build_png() -> bytes:
     image = Image.new("L", (320, 40), 255)
     raw = BytesIO()

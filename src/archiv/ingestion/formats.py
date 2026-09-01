@@ -18,8 +18,10 @@ SUPPORTED_SUFFIXES = {
     ".txt",
     ".md",
     ".pdf",
+    ".doc",
     ".docx",
     ".xlsx",
+    ".ppt",
     ".pptx",
     ".odt",
     ".ott",
@@ -45,8 +47,10 @@ SUPPORTED_SUFFIXES = {
 }
 MEDIA_TYPES = {
     ".md": "text/markdown",
+    ".doc": "application/msword",
     ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".ppt": "application/vnd.ms-powerpoint",
     ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     ".odt": "application/vnd.oasis.opendocument.text",
     ".ott": "application/vnd.oasis.opendocument.text-template",
