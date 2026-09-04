@@ -26,7 +26,7 @@ jobs:
       - run: python -m build
       - run: python -m pip_audit --format cyclonedx-json --output dist/sbom.cdx.json
       - run: cd dist && sha256sum * > SHA256SUMS
-      - uses: actions/attest-build-provenance@96b4a1ef7235a096b17240c259729fdd70c83d45
+      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be
         with:
           subject-path: "dist/*"
       - uses: sigstore/gh-action-sigstore-python@790bc6befb9d733738f18d8f895854b453640ec9
