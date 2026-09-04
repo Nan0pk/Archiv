@@ -14,6 +14,8 @@ from pydantic import BaseModel
 
 from archiv.contracts import (
     IngestionResult,
+    NormalizedDocument,
+    ProcessingEvidence,
     RetrievalDiagnostics,
     RunStatus,
     SearchIndexBuild,
@@ -21,13 +23,17 @@ from archiv.contracts import (
 from archiv.grounding import run_grounded_ask
 from archiv.ingestion import ingest_file
 from archiv.ingestion.formats import SUPPORTED_SUFFIXES, UnsupportedFormatError
+from archiv.ingestion.ledger import now_iso, record_processing
 from archiv.ingestion.summary import IngestionCounts, write_summary
+from archiv.ingestion.visual_ocr import run_visual_ocr
 from archiv.model_adapter import load_model_config
 from archiv.search import rebuild_search_index, search_documents
 from archiv.search.index import search_index_path
 from archiv.search.schema import connect_index
+from archiv.storage.database import ArchivDatabase
 from archiv.storage.integrity import inspect_home
 from archiv.storage.layout import ArchivLayout
+from archiv.storage.queue import fetch_pending_jobs, get_queue_depth, update_job
 from archiv.task_contracts import TaskRunResult
 from archiv.tasks import run_task, verify_task_run
 
@@ -213,6 +219,15 @@ def _status_payload(home: Path | None) -> dict[str, object]:
     model = load_model_config(layout.root)
     integrity = inspect_home(layout.root)
     errors.extend(integrity["errors"])
+
+    queue_counts = {"pending": 0, "processing": 0, "completed": 0, "failed": 0}
+    if layout.database.is_file():
+        try:
+            database = ArchivDatabase(layout.database)
+            queue_counts = get_queue_depth(database)
+        except Exception:
+            pass
+
     return {
         "schema_version": "1",
         "home": str(layout.root),
@@ -224,6 +239,7 @@ def _status_payload(home: Path | None) -> dict[str, object]:
             "degraded": counts["degraded_objects"],
             "skipped": counts["skipped_objects"],
         },
+        "queue": queue_counts,
         "search_index": {
             "available": index_path.is_file(),
             "documents": index_objects,
@@ -587,6 +603,15 @@ def register_user_commands(app: typer.Typer) -> tuple[Callable[..., None], ...]:
             )
         else:
             typer.echo("Search index: not built")
+        queue = cast(dict[str, int], payload.get("queue", {}))
+        if any(queue.values()):
+            typer.echo(
+                "Queue: "
+                f"{queue.get('pending', 0)} pending, "
+                f"{queue.get('processing', 0)} processing, "
+                f"{queue.get('completed', 0)} completed, "
+                f"{queue.get('failed', 0)} failed"
+            )
         typer.echo(
             f"Reports: {reports.get('succeeded', 0)} succeeded, "
             f"{sum(reports.values()) - reports.get('succeeded', 0)} other"
@@ -601,4 +626,134 @@ def register_user_commands(app: typer.Typer) -> tuple[Callable[..., None], ...]:
         for error in cast(list[str], payload["errors"]):
             typer.echo(f"Warning: {error}", err=True)
 
-    return add_command, find_command, ask_command, report_command, status_command
+    @app.command("process")
+    def process_command(
+        home: Annotated[
+            Path | None,
+            typer.Option("--home", file_okay=False, resolve_path=True),
+        ] = None,
+        limit: Annotated[
+            int | None,
+            typer.Option("--limit", min=1, help="Maximum number of queue jobs to process."),
+        ] = None,
+        processor: Annotated[
+            str | None,
+            typer.Option("--processor", help="Only process jobs for a specific processor name."),
+        ] = None,
+        json_output: Annotated[bool, typer.Option("--json")] = False,
+    ) -> None:
+        """Drain and process pending deep-tier background queue jobs."""
+
+        layout = ArchivLayout.resolve(home)
+        if not layout.database.is_file():
+            if json_output:
+                _emit_json({"status": "succeeded", "processed": 0, "failed": 0, "remaining": 0})
+                return
+            typer.echo("Database not found; no queue jobs to process.")
+            return
+
+        database = ArchivDatabase(layout.database)
+        database.initialize()
+
+        jobs = fetch_pending_jobs(database, limit=limit, processor=processor)
+        processed_count = 0
+        failed_count = 0
+
+        for job in jobs:
+            digest = str(job["object_sha256"])
+            proc = str(job["processor"])
+            update_job(database, digest, proc, state="processing")
+            if proc == "archiv.visual-ocr":
+                original = layout.original_path(digest)
+                root = layout.derived_root(digest)
+                norm_path = root / "normalized" / "document.json"
+                if not original.is_file() or not norm_path.is_file():
+                    update_job(
+                        database,
+                        digest,
+                        proc,
+                        state="failed",
+                        error="missing original or normalized document",
+                    )
+                    failed_count += 1
+                    continue
+                try:
+                    normalized = NormalizedDocument.model_validate_json(
+                        norm_path.read_text(encoding="utf-8")
+                    )
+                    ocr_run = run_visual_ocr(original, normalized, root)
+                    if ocr_run.status == "succeeded":
+                        normalized.segments.extend(ocr_run.segments)
+                        normalized.metadata["visual_ocr"] = ocr_run.summary
+                        norm_path.write_text(
+                            normalized.model_dump_json(indent=2),
+                            encoding="utf-8",
+                        )
+                        update_job(database, digest, proc, state="completed")
+                        record_processing(
+                            database,
+                            digest,
+                            ProcessingEvidence(
+                                processor="archiv.visual-ocr",
+                                processor_version="1",
+                                status="succeeded",
+                                output_kind="ocr-manifest",
+                                output_path=str(root / "ocr" / "status.json"),
+                            ),
+                            started_at=now_iso(),
+                            finished_at=now_iso(),
+                        )
+                        processed_count += 1
+                    elif ocr_run.status == "skipped":
+                        update_job(
+                            database,
+                            digest,
+                            proc,
+                            state="failed",
+                            error="ocr engine unavailable",
+                        )
+                        failed_count += 1
+                    else:
+                        update_job(
+                            database,
+                            digest,
+                            proc,
+                            state="failed",
+                            error=ocr_run.error or "ocr failed",
+                        )
+                        failed_count += 1
+                except Exception as error:
+                    update_job(database, digest, proc, state="failed", error=str(error))
+                    failed_count += 1
+            else:
+                update_job(
+                    database,
+                    digest,
+                    proc,
+                    state="failed",
+                    error=f"unsupported processor: {proc}",
+                )
+                failed_count += 1
+
+        if processed_count > 0:
+            index_path = search_index_path(layout)
+            if index_path.is_file():
+                rebuild_search_index(home=home)
+
+        remaining = get_queue_depth(database).get("pending", 0)
+        payload = {
+            "schema_version": "1",
+            "status": "succeeded",
+            "processed": processed_count,
+            "failed": failed_count,
+            "remaining": remaining,
+        }
+        if json_output:
+            _emit_json(payload)
+            return
+
+        typer.echo(
+            f"Processed: {processed_count} job(s), {failed_count} failed, {remaining} pending"
+        )
+
+    return add_command, find_command, ask_command, report_command, status_command, process_command

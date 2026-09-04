@@ -25,8 +25,20 @@ def record_processing(
 ) -> None:
     """Append one processor outcome to the SQLite ledger."""
 
+    record_processing_batch(database, digest, [(item, started_at, finished_at)])
+
+
+def record_processing_batch(
+    database: ArchivDatabase,
+    digest: str,
+    entries: list[tuple[ProcessingEvidence, str, str]],
+) -> None:
+    """Append multiple processor outcomes to the SQLite ledger in one transaction."""
+
+    if not entries:
+        return
     with database.connect() as connection:
-        connection.execute(
+        connection.executemany(
             """
             INSERT INTO processing_runs (
                 processing_id, object_sha256, processor, processor_version,
@@ -34,20 +46,23 @@ def record_processing(
                 output_sha256, error, started_at, finished_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (
-                uuid4().hex,
-                digest,
-                item.processor,
-                item.processor_version,
-                "{}",
-                item.status,
-                item.output_kind,
-                item.output_path,
-                item.output_sha256,
-                item.error,
-                started_at,
-                finished_at,
-            ),
+            [
+                (
+                    uuid4().hex,
+                    digest,
+                    item.processor,
+                    item.processor_version,
+                    "{}",
+                    item.status,
+                    item.output_kind,
+                    item.output_path,
+                    item.output_sha256,
+                    item.error,
+                    started_at,
+                    finished_at,
+                )
+                for item, started_at, finished_at in entries
+            ],
         )
         connection.commit()
 
