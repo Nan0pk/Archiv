@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import math
 import struct
+import tarfile
 import wave
 from io import BytesIO
 from pathlib import Path
+from typing import Any, cast
 from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile
 
 from docx import Document
@@ -463,3 +465,22 @@ def build_svg() -> bytes:
         f'  <text x="10" y="20">{MARKER}</text>\n'
         f"</svg>\n"
     ).encode()
+
+
+def build_zip() -> bytes:
+    raw = BytesIO()
+    with ZipFile(raw, "w", compression=ZIP_DEFLATED) as archive:
+        archive.writestr("probe.txt", f"Archiv matrix ZIP fixture\n{MARKER}\n")
+    return raw.getvalue()
+
+
+def build_tar(compression: str = "") -> bytes:
+    raw = BytesIO()
+    mode = f"w:{compression}" if compression else "w"
+    with tarfile.open(fileobj=raw, mode=cast(Any, mode)) as archive:
+        data = f"Archiv matrix TAR fixture\n{MARKER}\n".encode()
+        info = tarfile.TarInfo(name="probe.txt")
+        info.size = len(data)
+        info.mtime = 1700000000
+        archive.addfile(info, BytesIO(data))
+    return raw.getvalue()

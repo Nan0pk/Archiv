@@ -6,12 +6,14 @@ reusable extractors and signature-first format detection (issue #37, PR 108).
 
 from __future__ import annotations
 
+import tarfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, Protocol
 
 from archiv.contracts import NormalizedDocument
 from archiv.ingestion.formats import MalformedInputError, UnsupportedFormatError
+from archiv.ingestion.normalize_archive import normalize_archive
 from archiv.ingestion.normalize_documents import normalize_docx, normalize_pdf, normalize_text
 from archiv.ingestion.normalize_inpage import normalize_inpage
 from archiv.ingestion.normalize_legacy_office import normalize_doc, normalize_ppt, normalize_xls
@@ -37,6 +39,9 @@ KNOWN_BINARY_SIGNATURES: tuple[bytes, ...] = (
     b"BM",
     b"II*\x00",
     b"MM\x00*",
+    b"\x1f\x8b",
+    b"BZh",
+    b"\xfd7zXZ\x00",
 )
 
 
@@ -152,6 +157,14 @@ def _norm_svg(
     path: Path, digest: str, *, source_name: str, media_type: str, kind: str
 ) -> NormalizedDocument:
     return normalize_svg(path, digest, source_name=source_name, media_type=media_type)
+
+
+def _norm_archive(
+    path: Path, digest: str, *, source_name: str, media_type: str, kind: str
+) -> NormalizedDocument:
+    return normalize_archive(
+        path, digest, source_name=source_name, media_type=media_type, kind=kind
+    )
 
 
 ALL_EXTRACTORS: tuple[Extractor, ...] = (
@@ -371,6 +384,38 @@ ALL_EXTRACTORS: tuple[Extractor, ...] = (
         normalize=_norm_svg,
         cost="fast",
     ),
+    Extractor(
+        name="archive-zip",
+        version="1",
+        suffixes=frozenset({".zip"}),
+        media_types=frozenset({"application/zip"}),
+        magic=(b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08"),
+        kind="archive",
+        normalize=_norm_archive,
+        cost="fast",
+    ),
+    Extractor(
+        name="archive-tar",
+        version="1",
+        suffixes=frozenset({".tar", ".tar.gz", ".tgz", ".tar.bz2", ".tbz2", ".tar.xz", ".txz"}),
+        media_types=frozenset(
+            {
+                "application/x-tar",
+                "application/gzip",
+                "application/x-bzip2",
+                "application/x-xz",
+            }
+        ),
+        magic=(
+            b"\x1f\x8b",
+            b"BZh",
+            b"\xfd7zXZ\x00",
+            b"ustar",
+        ),
+        kind="archive",
+        normalize=_norm_archive,
+        cost="fast",
+    ),
 )
 
 _EXTRACTOR_BY_SUFFIX: dict[str, Extractor] = {
@@ -403,6 +448,19 @@ def check_content_signature(path: Path, extractor: Extractor, suffix: str) -> No
                 raise MalformedInputError(
                     f"binary file content signature found in text file with suffix '{suffix}'"
                 )
+        return
+
+    if extractor.name == "archive-tar":
+        is_tar = (
+            any(head.startswith(sig) for sig in (b"\x1f\x8b", b"BZh", b"\xfd7zXZ\x00"))
+            or (len(head) >= 262 and head[257:262] == b"ustar")
+            or tarfile.is_tarfile(path)
+        )
+        if not is_tar:
+            raise MalformedInputError(
+                f"file content signature does not match claimed format '{suffix}' "
+                "(not a tar archive)"
+            )
         return
 
     if not any(head.startswith(sig) for sig in extractor.magic):
