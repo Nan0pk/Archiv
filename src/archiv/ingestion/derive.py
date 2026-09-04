@@ -6,13 +6,16 @@ import json
 import shutil
 from pathlib import Path
 
-from archiv.contracts import ProcessingEvidence
+from PIL import Image
+
+from archiv.contracts import NormalizedDocument, ProcessingEvidence
 from archiv.hashing import sha256_file
-from archiv.ingestion.ledger import now_iso, record_processing
+from archiv.ingestion.ledger import now_iso, record_processing, record_processing_batch
 from archiv.ingestion.normalizers import normalize
 from archiv.ingestion.visual_ocr import VisualOcrRun, run_visual_ocr
 from archiv.storage.database import ArchivDatabase
 from archiv.storage.layout import ArchivLayout
+from archiv.storage.queue import enqueue_job
 
 DERIVED_CATEGORIES = (
     "normalized",
@@ -64,20 +67,13 @@ def reuse_derived(
 
 def _append(
     evidence: list[ProcessingEvidence],
-    database: ArchivDatabase,
-    digest: str,
+    pending_records: list[tuple[ProcessingEvidence, str, str]],
     item: ProcessingEvidence,
     *,
     started_at: str,
 ) -> None:
     evidence.append(item)
-    record_processing(
-        database,
-        digest,
-        item,
-        started_at=started_at,
-        finished_at=now_iso(),
-    )
+    pending_records.append((item, started_at, now_iso()))
 
 
 def derive(
@@ -88,6 +84,7 @@ def derive(
     database: ArchivDatabase,
     *,
     replace: bool,
+    normalized: NormalizedDocument | None = None,
 ) -> list[ProcessingEvidence]:
     """Build normalized, extracted, table, and processor-status artifacts."""
 
@@ -98,32 +95,42 @@ def derive(
         (root / category).mkdir(parents=True, exist_ok=True)
 
     started_at = now_iso()
-    try:
-        normalized = normalize(original, digest, source_name=source_name)
-    except Exception as error:
-        item = ProcessingEvidence(
-            processor="archiv.normalizer",
-            processor_version="1",
-            status="failed",
-            output_kind="normalized-document",
-            error=f"{type(error).__name__}: {error}",
-        )
-        record_processing(
-            database,
-            digest,
-            item,
-            started_at=started_at,
-            finished_at=now_iso(),
-        )
-        raise
+    if normalized is None:
+        try:
+            normalized = normalize(original, digest, source_name=source_name)
+        except Exception as error:
+            item = ProcessingEvidence(
+                processor="archiv.normalizer",
+                processor_version="1",
+                status="failed",
+                output_kind="normalized-document",
+                error=f"{type(error).__name__}: {error}",
+            )
+            record_processing(
+                database,
+                digest,
+                item,
+                started_at=started_at,
+                finished_at=now_iso(),
+            )
+            raise
 
     ocr_run: VisualOcrRun | None = None
     if normalized.kind in {"image", "pdf"}:
         ocr_run = run_visual_ocr(original, normalized, root)
         normalized.segments.extend(ocr_run.segments)
         normalized.metadata["visual_ocr"] = ocr_run.summary
+        enqueue_job(
+            database,
+            digest,
+            "archiv.visual-ocr",
+            processor_version="1",
+            state="completed" if ocr_run.status == "succeeded" else "failed",
+        )
 
     evidence: list[ProcessingEvidence] = []
+    pending_records: list[tuple[ProcessingEvidence, str, str]] = []
+
     normalized_path = root / "normalized" / "document.json"
     normalized_item = ProcessingEvidence(
         processor="archiv.normalizer",
@@ -133,7 +140,7 @@ def derive(
         output_path=str(normalized_path),
         output_sha256=_write_json(normalized_path, normalized.model_dump(mode="json")),
     )
-    _append(evidence, database, digest, normalized_item, started_at=started_at)
+    _append(evidence, pending_records, normalized_item, started_at=started_at)
 
     text = "\n".join(segment.text for segment in normalized.segments if segment.text)
     if text:
@@ -141,8 +148,7 @@ def derive(
         text_path.write_text(text + "\n", encoding="utf-8")
         _append(
             evidence,
-            database,
-            digest,
+            pending_records,
             ProcessingEvidence(
                 processor="archiv.text-export",
                 processor_version="1",
@@ -158,8 +164,7 @@ def derive(
         table_path = root / "tables" / "tables.json"
         _append(
             evidence,
-            database,
-            digest,
+            pending_records,
             ProcessingEvidence(
                 processor="archiv.table-export",
                 processor_version="1",
@@ -177,8 +182,7 @@ def derive(
     if ocr_run is not None:
         _append(
             evidence,
-            database,
-            digest,
+            pending_records,
             ProcessingEvidence(
                 processor="archiv.visual-ocr",
                 processor_version="1",
@@ -192,25 +196,29 @@ def derive(
         )
 
     if normalized.kind == "image":
-        _derive_image_preview(evidence, database, digest, root, normalized.metadata, started_at)
+        _derive_image_preview(
+            evidence, pending_records, digest, root, original, normalized.metadata, started_at
+        )
     if normalized.kind == "audio":
-        _derive_audio_status(evidence, database, digest, root, started_at)
+        _derive_audio_status(evidence, pending_records, digest, root, started_at)
+
+    record_processing_batch(database, digest, pending_records)
     return evidence
 
 
 def _derive_image_preview(
     evidence: list[ProcessingEvidence],
-    database: ArchivDatabase,
+    pending_records: list[tuple[ProcessingEvidence, str, str]],
     digest: str,
     root: Path,
+    original: Path,
     metadata: dict[str, object],
     started_at: str,
 ) -> None:
     preview_path = root / "previews" / "metadata.json"
     _append(
         evidence,
-        database,
-        digest,
+        pending_records,
         ProcessingEvidence(
             processor="archiv.image-metadata",
             processor_version="1",
@@ -222,10 +230,46 @@ def _derive_image_preview(
         started_at=started_at,
     )
 
+    thumbnail_path = root / "previews" / "thumbnail.webp"
+    try:
+        with Image.open(original) as img:
+            thumb = img.copy()
+            thumb.thumbnail((256, 256))
+            if thumb.mode not in ("RGB", "RGBA"):
+                thumb = thumb.convert("RGB")
+            thumb.save(thumbnail_path, format="WEBP", quality=80)
+        _append(
+            evidence,
+            pending_records,
+            ProcessingEvidence(
+                processor="archiv.thumbnail",
+                processor_version="1",
+                status="succeeded",
+                output_kind="thumbnail",
+                output_path=str(thumbnail_path),
+                output_sha256=sha256_file(thumbnail_path),
+            ),
+            started_at=started_at,
+        )
+    except Exception as error:
+        _append(
+            evidence,
+            pending_records,
+            ProcessingEvidence(
+                processor="archiv.thumbnail",
+                processor_version="1",
+                status="skipped",
+                output_kind="thumbnail",
+                output_path=str(thumbnail_path),
+                error=f"{type(error).__name__}: {error}",
+            ),
+            started_at=started_at,
+        )
+
 
 def _derive_audio_status(
     evidence: list[ProcessingEvidence],
-    database: ArchivDatabase,
+    pending_records: list[tuple[ProcessingEvidence, str, str]],
     digest: str,
     root: Path,
     started_at: str,
@@ -233,8 +277,7 @@ def _derive_audio_status(
     transcript_path = root / "transcripts" / "status.json"
     _append(
         evidence,
-        database,
-        digest,
+        pending_records,
         ProcessingEvidence(
             processor="archiv.transcription",
             processor_version="1",

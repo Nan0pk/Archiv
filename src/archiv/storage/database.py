@@ -9,7 +9,7 @@ from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from pathlib import Path
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 MIN_SUPPORTED_SCHEMA_VERSION = 0
 
 SCHEMA = """
@@ -38,6 +38,18 @@ CREATE TABLE IF NOT EXISTS ingestion_failures (
     object_sha256 TEXT, error TEXT NOT NULL, attempted_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ingestion_failures_time_idx ON ingestion_failures(attempted_at);
+CREATE TABLE IF NOT EXISTS processing_queue (
+    object_sha256 TEXT NOT NULL REFERENCES objects(sha256),
+    processor TEXT NOT NULL,
+    processor_version TEXT NOT NULL,
+    state TEXT NOT NULL CHECK(state IN ('pending', 'processing', 'completed', 'failed')),
+    attempts INTEGER NOT NULL DEFAULT 0,
+    error TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (object_sha256, processor)
+);
+CREATE INDEX IF NOT EXISTS processing_queue_state_idx ON processing_queue(state, processor);
 """
 
 
@@ -73,9 +85,34 @@ def _migration_1_to_2(connection: sqlite3.Connection) -> None:
     )
 
 
+def _migration_2_to_3(connection: sqlite3.Connection) -> None:
+    """Add a durable queue for deferred deep-tier processors (PR 108 Milestone 1)."""
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS processing_queue (
+            object_sha256 TEXT NOT NULL REFERENCES objects(sha256),
+            processor TEXT NOT NULL,
+            processor_version TEXT NOT NULL,
+            state TEXT NOT NULL CHECK(state IN ('pending', 'processing', 'completed', 'failed')),
+            attempts INTEGER NOT NULL DEFAULT 0,
+            error TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (object_sha256, processor)
+        )
+        """
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS processing_queue_state_idx "
+        "ON processing_queue(state, processor)"
+    )
+
+
 MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     0: _migration_0_to_1,
     1: _migration_1_to_2,
+    2: _migration_2_to_3,
 }
 
 

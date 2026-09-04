@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import os
-import shutil
 from pathlib import Path
 from uuid import uuid4
 
 from archiv.contracts import IngestionResult, IngestionStatus, ProcessingEvidence
-from archiv.hashing import sha256_file
+from archiv.hashing import copy_and_hash, sha256_file
 from archiv.ingestion.derive import derive, reuse_derived
 from archiv.ingestion.ledger import canonical_source_name, now_iso
 from archiv.ingestion.limits import check_input
@@ -25,8 +24,8 @@ def _store_original(source: Path, target: Path, digest: str) -> bool:
 
     target.parent.mkdir(parents=True, exist_ok=True)
     temporary = target.with_name(f".{target.name}.{uuid4().hex}.tmp")
-    shutil.copyfile(source, temporary)
-    if sha256_file(temporary) != digest:
+    copied_digest = copy_and_hash(source, temporary)
+    if copied_digest != digest:
         temporary.unlink(missing_ok=True)
         raise RuntimeError("copied original digest mismatch")
     os.chmod(temporary, 0o444)
@@ -160,7 +159,7 @@ def ingest_file(
         source_name = source.name
         media_type = media_type_for(source_name)
         source_extension = suffix_for(source_name)
-        normalize(source, digest, source_name=source_name)
+        normalized = normalize(source, digest, source_name=source_name)
     except Exception as error:
         if home_already_exists:
             layout.ensure()
@@ -200,6 +199,7 @@ def ingest_file(
                 layout,
                 database,
                 replace=True,
+                normalized=normalized,
             )
         )
         if sha256_file(source) != digest:
