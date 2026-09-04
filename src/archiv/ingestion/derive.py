@@ -206,6 +206,10 @@ def derive(
         )
     if normalized.kind == "audio":
         _derive_audio_status(evidence, pending_records, digest, root, started_at)
+    if normalized.kind == "archive":
+        _derive_archive_status(
+            evidence, pending_records, database, digest, root, normalized.metadata, started_at
+        )
 
     record_processing_batch(database, digest, pending_records)
     return evidence
@@ -400,4 +404,38 @@ def _derive_audio_status(
             ),
         ),
         started_at=started_at,
+    )
+
+
+def _derive_archive_status(
+    evidence: list[ProcessingEvidence],
+    pending_records: list[tuple[ProcessingEvidence, str, str]],
+    database: ArchivDatabase,
+    digest: str,
+    root: Path,
+    metadata: dict[str, object],
+    started_at: str,
+) -> None:
+    is_locked = bool(metadata.get("archive_locked"))
+    reason = str(metadata.get("reason") or "unsupported")
+    status = "skipped" if is_locked else "succeeded"
+    error = f"archive locked: {reason}" if is_locked else None
+    _append(
+        evidence,
+        pending_records,
+        ProcessingEvidence(
+            processor="archiv.archive-extract",
+            processor_version="1",
+            status=status,
+            output_kind="archive-members",
+            error=error,
+        ),
+        started_at=started_at,
+    )
+    enqueue_job(
+        database,
+        digest,
+        "archiv.archive-extract",
+        processor_version="1",
+        state="completed" if not is_locked else "failed",
     )

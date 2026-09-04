@@ -25,7 +25,7 @@ def test_every_supported_schema_fixture_opens_or_upgrades(tmp_path: Path, versio
         connection.executescript((FIXTURES / f"schema-{version}.sql").read_text())
     ArchivDatabase(database).initialize()
     assert ArchivDatabase(database).schema_version() == SCHEMA_VERSION
-    assert {"objects", "ingestions", "processing_runs", "processing_queue"} <= {
+    assert {"objects", "ingestions", "processing_runs", "processing_queue", "containment"} <= {
         row[0] for row in sqlite3.connect(database).execute("SELECT name FROM sqlite_master")
     }
     if version < SCHEMA_VERSION:

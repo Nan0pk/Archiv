@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import stat
+import tarfile
 from pathlib import Path, PurePosixPath
 from zipfile import BadZipFile, ZipFile, is_zipfile
 
@@ -54,6 +55,8 @@ def check_input(path: Path) -> None:
         _fail("input bytes", info.st_size, MAX_INPUT_BYTES)
     if is_zipfile(path):
         check_zip(path)
+    elif tarfile.is_tarfile(path):
+        check_tar(path)
 
 
 def check_zip(path: Path) -> None:
@@ -98,6 +101,42 @@ def check_zip(path: Path) -> None:
                     )
     except BadZipFile as error:
         raise LimitExceededError("malformed ZIP container") from error
+
+
+def check_tar(path: Path) -> None:
+    """Inspect TAR metadata without extracting members to the filesystem."""
+
+    try:
+        with tarfile.open(path, "r:*") as archive:
+            total = 0
+            names: set[str] = set()
+            for count, member in enumerate(archive, start=1):
+                if count > MAX_ARCHIVE_ENTRIES:
+                    _fail("archive entries", count, MAX_ARCHIVE_ENTRIES)
+                name = member.name
+                parts = PurePosixPath(name).parts
+                if not name or name.startswith(("/", "\\")) or "\\" in name or ".." in parts:
+                    raise LimitExceededError(f"unsafe member path: {name!r}")
+                if name in names:
+                    raise LimitExceededError(f"duplicate archive member: {name!r}")
+                names.add(name)
+                depth = len([part for part in parts if part not in {"", "."}])
+                if depth > MAX_RECURSION_DEPTH:
+                    _fail("archive path recursion", depth, MAX_RECURSION_DEPTH)
+                if member.issym() or member.islnk():
+                    raise LimitExceededError(f"archive symbolic link is not allowed: {name!r}")
+                if member.isdev():
+                    raise LimitExceededError(f"archive device node is not allowed: {name!r}")
+                if member.size > MAX_ARCHIVE_MEMBER_BYTES:
+                    _fail("archive member bytes", member.size, MAX_ARCHIVE_MEMBER_BYTES)
+                total += member.size
+                if total > MAX_EXPANDED_BYTES:
+                    _fail("archive expanded bytes", total, MAX_EXPANDED_BYTES)
+            file_size = path.stat().st_size
+            if file_size > 0 and total // file_size > MAX_EXPANSION_RATIO:
+                _fail("archive expansion ratio", total // file_size, MAX_EXPANSION_RATIO)
+    except (tarfile.TarError, OSError, EOFError) as error:
+        raise LimitExceededError(f"malformed TAR container: {error}") from error
 
 
 def check_pages(count: int) -> None:

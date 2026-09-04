@@ -9,7 +9,7 @@ from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from pathlib import Path
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 MIN_SUPPORTED_SCHEMA_VERSION = 0
 
 SCHEMA = """
@@ -50,6 +50,17 @@ CREATE TABLE IF NOT EXISTS processing_queue (
     PRIMARY KEY (object_sha256, processor)
 );
 CREATE INDEX IF NOT EXISTS processing_queue_state_idx ON processing_queue(state, processor);
+CREATE TABLE IF NOT EXISTS containment (
+    parent_sha256  TEXT NOT NULL REFERENCES objects(sha256),
+    child_sha256   TEXT NOT NULL REFERENCES objects(sha256),
+    internal_path  TEXT NOT NULL,
+    member_modified_at TEXT,
+    compression    TEXT,
+    depth          INTEGER NOT NULL,
+    PRIMARY KEY (parent_sha256, internal_path)
+);
+CREATE INDEX IF NOT EXISTS containment_child_idx ON containment(child_sha256);
+CREATE INDEX IF NOT EXISTS containment_parent_idx ON containment(parent_sha256);
 """
 
 
@@ -109,10 +120,34 @@ def _migration_2_to_3(connection: sqlite3.Connection) -> None:
     )
 
 
+def _migration_3_to_4(connection: sqlite3.Connection) -> None:
+    """Add containment table for recursive archive member provenance (PR 108 Milestone 3)."""
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS containment (
+            parent_sha256  TEXT NOT NULL REFERENCES objects(sha256),
+            child_sha256   TEXT NOT NULL REFERENCES objects(sha256),
+            internal_path  TEXT NOT NULL,
+            member_modified_at TEXT,
+            compression    TEXT,
+            depth          INTEGER NOT NULL,
+            PRIMARY KEY (parent_sha256, internal_path)
+        )
+        """
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS containment_child_idx ON containment(child_sha256)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS containment_parent_idx ON containment(parent_sha256)"
+    )
+
+
 MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     0: _migration_0_to_1,
     1: _migration_1_to_2,
     2: _migration_2_to_3,
+    3: _migration_3_to_4,
 }
 
 
@@ -194,3 +229,39 @@ class ArchivDatabase:
         if not self.recovery_path.is_file():
             raise FileNotFoundError("no pre-migration recovery point exists")
         shutil.copy2(self.recovery_path, self.path)
+
+
+def get_containment_for_child(
+    database: ArchivDatabase, child_sha256: str
+) -> list[dict[str, object]]:
+    """Return all containment records where this object is a child."""
+    with database.connect() as connection:
+        rows = connection.execute(
+            """
+            SELECT parent_sha256, child_sha256, internal_path,
+                   member_modified_at, compression, depth
+            FROM containment
+            WHERE child_sha256 = ?
+            ORDER BY depth ASC
+            """,
+            (child_sha256,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+
+def get_containment_for_parent(
+    database: ArchivDatabase, parent_sha256: str
+) -> list[dict[str, object]]:
+    """Return all containment records where this object is the parent archive."""
+    with database.connect() as connection:
+        rows = connection.execute(
+            """
+            SELECT parent_sha256, child_sha256, internal_path,
+                   member_modified_at, compression, depth
+            FROM containment
+            WHERE parent_sha256 = ?
+            ORDER BY internal_path ASC
+            """,
+            (parent_sha256,),
+        ).fetchall()
+        return [dict(row) for row in rows]

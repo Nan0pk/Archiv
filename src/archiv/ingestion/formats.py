@@ -52,6 +52,14 @@ SUPPORTED_SUFFIXES = {
     ".webp",
     ".svg",
     ".wav",
+    ".zip",
+    ".tar",
+    ".tar.gz",
+    ".tgz",
+    ".tar.bz2",
+    ".tbz2",
+    ".tar.xz",
+    ".txz",
 }
 MEDIA_TYPES = {
     ".md": "text/markdown",
@@ -89,11 +97,32 @@ MEDIA_TYPES = {
     ".webp": "image/webp",
     ".svg": "image/svg+xml",
     ".wav": "audio/wav",
+    ".zip": "application/zip",
+    ".tar": "application/x-tar",
+    ".tar.gz": "application/gzip",
+    ".tgz": "application/gzip",
+    ".tar.bz2": "application/x-bzip2",
+    ".tbz2": "application/x-bzip2",
+    ".tar.xz": "application/x-xz",
+    ".txz": "application/x-xz",
 }
+
+COMPOUND_SUFFIXES = (
+    ".tar.gz",
+    ".tar.bz2",
+    ".tar.xz",
+)
 
 
 def suffix_for(source_name: str) -> str:
     """Return a validated lowercase suffix for a logical source name."""
+
+    lower = source_name.lower()
+    for compound in COMPOUND_SUFFIXES:
+        if lower.endswith(compound):
+            if compound not in SUPPORTED_SUFFIXES:
+                raise UnsupportedFormatError(f"unsupported file type: {compound}")
+            return compound
 
     suffix = Path(source_name).suffix.lower()
     if suffix not in SUPPORTED_SUFFIXES:

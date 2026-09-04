@@ -654,6 +654,49 @@
         "metadata (channels, sample rate, duration) is recorded for provenance"
       ],
       "support_level": "partial"
+    },
+    {
+      "schema_version": "1",
+      "family": "archive",
+      "suffixes": [
+        ".zip",
+        ".tar",
+        ".tar.gz",
+        ".tgz",
+        ".tar.bz2",
+        ".tbz2",
+        ".tar.xz",
+        ".txz"
+      ],
+      "media_types": [
+        "application/zip",
+        "application/x-tar",
+        "application/gzip",
+        "application/x-bzip2",
+        "application/x-xz"
+      ],
+      "detection": "suffix plus container signature and structure validation; path traversal and hostile entries fail closed",
+      "immutable_ingestion": true,
+      "text_extraction": "native",
+      "structure": [
+        "archive_members",
+        "containment_provenance"
+      ],
+      "locator_shapes": [
+        [
+          "internal_path"
+        ]
+      ],
+      "grounding": true,
+      "preview_render": "member listing and recursive child document preview",
+      "macros": "no execution surface",
+      "encryption": "encrypted archives detected and marked archive_locked without password guessing",
+      "known_limits": [
+        "archive recursion depth capped at 8",
+        "total aggregate expanded bytes capped at 128 MB",
+        "encrypted archives are recorded as locked and members are not extracted"
+      ],
+      "support_level": "full"
     }
   ],
   "outputs": [
@@ -688,12 +731,6 @@
       "suffix": ".docm",
       "example": "macro-enabled Word document",
       "reason": "not a supported suffix; rejected before any parsing is attempted"
-    },
-    {
-      "schema_version": "1",
-      "suffix": ".zip",
-      "example": "generic archive",
-      "reason": "not a supported suffix; only validated document containers are unpacked"
     },
     {
       "schema_version": "1",

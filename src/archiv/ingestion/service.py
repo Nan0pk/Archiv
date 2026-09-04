@@ -2,16 +2,31 @@
 
 from __future__ import annotations
 
+import contextlib
 import os
+import shutil
+import tarfile
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
+from zipfile import ZipFile
 
 from archiv.contracts import IngestionResult, IngestionStatus, ProcessingEvidence
 from archiv.hashing import copy_and_hash, sha256_file
 from archiv.ingestion.derive import derive, reuse_derived
 from archiv.ingestion.ledger import canonical_source_name, now_iso
-from archiv.ingestion.limits import check_input
-from archiv.ingestion.normalizers import media_type_for, normalize, suffix_for
+from archiv.ingestion.limits import (
+    MAX_EXPANDED_BYTES,
+    MAX_RECURSION_DEPTH,
+    LimitExceededError,
+    check_input,
+)
+from archiv.ingestion.normalizers import (
+    UnsupportedFormatError,
+    media_type_for,
+    normalize,
+    suffix_for,
+)
 from archiv.storage.database import ArchivDatabase
 from archiv.storage.layout import ArchivLayout
 
@@ -134,8 +149,16 @@ def ingest_file(
     *,
     home: Path | None = None,
     rebuild_derived: bool = False,
+    _depth: int = 0,
+    _aggregate_bytes: list[int] | None = None,
 ) -> IngestionResult:
     """Validate, content-address, record, and derive one local file."""
+
+    if _depth > MAX_RECURSION_DEPTH:
+        raise LimitExceededError(
+            f"archive recursion depth limit exceeded: {_depth} > {MAX_RECURSION_DEPTH}"
+        )
+    aggregate_bytes = _aggregate_bytes if _aggregate_bytes is not None else [0]
 
     source = source.expanduser()
     layout = ArchivLayout.resolve(home)
@@ -206,6 +229,115 @@ def ingest_file(
             raise RuntimeError("source hash changed during ingestion")
         if sha256_file(target) != digest:
             raise RuntimeError("stored original failed post-processing integrity check")
+
+        if (
+            normalized.kind == "archive"
+            and not normalized.metadata.get("archive_locked")
+            and (not duplicate or rebuild_derived)
+        ):
+            total_uncompressed = int(str(normalized.metadata.get("total_uncompressed_bytes") or 0))
+            aggregate_bytes[0] += total_uncompressed
+            if aggregate_bytes[0] > MAX_EXPANDED_BYTES:
+                raise LimitExceededError(
+                    f"archive expanded bytes limit exceeded: "
+                    f"{aggregate_bytes[0]} > {MAX_EXPANDED_BYTES}"
+                )
+
+            temp_dir = layout.temporary / f"extract-{digest[:16]}-{uuid4().hex}"
+            temp_dir.mkdir(parents=True, exist_ok=True)
+            try:
+                archive_format = normalized.metadata.get("format")
+                if archive_format == "zip":
+                    with ZipFile(target) as archive:
+                        for member in archive.infolist():
+                            if member.is_dir():
+                                continue
+                            archive.extract(member, path=temp_dir)
+                            extracted_path = temp_dir / member.filename
+                            if not extracted_path.resolve().is_relative_to(temp_dir.resolve()):
+                                raise LimitExceededError(f"unsafe member path: {member.filename!r}")
+                            date_iso = None
+                            with contextlib.suppress(Exception):
+                                date_iso = (
+                                    f"{member.date_time[0]:04d}-{member.date_time[1]:02d}-{member.date_time[2]:02d}"
+                                    f"T{member.date_time[3]:02d}:{member.date_time[4]:02d}:{member.date_time[5]:02d}Z"
+                                )
+                            compression = "deflate" if member.compress_type == 8 else "stored"
+                            try:
+                                child_res = ingest_file(
+                                    extracted_path,
+                                    home=layout.root,
+                                    rebuild_derived=rebuild_derived,
+                                    _depth=_depth + 1,
+                                    _aggregate_bytes=aggregate_bytes,
+                                )
+                            except UnsupportedFormatError:
+                                continue
+
+                            with database.connect() as connection:
+                                connection.execute(
+                                    """
+                                    INSERT OR REPLACE INTO containment (
+                                        parent_sha256, child_sha256, internal_path,
+                                        member_modified_at, compression, depth
+                                    ) VALUES (?, ?, ?, ?, ?, ?)
+                                    """,
+                                    (
+                                        digest,
+                                        child_res.object_sha256,
+                                        member.filename,
+                                        date_iso,
+                                        compression,
+                                        _depth + 1,
+                                    ),
+                                )
+                                connection.commit()
+                elif archive_format == "tar":
+                    with tarfile.open(target, "r:*") as archive:
+                        for member in archive:
+                            if not member.isfile():
+                                continue
+                            archive.extract(member, path=temp_dir, filter="data")
+                            extracted_path = temp_dir / member.name
+                            if not extracted_path.resolve().is_relative_to(temp_dir.resolve()):
+                                raise LimitExceededError(f"unsafe member path: {member.name!r}")
+                            date_iso = None
+                            with contextlib.suppress(Exception):
+                                date_iso = datetime.fromtimestamp(member.mtime, UTC).strftime(
+                                    "%Y-%m-%dT%H:%M:%SZ"
+                                )
+                            compression = "tar"
+                            try:
+                                child_res = ingest_file(
+                                    extracted_path,
+                                    home=layout.root,
+                                    rebuild_derived=rebuild_derived,
+                                    _depth=_depth + 1,
+                                    _aggregate_bytes=aggregate_bytes,
+                                )
+                            except UnsupportedFormatError:
+                                continue
+
+                            with database.connect() as connection:
+                                connection.execute(
+                                    """
+                                    INSERT OR REPLACE INTO containment (
+                                        parent_sha256, child_sha256, internal_path,
+                                        member_modified_at, compression, depth
+                                    ) VALUES (?, ?, ?, ?, ?, ?)
+                                    """,
+                                    (
+                                        digest,
+                                        child_res.object_sha256,
+                                        member.name,
+                                        date_iso,
+                                        compression,
+                                        _depth + 1,
+                                    ),
+                                )
+                                connection.commit()
+            finally:
+                shutil.rmtree(temp_dir, ignore_errors=True)
     except Exception as error:
         _finish_ingestion(database, ingestion_id, error=error)
         raise

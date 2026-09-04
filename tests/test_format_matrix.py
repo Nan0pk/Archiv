@@ -31,12 +31,14 @@ from format_matrix_support import (
     build_pptx,
     build_rtf,
     build_svg,
+    build_tar,
     build_text,
     build_tiff,
     build_wav,
     build_webp,
     build_xls,
     build_xlsx,
+    build_zip,
 )
 
 from archiv.contracts import IngestionResult
@@ -118,6 +120,16 @@ def _write_fixture(directory: Path, suffix: str) -> Path:
         path.write_bytes(build_svg())
     elif bare == "wav":
         path.write_bytes(build_wav())
+    elif bare == "zip":
+        path.write_bytes(build_zip())
+    elif bare == "tar":
+        path.write_bytes(build_tar())
+    elif bare in {"tar.gz", "tgz"}:
+        path.write_bytes(build_tar("gz"))
+    elif bare in {"tar.bz2", "tbz2"}:
+        path.write_bytes(build_tar("bz2"))
+    elif bare in {"tar.xz", "txz"}:
+        path.write_bytes(build_tar("xz"))
     else:
         raise AssertionError(f"no fixture builder for {suffix}")
     return path
@@ -198,6 +210,14 @@ def _ingest(tmp_path: Path, suffix: str) -> tuple[IngestionResult, list[dict[str
         ".odb",
         ".inp",
         ".svg",
+        ".zip",
+        ".tar",
+        ".tar.gz",
+        ".tgz",
+        ".tar.bz2",
+        ".tbz2",
+        ".tar.xz",
+        ".txz",
     ],
 )
 def test_family_claims_match_live_ingestion(
