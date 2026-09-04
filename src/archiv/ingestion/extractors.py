@@ -20,6 +20,7 @@ from archiv.ingestion.normalize_odb import normalize_odb
 from archiv.ingestion.normalize_odf import ODF_MIMETYPES, normalize_odf
 from archiv.ingestion.normalize_office import normalize_pptx, normalize_xlsx
 from archiv.ingestion.normalize_rtf import normalize_rtf
+from archiv.ingestion.normalize_svg import normalize_svg
 
 # Known binary signatures that must never appear in plain-text documents
 KNOWN_BINARY_SIGNATURES: tuple[bytes, ...] = (
@@ -31,6 +32,11 @@ KNOWN_BINARY_SIGNATURES: tuple[bytes, ...] = (
     b"{\\rtf",
     b"RIFF",
     b"SQLite format 3\x00",
+    b"GIF87a",
+    b"GIF89a",
+    b"BM",
+    b"II*\x00",
+    b"MM\x00*",
 )
 
 
@@ -140,6 +146,12 @@ def _norm_wav(
     path: Path, digest: str, *, source_name: str, media_type: str, kind: str
 ) -> NormalizedDocument:
     return normalize_wav(path, digest, source_name=source_name, media_type=media_type)
+
+
+def _norm_svg(
+    path: Path, digest: str, *, source_name: str, media_type: str, kind: str
+) -> NormalizedDocument:
+    return normalize_svg(path, digest, source_name=source_name, media_type=media_type)
 
 
 ALL_EXTRACTORS: tuple[Extractor, ...] = (
@@ -300,6 +312,46 @@ ALL_EXTRACTORS: tuple[Extractor, ...] = (
         cost="fast",
     ),
     Extractor(
+        name="gif-image",
+        version="1",
+        suffixes=frozenset({".gif"}),
+        media_types=frozenset({"image/gif"}),
+        magic=(b"GIF87a", b"GIF89a"),
+        kind="image",
+        normalize=_norm_image,
+        cost="fast",
+    ),
+    Extractor(
+        name="bmp-image",
+        version="1",
+        suffixes=frozenset({".bmp"}),
+        media_types=frozenset({"image/bmp"}),
+        magic=(b"BM",),
+        kind="image",
+        normalize=_norm_image,
+        cost="fast",
+    ),
+    Extractor(
+        name="tiff-image",
+        version="1",
+        suffixes=frozenset({".tiff", ".tif"}),
+        media_types=frozenset({"image/tiff"}),
+        magic=(b"II*\x00", b"MM\x00*"),
+        kind="image",
+        normalize=_norm_image,
+        cost="fast",
+    ),
+    Extractor(
+        name="webp-image",
+        version="1",
+        suffixes=frozenset({".webp"}),
+        media_types=frozenset({"image/webp"}),
+        magic=(b"RIFF",),
+        kind="image",
+        normalize=_norm_image,
+        cost="fast",
+    ),
+    Extractor(
         name="wav",
         version="1",
         suffixes=frozenset({".wav"}),
@@ -307,6 +359,16 @@ ALL_EXTRACTORS: tuple[Extractor, ...] = (
         magic=(b"RIFF",),
         kind="wav",
         normalize=_norm_wav,
+        cost="fast",
+    ),
+    Extractor(
+        name="svg",
+        version="1",
+        suffixes=frozenset({".svg"}),
+        media_types=frozenset({"image/svg+xml"}),
+        magic=(b"<?xml", b"<svg", b"<!DOCTYPE svg", b"<!doctype svg", b"<"),
+        kind="svg",
+        normalize=_norm_svg,
         cost="fast",
     ),
 )
@@ -344,11 +406,38 @@ def check_content_signature(path: Path, extractor: Extractor, suffix: str) -> No
         return
 
     if not any(head.startswith(sig) for sig in extractor.magic):
-        detail = ""
-        if extractor.name == "inpage" or suffix == ".inp":
-            detail = " (not an InPage CFB compound document)"
+        stripped = head.lstrip()
+        if extractor.name in {"svg", "odf-flat"} and any(
+            stripped.startswith(sig) for sig in extractor.magic
+        ):
+            pass
+        else:
+            detail = ""
+            if extractor.name == "inpage" or suffix == ".inp":
+                detail = " (not an InPage CFB compound document)"
+            raise MalformedInputError(
+                f"file content signature does not match claimed format '{suffix}'{detail}"
+            )
+
+    if extractor.name == "svg":
+        with path.open("rb") as stream:
+            svg_sample = stream.read(2048).lower()
+        if b"<svg" not in svg_sample and b"<!doctype svg" not in svg_sample:
+            raise MalformedInputError(
+                f"file content signature does not match claimed format '{suffix}' "
+                "(not an SVG document)"
+            )
+
+    if extractor.name == "webp-image" and head[8:12] != b"WEBP":
         raise MalformedInputError(
-            f"file content signature does not match claimed format '{suffix}'{detail}"
+            f"file content signature does not match claimed format '{suffix}' "
+            "(not a WEBP container)"
+        )
+
+    if extractor.name == "wav" and head[8:12] != b"WAVE":
+        raise MalformedInputError(
+            f"file content signature does not match claimed format '{suffix}' "
+            "(not a WAVE container)"
         )
 
 

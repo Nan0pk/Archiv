@@ -413,6 +413,34 @@ def build_jpeg() -> bytes:
     return raw.getvalue()
 
 
+def build_gif() -> bytes:
+    image = Image.new("P", (320, 40), 0)
+    raw = BytesIO()
+    image.save(raw, format="GIF")
+    return raw.getvalue()
+
+
+def build_bmp() -> bytes:
+    image = Image.new("RGB", (320, 40), (255, 255, 255))
+    raw = BytesIO()
+    image.save(raw, format="BMP")
+    return raw.getvalue()
+
+
+def build_tiff() -> bytes:
+    image = Image.new("RGB", (320, 40), (255, 255, 255))
+    raw = BytesIO()
+    image.save(raw, format="TIFF")
+    return raw.getvalue()
+
+
+def build_webp() -> bytes:
+    image = Image.new("RGB", (320, 40), (255, 255, 255))
+    raw = BytesIO()
+    image.save(raw, format="WEBP")
+    return raw.getvalue()
+
+
 def build_wav() -> bytes:
     raw = BytesIO()
     with wave.open(raw, "wb") as audio:
@@ -425,3 +453,13 @@ def build_wav() -> bytes:
             frames.extend(struct.pack("<h", value))
         audio.writeframes(bytes(frames))
     return raw.getvalue()
+
+
+def build_svg() -> bytes:
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">\n'
+        f"  <title>Archiv matrix SVG fixture</title>\n"
+        f"  <desc>SVG format compatibility test</desc>\n"
+        f'  <text x="10" y="20">{MARKER}</text>\n'
+        f"</svg>\n"
+    ).encode()
