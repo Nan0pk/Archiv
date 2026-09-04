@@ -45,6 +45,12 @@ SUPPORTED_SUFFIXES = {
     ".png",
     ".jpg",
     ".jpeg",
+    ".gif",
+    ".bmp",
+    ".tiff",
+    ".tif",
+    ".webp",
+    ".svg",
     ".wav",
 }
 MEDIA_TYPES = {
@@ -73,6 +79,15 @@ MEDIA_TYPES = {
     ".fodp": "text/xml",
     ".fodg": "text/xml",
     ".inp": "application/x-inpage",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".bmp": "image/bmp",
+    ".tiff": "image/tiff",
+    ".tif": "image/tiff",
+    ".webp": "image/webp",
+    ".svg": "image/svg+xml",
     ".wav": "audio/wav",
 }
 

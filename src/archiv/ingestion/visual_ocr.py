@@ -318,6 +318,7 @@ def _parse_tsv(
             "origin": "visual_ocr",
             "page": page,
             "line": line_number,
+            "bbox": [left, top, right, bottom],
             "region": {
                 "x": left,
                 "y": top,
@@ -384,6 +385,9 @@ def _ocr_image(
     }
 
 
+MIN_NATIVE_CHARS_PER_PAGE = 25
+
+
 def _pdf_pages(document: NormalizedDocument) -> tuple[int, list[int]]:
     page_count = document.metadata.get("pages")
     if not isinstance(page_count, int) or page_count < 0:
@@ -393,12 +397,12 @@ def _pdf_pages(document: NormalizedDocument) -> tuple[int, list[int]]:
         page = segment.locator.get("page")
         if isinstance(page, int):
             text_by_page.setdefault(page, []).append(segment.text)
-    empty = [
+    pages_to_ocr = [
         page
         for page in range(1, page_count + 1)
-        if not "\n".join(text_by_page.get(page, [])).strip()
+        if len("\n".join(text_by_page.get(page, [])).strip()) < MIN_NATIVE_CHARS_PER_PAGE
     ]
-    return page_count, empty
+    return page_count, pages_to_ocr
 
 
 def _render_pdf_page(
@@ -502,7 +506,68 @@ def run_visual_ocr(
     pages: list[dict[str, object]] = []
     warnings: list[str] = []
     if normalized.kind == "image":
-        inputs.append((1, original, "canonical_original", None, normalized.object_sha256, None))
+        frames = normalized.metadata.get("frames", 1)
+        if isinstance(frames, int) and frames > 1:
+            try:
+                pages_dir = root / "previews" / "pages"
+                pages_dir.mkdir(parents=True, exist_ok=True)
+                with Image.open(original) as img:
+                    for frame_idx in range(frames):
+                        img.seek(frame_idx)
+                        page_num = frame_idx + 1
+                        rel_path = Path("previews") / "pages" / f"page-{page_num:04d}.png"
+                        out_path = root / rel_path
+                        if not out_path.is_file():
+                            frame_copy = img.copy()
+                            if frame_copy.mode not in ("RGB", "RGBA"):
+                                frame_copy = frame_copy.convert("RGB")
+                            frame_copy.save(out_path, format="PNG")
+                        inputs.append(
+                            (
+                                page_num,
+                                out_path,
+                                "rendered_image_frame",
+                                rel_path.as_posix(),
+                                sha256_file(out_path),
+                                None,
+                            )
+                        )
+            except Exception as error:
+                manifest.update(
+                    {"status": "failed", "reason": f"failed to unpack multi-frame image: {error}"}
+                )
+                return _finish(root, manifest, [], error=str(error))
+        else:
+            inputs.append((1, original, "canonical_original", None, normalized.object_sha256, None))
+    elif normalized.kind == "svg":
+        resvg = shutil.which("resvg")
+        if resvg is None:
+            manifest["reason"] = "resvg is required for SVG visual OCR"
+            return _finish(root, manifest, [])
+        try:
+            rel_path = Path("previews") / "pages" / "page-0001.png"
+            out_path = root / rel_path
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            if not out_path.is_file():
+                subprocess.run(
+                    [resvg, str(original), str(out_path)],
+                    check=True,
+                    capture_output=True,
+                    timeout=OCR_TIMEOUT_SECONDS,
+                )
+            inputs.append(
+                (
+                    1,
+                    out_path,
+                    "rendered_svg_page",
+                    rel_path.as_posix(),
+                    sha256_file(out_path),
+                    None,
+                )
+            )
+        except Exception as error:
+            manifest.update({"status": "failed", "reason": f"failed to render SVG: {error}"})
+            return _finish(root, manifest, [], error=str(error))
     elif normalized.kind == "pdf":
         try:
             page_count, empty_pages = _pdf_pages(normalized)

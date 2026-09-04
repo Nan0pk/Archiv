@@ -128,6 +128,7 @@ def test_image_ocr_is_searchable_and_citable(
         "height": 24,
         "unit": "pixel",
     }
+    assert citation.locator["bbox"] == [20, 20, 320, 44]
     assert validate_citation(citation, home=home).valid is True
 
 
@@ -167,6 +168,40 @@ def test_image_only_pdf_pages_are_rendered_then_ocrd(
     assert matches[0].citation.source_name == "image-only.pdf"
     assert matches[0].citation.locator["origin"] == "visual_ocr"
     assert matches[0].citation.locator["page"] == 1
+    assert matches[0].citation.locator["bbox"] == [20, 20, 320, 44]
+
+
+def test_watermark_sparse_pdf_page_triggers_ocr(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    marker = "ARCHIV-WATERMARK-PDF-OCR-2026"
+    _install_fake_tesseract(bin_dir, marker=marker)
+    _install_fake_pdftoppm(bin_dir)
+    _enable_fake_ocr(monkeypatch, bin_dir)
+
+    source = tmp_path / "watermark-scanner.pdf"
+    canvas = Canvas(str(source), pagesize=(320, 200), invariant=1)
+    # Page with only a short watermark (< 25 chars)
+    canvas.drawString(20, 180, "Page 1")
+    canvas.showPage()
+    canvas.save()
+
+    home = tmp_path / "archiv-home"
+    result = ingest_file(source, home=home)
+    derived = Path(result.derived_root)
+    manifest = json.loads((derived / "ocr" / "status.json").read_text(encoding="utf-8"))
+
+    assert manifest["status"] == "succeeded"
+    assert manifest["pages_requiring_ocr"] == [1]
+
+    rebuild_search_index(home=home)
+    matches = search_documents(marker, home=home)
+    assert len(matches) == 1
+    assert matches[0].citation.source_name == "watermark-scanner.pdf"
+    assert matches[0].citation.locator["origin"] == "visual_ocr"
 
 
 def test_bubblewrap_sandbox_can_read_original_under_tmp_home(

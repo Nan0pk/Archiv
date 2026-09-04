@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import subprocess
 from pathlib import Path
 
 from PIL import Image
@@ -199,6 +200,10 @@ def derive(
         _derive_image_preview(
             evidence, pending_records, digest, root, original, normalized.metadata, started_at
         )
+    if normalized.kind == "svg":
+        _derive_svg_preview(
+            evidence, pending_records, digest, root, original, normalized.metadata, started_at
+        )
     if normalized.kind == "audio":
         _derive_audio_status(evidence, pending_records, digest, root, started_at)
 
@@ -230,6 +235,23 @@ def _derive_image_preview(
         started_at=started_at,
     )
 
+    frames = metadata.get("frames", 1)
+    if isinstance(frames, int) and frames > 1:
+        try:
+            with Image.open(original) as img:
+                pages_dir = root / "previews" / "pages"
+                pages_dir.mkdir(parents=True, exist_ok=True)
+                for frame_idx in range(frames):
+                    img.seek(frame_idx)
+                    page_path = pages_dir / f"page-{frame_idx + 1:04d}.png"
+                    if not page_path.exists():
+                        frame_img = img.copy()
+                        if frame_img.mode not in ("RGB", "RGBA"):
+                            frame_img = frame_img.convert("RGB")
+                        frame_img.save(page_path, format="PNG")
+        except Exception:
+            pass
+
     thumbnail_path = root / "previews" / "thumbnail.webp"
     try:
         with Image.open(original) as img:
@@ -259,6 +281,91 @@ def _derive_image_preview(
                 processor="archiv.thumbnail",
                 processor_version="1",
                 status="skipped",
+                output_kind="thumbnail",
+                output_path=str(thumbnail_path),
+                error=f"{type(error).__name__}: {error}",
+            ),
+            started_at=started_at,
+        )
+
+
+def _derive_svg_preview(
+    evidence: list[ProcessingEvidence],
+    pending_records: list[tuple[ProcessingEvidence, str, str]],
+    digest: str,
+    root: Path,
+    original: Path,
+    metadata: dict[str, object],
+    started_at: str,
+) -> None:
+    preview_path = root / "previews" / "metadata.json"
+    _append(
+        evidence,
+        pending_records,
+        ProcessingEvidence(
+            processor="archiv.svg-metadata",
+            processor_version="1",
+            status="succeeded",
+            output_kind="preview-metadata",
+            output_path=str(preview_path),
+            output_sha256=_write_json(preview_path, metadata),
+        ),
+        started_at=started_at,
+    )
+
+    resvg = shutil.which("resvg")
+    thumbnail_path = root / "previews" / "thumbnail.webp"
+    if resvg is None:
+        _append(
+            evidence,
+            pending_records,
+            ProcessingEvidence(
+                processor="archiv.svg-preview",
+                processor_version="1",
+                status="skipped",
+                output_kind="thumbnail",
+                output_path=str(thumbnail_path),
+                error="resvg executable not installed",
+            ),
+            started_at=started_at,
+        )
+        return
+
+    try:
+        tmp_png = root / "previews" / "rendered.png"
+        subprocess.run(
+            [resvg, "-w", "256", "-h", "256", str(original), str(tmp_png)],
+            check=True,
+            capture_output=True,
+            timeout=30,
+        )
+        with Image.open(tmp_png) as img:
+            thumb = img.copy()
+            if thumb.mode not in ("RGB", "RGBA"):
+                thumb = thumb.convert("RGB")
+            thumb.save(thumbnail_path, format="WEBP", quality=80)
+        tmp_png.unlink(missing_ok=True)
+        _append(
+            evidence,
+            pending_records,
+            ProcessingEvidence(
+                processor="archiv.svg-preview",
+                processor_version="1",
+                status="succeeded",
+                output_kind="thumbnail",
+                output_path=str(thumbnail_path),
+                output_sha256=sha256_file(thumbnail_path),
+            ),
+            started_at=started_at,
+        )
+    except Exception as error:
+        _append(
+            evidence,
+            pending_records,
+            ProcessingEvidence(
+                processor="archiv.svg-preview",
+                processor_version="1",
+                status="failed",
                 output_kind="thumbnail",
                 output_path=str(thumbnail_path),
                 error=f"{type(error).__name__}: {error}",

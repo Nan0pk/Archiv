@@ -545,11 +545,20 @@
       "suffixes": [
         ".png",
         ".jpg",
-        ".jpeg"
+        ".jpeg",
+        ".gif",
+        ".bmp",
+        ".tiff",
+        ".tif",
+        ".webp"
       ],
       "media_types": [
         "image/png",
-        "image/jpeg"
+        "image/jpeg",
+        "image/gif",
+        "image/bmp",
+        "image/tiff",
+        "image/webp"
       ],
       "detection": "suffix plus image decode validation via Pillow; corrupt images fail closed",
       "immutable_ingestion": true,
@@ -561,6 +570,7 @@
       ],
       "locator_shapes": [
         [
+          "bbox",
           "engine",
           "languages",
           "line",
@@ -569,6 +579,7 @@
           "region"
         ],
         [
+          "bbox",
           "confidence",
           "engine",
           "languages",
@@ -576,6 +587,9 @@
           "origin",
           "page",
           "region"
+        ],
+        [
+          "metadata"
         ]
       ],
       "grounding": true,
@@ -587,6 +601,35 @@
         "OCR output is derived evidence with provenance and never overwrites the original"
       ],
       "support_level": "partial"
+    },
+    {
+      "schema_version": "1",
+      "family": "svg",
+      "suffixes": [
+        ".svg"
+      ],
+      "media_types": [
+        "image/svg+xml"
+      ],
+      "detection": "XML header and SVG root element parsing; malformed XML, DTD entity expansion, or external references fail closed",
+      "immutable_ingestion": true,
+      "text_extraction": "native",
+      "structure": [
+        "elements"
+      ],
+      "locator_shapes": [
+        [
+          "element"
+        ]
+      ],
+      "grounding": true,
+      "preview_render": "sandboxed resvg rendering when available; text elements extracted natively without external rendering",
+      "macros": "script elements and external resources are ignored and never executed",
+      "encryption": "no encryption layer exists",
+      "known_limits": [
+        "complex path-rendered text requires optional deep-tier OCR rendering"
+      ],
+      "support_level": "full"
     },
     {
       "schema_version": "1",

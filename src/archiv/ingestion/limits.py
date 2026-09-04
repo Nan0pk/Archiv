@@ -17,6 +17,7 @@ MAX_EXPANSION_RATIO = 200
 MAX_PAGES = 250
 MAX_NATIVE_PAGES = 10_000
 MAX_IMAGE_PIXELS = 80_000_000
+MAX_IMAGE_FRAMES = 100
 MAX_RECURSION_DEPTH = 8
 MAX_SUBPROCESSES = 1
 MAX_CPU_SECONDS = 60
@@ -115,3 +116,8 @@ def check_image(width: int, height: int) -> None:
     pixels = width * height
     if width <= 0 or height <= 0 or pixels > MAX_IMAGE_PIXELS:
         _fail("image pixels", pixels, MAX_IMAGE_PIXELS)
+
+
+def check_image_frames(frames: int) -> None:
+    if frames > MAX_IMAGE_FRAMES:
+        _fail("image frames", frames, MAX_IMAGE_FRAMES)

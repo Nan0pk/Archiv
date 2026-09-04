@@ -15,8 +15,10 @@ import pytest
 from format_matrix_support import (
     MARKER,
     build_blank_pdf,
+    build_bmp,
     build_doc,
     build_docx,
+    build_gif,
     build_inpage300,
     build_jpeg,
     build_odb,
@@ -28,8 +30,11 @@ from format_matrix_support import (
     build_ppt,
     build_pptx,
     build_rtf,
+    build_svg,
     build_text,
+    build_tiff,
     build_wav,
+    build_webp,
     build_xls,
     build_xlsx,
 )
@@ -101,6 +106,16 @@ def _write_fixture(directory: Path, suffix: str) -> Path:
         path.write_bytes(build_png())
     elif bare in {"jpg", "jpeg"}:
         path.write_bytes(build_jpeg())
+    elif bare == "gif":
+        path.write_bytes(build_gif())
+    elif bare == "bmp":
+        path.write_bytes(build_bmp())
+    elif bare in {"tiff", "tif"}:
+        path.write_bytes(build_tiff())
+    elif bare == "webp":
+        path.write_bytes(build_webp())
+    elif bare == "svg":
+        path.write_bytes(build_svg())
     elif bare == "wav":
         path.write_bytes(build_wav())
     else:
@@ -182,6 +197,7 @@ def _ingest(tmp_path: Path, suffix: str) -> tuple[IngestionResult, list[dict[str
         ".odf",
         ".odb",
         ".inp",
+        ".svg",
     ],
 )
 def test_family_claims_match_live_ingestion(
@@ -219,7 +235,7 @@ def test_family_claims_match_live_ingestion(
 def test_image_family_is_metadata_only_without_local_ocr(
     tmp_path: Path, matrix: FormatMatrix
 ) -> None:
-    for suffix in (".png", ".jpg", ".jpeg"):
+    for suffix in (".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff", ".tif", ".webp"):
         family = matrix.family_for_suffix(suffix)
         directory = tmp_path / suffix.lstrip(".")
         directory.mkdir(parents=True)
