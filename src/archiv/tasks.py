@@ -9,6 +9,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from archiv.contracts import RetrievalDiagnostics, RunStatus, SearchResult
+from archiv.evaluation_config import EvaluationNotEnabledError, check_evaluation_opt_in
 from archiv.grounding import build_grounding_prompt, parse_and_validate_grounded_response
 from archiv.hashing import sha256_file
 from archiv.model_adapter import build_model_adapter, load_model_config
@@ -109,6 +110,24 @@ def run_task(task_path: Path, *, home: Path | None = None) -> TaskRunResult:
         _write_json(evidence_dir / "result.json", result.model_dump(mode="json"))
         return result
 
+    if model.adapter == "remote-evaluation":
+        # The report path does not share the ask path's model call, so this guard has
+        # to be written twice. Losing it here would mean `report` could send documents
+        # off an archive that `ask` refuses to touch.
+        try:
+            check_evaluation_opt_in(layout.root)
+        except EvaluationNotEnabledError as error:
+            result = TaskRunResult(
+                run_id=run_id,
+                status=RunStatus.BLOCKED_BY_POLICY,
+                task_path=str(task_path),
+                evidence_dir=str(evidence_dir),
+                model=model,
+                errors=[str(error)],
+            )
+            _write_json(evidence_dir / "result.json", result.model_dump(mode="json"))
+            return result
+
     before: dict[str, str] = {}
     retrieval_results: list[SearchResult] | None = None
     retrieval_diagnostics: RetrievalDiagnostics | None = None
@@ -142,7 +161,7 @@ def run_task(task_path: Path, *, home: Path | None = None) -> TaskRunResult:
 
             if citations_map:
                 prompt = build_grounding_prompt(task.query, citations_map)
-                adapter = build_model_adapter(model)
+                adapter = build_model_adapter(model, layout.root)
                 raw_response = adapter.complete(prompt)
                 parsed, p_errors = parse_and_validate_grounded_response(
                     raw_response, set(citations_map.keys())

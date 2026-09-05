@@ -452,6 +452,7 @@ readable table.
 | `archiv model evaluation status` | Show whether this archive may use a model off this machine |
 | `archiv model evaluation enable` | Mark this archive for evaluation — needs an explicit acknowledgement |
 | `archiv model evaluation disable` | Remove the mark |
+| `archiv model configure-remote-evaluation` | Point at a model off this machine, for evaluation only |
 
 ##### Evaluation archives
 
@@ -465,6 +466,14 @@ mark counts as absent.
 Do not mark an archive that holds private or confidential documents. Marking it means
 their text is sent to computers you do not control. Make a separate archive for
 evaluation instead.
+
+Marking an archive is only half of it. The archive also has to be pointed at a model off
+this machine with `archiv model configure-remote-evaluation`, and the two are separate on
+purpose: configuring one without marking the archive sends nothing, and marking an archive
+without configuring one does nothing. Either alone is inert.
+
+That command stores the *name* of an environment variable holding your API key, never the
+key itself, because the settings directory travels in backups and the key must not.
 
 **The mark travels with your data.** It lives in `config/`, which is included in backups
 and exports, so restoring an evaluation archive somewhere else produces an archive that

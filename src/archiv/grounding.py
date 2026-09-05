@@ -10,6 +10,7 @@ from uuid import uuid4
 
 from archiv.ask_contracts import AskRunResult
 from archiv.contracts import Citation, RunStatus, SearchResult
+from archiv.evaluation_config import EvaluationNotEnabledError, check_evaluation_opt_in
 from archiv.grounding_contracts import GroundedModelResponse
 from archiv.model_adapter import build_model_adapter, load_model_config
 from archiv.reports.formatting import format_locator
@@ -161,6 +162,26 @@ def run_grounded_ask(
         _write_json(evidence_dir / "result.json", result.model_dump(mode="json"))
         return result
 
+    if model_config.adapter == "remote-evaluation":
+        # Checked here as well as inside the adapter, and before anything is retrieved
+        # or written, so an unmarked archive never even builds a prompt out of its own
+        # documents. The adapter keeps its own check because it is the thing that opens
+        # the socket; this one exists so the refusal is recorded as policy rather than
+        # arriving as a generic failure from the call below.
+        try:
+            check_evaluation_opt_in(layout.root)
+        except EvaluationNotEnabledError as error:
+            result = AskRunResult(
+                run_id=run_id,
+                status=RunStatus.BLOCKED_BY_POLICY,
+                query=query,
+                evidence_dir=str(evidence_dir),
+                model=model_config,
+                errors=[str(error)],
+            )
+            _write_json(evidence_dir / "result.json", result.model_dump(mode="json"))
+            return result
+
     retrieval = retrieve_evidence(query, home=layout.root, evidence_limit=max_sources)
     _write_json(
         evidence_dir / "retrieval.json",
@@ -233,7 +254,7 @@ def run_grounded_ask(
         },
     )
 
-    adapter = build_model_adapter(model_config)
+    adapter = build_model_adapter(model_config, layout.root)
     raw_response: str | None = None
     try:
         raw_response = adapter.complete(prompt)
