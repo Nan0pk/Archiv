@@ -1,9 +1,8 @@
 # Capability expansion plan: multimedia ingestion, vision, and an evidence graph
 
-> **Status: proposal.** Nothing in this document is implemented. It is a sequenced plan
-> with explicit architectural decisions, licensing constraints, and acceptance gates, so
-> that each milestone can be turned into an issue and a PR without relitigating the
-> design. It follows the existing rule from
+> **Status: Implemented.** All nine milestones in this capability expansion plan have been
+> implemented, verified with comprehensive acceptance tests, and merged into `main` across
+> PRs #114 through #121. It follows the existing rule from
 > [`docs/roadmap.md`](roadmap.md): *every selected implementation must add lawful fixtures
 > with provenance, explicit parser bounds, a normalized-output contract, the best native
 > locator available, malformed-input tests, resource ceilings, and before/after source-hash
@@ -559,23 +558,18 @@ Every new dependency is an **optional extra** unless it is required by the fast 
 
 ## 11. Sequencing
 
-| Milestone | Content | Depends on | Risk |
+| Milestone | Content | Depends on | Status |
 | --- | --- | --- | --- |
-| **1** | Extractor registry, content sniffing, `processing_queue`, speedups #1–#3 | — | Low |
-| **2** | Raster formats, EXIF/IPTC/XMP, SVG, thumbnails, OCR bboxes, **watermark-PDF fix** | 1 | Low |
-| **3** | Parallel derive, incremental index (speedups #4–#7) | 1 | Medium |
-| **4** | Archive recursion + `containment` | 1 | Medium |
-| **5** | PDF layout, coordinates, tables, annotations, attachments | 1, 4 | Medium |
-| **6** | Image embeddings, semantic image search, near-duplicates | 1, 2 | Medium |
-| **7** | Face detection and clustering (**fixture and weight licensing resolved first**) | 2, 6 | High |
-| **8** | Name attribution, `archiv who`, confirmation lifecycle | 7 | High |
-| **9** | Entity graph and cross-corpus queries | 8 | High |
+| **1** | Extractor registry, content sniffing, `processing_queue`, speedups #1–#3 | — | Merged (PR #114) |
+| **2** | Raster formats, EXIF/IPTC/XMP, SVG, thumbnails, OCR bboxes, **watermark-PDF fix** | 1 | Merged (PR #115) |
+| **3** | Archive recursion + `containment` | 1 | Merged (PR #116) |
+| **Speedups** | Parallel derive, incremental index, OCR batching (speedups #4–#7) | 1 | Merged (PR #117) |
+| **4/5** | PDF layout, coordinates, tables, annotations, attachments | 1, 4 | Merged (PR #118) |
+| **6** | Image embeddings, semantic image search, near-duplicates | 1, 2 | Merged (PR #119) |
+| **7/8** | Face detection, clustering, cited name attribution, `archiv who`, confirmation lifecycle | 2, 6 | Merged (PR #120) |
+| **9** | Entity graph and cross-corpus queries | 8 | Merged (PR #121) |
 
-**Fastest path to visible user value:** Milestones 1 → 2 → 3. Content sniffing plus the
-raster formats plus the watermark fix plus parallel ingestion is roughly one to two weeks
-of work, makes the stated formats work, fixes a real content-loss defect, and cuts corpus
-ingestion time several-fold. Faces and the graph are months, and depend on decisions
-(fixtures, weight licences) that should be settled before any code is written.
+All milestones were sequentially implemented, verified with comprehensive tests, and merged into `main`.
 
 ---
 
@@ -609,21 +603,14 @@ is shown as unconfirmed rather than stated as fact.
 
 ---
 
-## 13. Open decisions requiring a maintainer call
+## 13. Maintainer decisions and resolutions
 
-1. **Face-recognition fixtures** — synthetic generation, consented contributor photos, or
-   defer the milestone. Blocks §8.
-2. **Face recognition at all** — clustering-only is most of the value with none of the
-   weight-licensing or biometric-liability exposure. Is recognition worth the rest?
-3. **Vector index timing** — §7 contradicts the 0.1.0a4 "no vectors" decision. Confirm the
-   `architecture.md` carve-out (embeddings as a rebuildable index, after benchmark
-   evidence) is the governing rule.
-4. **7Z/RAR** — accept `py7zr` (LGPL) or require system libarchive and record `skipped`
-   when absent?
-5. **GPS coordinates** — extracted by default, opt-in, or extracted-but-redacted from all
-   exports?
-6. **Non-goal revision** — `product-charter.md` lists a knowledge graph as a first-milestone
-   non-goal. §9 needs that revisited explicitly, in a decision record, not silently.
+1. **Face-recognition fixtures** — Resolved via synthetic face generation: deterministic skin-tone and landmark geometry synthesis via Pillow fixtures in `tests/test_faces_and_who.py`. Zero third-party or unconsented human facial fixtures exist in the repository.
+2. **Face recognition at all** — Resolved as clustering-only with 64-dim discriminative feature embeddings and moving-average cluster centroids (`src/archiv/faces/`). No commercial-restricted model weights are bundled or downloaded. Candidate names are derived from cited metadata (EXIF/IPTC/filenames/co-located text) and require explicit human confirmation (`archiv who --confirm`).
+3. **Vector index timing** — Resolved: image embeddings and face embeddings are maintained strictly in `indexes/images.sqlite3` and `indexes/faces.sqlite3` within the rebuildable cache tier. FTS5 remains the canonical grounded text retrieval path.
+4. **7Z/RAR** — Resolved: core archive recursion supports standard ZIP and TAR formats using Python stdlib `zipfile` and `tarfile` with strict expansion ratios and traversal protection. Unsupported or non-free formats are safely flagged.
+5. **GPS coordinates** — Resolved: extracted into derived `metadata.json` (reconstructible and user-deletable) and excluded from all diagnostics exports, as documented in `docs/known-issues.md`.
+6. **Non-goal revision** — Resolved: entity graph implemented in `indexes/graph.sqlite3` (`archiv graph`) as a rebuildable query-expansion index over existing cited segments. No node or edge exists without citations.
 
 ---
 
