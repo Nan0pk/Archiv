@@ -6,6 +6,7 @@ import json
 import os
 import re
 from pathlib import Path
+from typing import Literal
 from uuid import uuid4
 
 from archiv.ask_contracts import AskRunResult
@@ -16,6 +17,7 @@ from archiv.model_adapter import build_model_adapter, load_model_config
 from archiv.reports.formatting import format_locator
 from archiv.search import read_source_excerpt, retrieve_evidence, validate_citation
 from archiv.storage.layout import ArchivLayout
+from archiv.structured_output import request_grounded_response
 
 
 def build_grounding_prompt(query: str, citations: dict[str, SearchResult]) -> str:
@@ -94,35 +96,57 @@ def _extract_json_payload(raw_text: str) -> str:
     return cleaned
 
 
-def parse_and_validate_grounded_response(
+GroundedFailure = Literal["schema_violation", "valid_but_unsupported"]
+"""The two ways a reply can be unusable, which have different causes and fixes."""
+
+
+def classify_grounded_response(
     raw_text: str,
     allowed_citations: set[str],
-) -> tuple[GroundedModelResponse | None, list[str]]:
-    """Parse JSON and validate that all cited sources are present in allowed_citations."""
+) -> tuple[GroundedModelResponse | None, GroundedFailure | None, list[str]]:
+    """Parse and validate, saying *which* way it failed rather than only that it did.
+
+    The two failures are different problems with different causes. A reply that does not
+    parse means the schema was not held to. A reply that parses but cites evidence it was
+    never given means the schema was held to and the answer is still unsupported -- the
+    failure that gets worse as models get smaller, and the one that a single "invalid"
+    counter would hide.
+
+    Returns the response when it is usable, otherwise `"schema_violation"` or
+    `"valid_but_unsupported"` alongside the reasons.
+    """
 
     json_str = _extract_json_payload(raw_text)
     try:
         data = json.loads(json_str)
         response = GroundedModelResponse.model_validate(data)
     except Exception as error:
-        return None, [f"malformed model JSON or schema mismatch: {error}"]
+        return None, "schema_violation", [f"malformed model JSON or schema mismatch: {error}"]
 
     errors: list[str] = []
-    used_citations: set[str] = set()
-
     for paragraph in response.paragraphs:
         for cid in paragraph.citation_ids:
-            used_citations.add(cid)
             if cid not in allowed_citations:
                 errors.append(f"model cited unknown or un-retrieved source: {cid}")
 
     for claim in response.claims:
         for cid in claim.citation_ids:
-            used_citations.add(cid)
             if cid not in allowed_citations:
                 errors.append(f"model cited unknown or un-retrieved source: {cid}")
 
-    return (response if not errors else None), errors
+    if errors:
+        return None, "valid_but_unsupported", errors
+    return response, None, []
+
+
+def parse_and_validate_grounded_response(
+    raw_text: str,
+    allowed_citations: set[str],
+) -> tuple[GroundedModelResponse | None, list[str]]:
+    """Parse JSON and validate that all cited sources are present in allowed_citations."""
+
+    response, _failure, errors = classify_grounded_response(raw_text, allowed_citations)
+    return response, errors
 
 
 def _write_json(path: Path, payload: object) -> None:
@@ -257,7 +281,16 @@ def run_grounded_ask(
     adapter = build_model_adapter(model_config, layout.root)
     raw_response: str | None = None
     try:
-        raw_response = adapter.complete(prompt)
+        structured = request_grounded_response(adapter, prompt, set(citations_map.keys()))
+        _write_json(
+            evidence_dir / "structured_output.json",
+            structured.record.model_dump(mode="json"),
+        )
+        raw_response = json.dumps(
+            structured.response.model_dump(mode="json") if structured.response else {},
+            indent=2,
+            sort_keys=True,
+        )
     except Exception as error:
         result = AskRunResult(
             run_id=run_id,
@@ -274,9 +307,8 @@ def run_grounded_ask(
 
     (evidence_dir / "model_response.txt").write_text(raw_response, encoding="utf-8")
 
-    parsed_response, parse_errors = parse_and_validate_grounded_response(
-        raw_response, set(citations_map.keys())
-    )
+    parsed_response = structured.response
+    parse_errors = list(structured.errors)
 
     if parse_errors or parsed_response is None:
         result = AskRunResult(

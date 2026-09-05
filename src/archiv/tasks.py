@@ -10,7 +10,7 @@ from uuid import uuid4
 
 from archiv.contracts import RetrievalDiagnostics, RunStatus, SearchResult
 from archiv.evaluation_config import EvaluationNotEnabledError, check_evaluation_opt_in
-from archiv.grounding import build_grounding_prompt, parse_and_validate_grounded_response
+from archiv.grounding import build_grounding_prompt
 from archiv.hashing import sha256_file
 from archiv.model_adapter import build_model_adapter, load_model_config
 from archiv.report_contracts import ReportManifest, ReportStatus
@@ -19,6 +19,7 @@ from archiv.reports.validation import write_validation
 from archiv.search import rebuild_search_index, retrieve_evidence
 from archiv.storage.database import ArchivDatabase
 from archiv.storage.layout import ArchivLayout
+from archiv.structured_output import request_grounded_response
 from archiv.task_contracts import CrossFileReportTask, TaskRunResult, TaskVerification
 
 _RUN_ID = re.compile(r"^[0-9a-f]{32}$")
@@ -162,13 +163,20 @@ def run_task(task_path: Path, *, home: Path | None = None) -> TaskRunResult:
             if citations_map:
                 prompt = build_grounding_prompt(task.query, citations_map)
                 adapter = build_model_adapter(model, layout.root)
-                raw_response = adapter.complete(prompt)
-                parsed, p_errors = parse_and_validate_grounded_response(
-                    raw_response, set(citations_map.keys())
+                # The same bounded, counted retry the ask path uses. This code path is a
+                # separate implementation of the model call, so it has to be wired up
+                # here too or `report` silently keeps the old single-shot behaviour.
+                structured = request_grounded_response(adapter, prompt, set(citations_map.keys()))
+                _write_json(
+                    evidence_dir / "structured_output.json",
+                    structured.record.model_dump(mode="json"),
                 )
-                if p_errors or parsed is None:
-                    raise ValueError("model response validation failed: " + "; ".join(p_errors))
-                grounded_response = parsed
+                if structured.response is None:
+                    raise ValueError(
+                        "model response validation failed after "
+                        f"{structured.record.attempts} attempt(s): " + "; ".join(structured.errors)
+                    )
+                grounded_response = structured.response
 
         if retrieval_results is None:
             report = generate_report(
