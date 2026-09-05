@@ -14,6 +14,8 @@ from pathlib import Path
 from uuid import uuid4
 from zipfile import ZipFile
 
+from pypdf import PdfReader
+
 from archiv.contracts import (
     IngestionResult,
     IngestionStatus,
@@ -397,6 +399,72 @@ def commit_candidate(
                                     ),
                                 )
                                 connection.commit()
+            finally:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+        elif (
+            normalized.kind == "pdf"
+            and bool(normalized.metadata.get("attachments"))
+            and not normalized.metadata.get("archive_locked")
+            and (not duplicate or rebuild_derived)
+        ):
+            temp_dir = layout.temporary / f"extract-pdf-{digest[:16]}-{uuid4().hex}"
+            temp_dir.mkdir(parents=True, exist_ok=True)
+            try:
+                reader = PdfReader(target, strict=False)
+                if reader.is_encrypted:
+                    with contextlib.suppress(Exception):
+                        reader.decrypt("")
+                attachments = getattr(reader, "attachments", {}) or {}
+                for att_name, data_list in attachments.items():
+                    if not data_list:
+                        continue
+                    safe_name = Path(att_name).name
+                    if not safe_name or safe_name in (".", ".."):
+                        continue
+                    extracted_path = temp_dir / safe_name
+                    if not extracted_path.resolve().is_relative_to(temp_dir.resolve()):
+                        raise LimitExceededError(f"unsafe attachment path: {att_name!r}")
+                    raw_content = b"".join(bytes(d) for d in data_list)
+                    aggregate_bytes[0] += len(raw_content)
+                    if aggregate_bytes[0] > MAX_EXPANDED_BYTES:
+                        raise LimitExceededError(
+                            f"PDF attachment expanded bytes limit exceeded: "
+                            f"{aggregate_bytes[0]} > {MAX_EXPANDED_BYTES}"
+                        )
+                    extracted_path.write_bytes(raw_content)
+                    try:
+                        child_prep = prepare_candidate(
+                            extracted_path, layout, rebuild_derived=rebuild_derived
+                        )
+                        child_res = commit_candidate(
+                            database,
+                            layout,
+                            child_prep,
+                            rebuild_derived=rebuild_derived,
+                            _depth=_depth + 1,
+                            _aggregate_bytes=aggregate_bytes,
+                        )
+                    except UnsupportedFormatError:
+                        continue
+
+                    with database.connect() as connection:
+                        connection.execute(
+                            """
+                            INSERT OR REPLACE INTO containment (
+                                parent_sha256, child_sha256, internal_path,
+                                member_modified_at, compression, depth
+                            ) VALUES (?, ?, ?, ?, ?, ?)
+                            """,
+                            (
+                                digest,
+                                child_res.object_sha256,
+                                safe_name,
+                                None,
+                                "none",
+                                _depth + 1,
+                            ),
+                        )
+                        connection.commit()
             finally:
                 shutil.rmtree(temp_dir, ignore_errors=True)
     except Exception as error:

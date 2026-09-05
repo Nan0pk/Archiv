@@ -47,22 +47,63 @@
       "immutable_ingestion": true,
       "text_extraction": "native",
       "structure": [
-        "pages"
+        "pages",
+        "lines",
+        "tables",
+        "bookmarks",
+        "annotations",
+        "form_fields"
       ],
       "locator_shapes": [
         [
           "page"
+        ],
+        [
+          "bbox",
+          "line",
+          "page"
+        ],
+        [
+          "bbox",
+          "column",
+          "line",
+          "page"
+        ],
+        [
+          "column",
+          "page",
+          "row",
+          "table_index"
+        ],
+        [
+          "level",
+          "origin",
+          "page"
+        ],
+        [
+          "field",
+          "origin"
+        ],
+        [
+          "origin",
+          "page",
+          "type"
+        ],
+        [
+          "bbox",
+          "origin",
+          "page",
+          "type"
         ]
       ],
       "grounding": true,
-      "preview_render": "LibreOffice render for report validation; poppler pdftoppm only for bounded OCR rendering of textless pages",
+      "preview_render": "LibreOffice render for report validation; poppler pdftoppm or pypdfium2 for bounded OCR rendering of textless pages",
       "macros": "embedded scripts and actions are never executed",
-      "encryption": "undecryptable inputs fail closed during normalization; no password handling is attempted",
+      "encryption": "empty-password decryption attempted; genuinely password-protected files marked pdf_locked without password guessing",
       "known_limits": [
-        "text follows content-stream order, not visual layout",
         "pages without native text yield conditional visual_ocr segments only when local Tesseract and Poppler tools are present (page, line, and pixel-region locators); with tools absent ingestion stays valid with no searchable text"
       ],
-      "support_level": "partial"
+      "support_level": "full"
     },
     {
       "schema_version": "1",

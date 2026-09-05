@@ -15,7 +15,10 @@ from archiv.search import (
 
 MARKERS_AND_LOCATIONS: dict[str, tuple[str, dict[str, object]]] = {
     "ARCHIV-TEXT-MARKER-2026": ("plain-text.txt", {"line": 3}),
-    "ARCHIV-PDF-MARKER-2026": ("report.pdf", {"page": 1}),
+    "ARCHIV-PDF-MARKER-2026": (
+        "report.pdf",
+        {"page": 1, "line": 2, "bbox": [72.0, 85.73, 311.02, 103.73]},
+    ),
     "ARCHIV-DOCX-MARKER-2026": ("document.docx", {"paragraph": 2}),
     "ARCHIV-XLSX-MARKER-2026": (
         "workbook.xlsx",
