@@ -449,6 +449,29 @@ readable table.
 | `archiv model show` | Show the exact persisted policy — absence means disabled |
 | `archiv model test` | Test connectivity to the configured local server |
 | `archiv model disable` | Turn local model integration off |
+| `archiv model evaluation status` | Show whether this archive may use a model off this machine |
+| `archiv model evaluation enable` | Mark this archive for evaluation — needs an explicit acknowledgement |
+| `archiv model evaluation disable` | Remove the mark |
+
+##### Evaluation archives
+
+Archiv talks only to a model on your own machine. Evaluating the product against a
+hosted model is the one exception, and an archive cannot drift into it: it happens only
+if that archive carries a mark saying so, added by a command whose flag names the
+consequence rather than a plain `--yes`. The mark stores what you agreed to and when, so
+it can be checked later instead of taken on trust. A missing, unreadable or hand-edited
+mark counts as absent.
+
+Do not mark an archive that holds private or confidential documents. Marking it means
+their text is sent to computers you do not control. Make a separate archive for
+evaluation instead.
+
+**The mark travels with your data.** It lives in `config/`, which is included in backups
+and exports, so restoring an evaluation archive somewhere else produces an archive that
+is still marked for evaluation. That is deliberate — the alternative is a restored copy
+that has quietly forgotten it was allowed to send documents out — but it means the
+permission moves with the backup. Run `archiv model evaluation disable` after restoring
+if that is not what you want.
 
 #### Keeping and moving your data
 
