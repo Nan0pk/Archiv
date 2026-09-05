@@ -74,6 +74,18 @@ or diagnostics bundle. `config/` is durable and travels in backups
 The specific model name is a configuration field, not a code constant. Pick it at S04
 from what the account has access to, and record it in that step's pull request.
 
+**Recorded at S04.** The base URL default is `https://api.openai.com`, exported as
+`REMOTE_EVALUATION_ENDPOINT` in `src/archiv/model_adapter.py`. It is the default value of
+`--endpoint` on `archiv model configure-remote-evaluation`, not a value the adapter falls
+back to: an unconfigured archive has no remote adapter at all.
+
+**No model name is baked in, and none is defaulted.** `--model` is a required option.
+The session implementing S04 had no API key and therefore no way to check what the
+account can actually reach, and a default chosen without checking would be exactly the
+kind of unverified claim this queue exists to prevent. `gpt-4o-mini` is a reasonable
+starting point to try, but it is written here as a suggestion, not as a measured fact
+about the account.
+
 ---
 
 ## 4. Time is predicted; quality is measured

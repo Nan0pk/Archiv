@@ -17,6 +17,7 @@ from archiv.evaluation_config import (
     mark_for_evaluation,
 )
 from archiv.model_adapter import (
+    REMOTE_EVALUATION_ENDPOINT,
     ModelConfig,
     build_model_adapter,
     load_model_config,
@@ -183,7 +184,7 @@ def model_test_command(
         raise typer.Exit(code=1)
 
     start_time = time.monotonic()
-    adapter = build_model_adapter(config)
+    adapter = build_model_adapter(config, home)
     try:
         response = adapter.complete("Respond with the single word PONG.")
         duration_ms = round((time.monotonic() - start_time) * 1000, 2)
@@ -322,3 +323,65 @@ def evaluation_disable_command(
         return
     typer.echo("Evaluation mark removed.")
     typer.echo("Nothing in this archive will be sent to a model outside this machine.")
+
+
+@model_app.command("configure-remote-evaluation")
+def model_configure_remote_evaluation_command(
+    model: Annotated[str, typer.Option("--model", help="Model name at the provider.")],
+    api_key_env: Annotated[
+        str,
+        typer.Option(
+            "--api-key-env",
+            help="Name of the environment variable holding the API key. The key itself "
+            "is never written to disk.",
+        ),
+    ],
+    endpoint: Annotated[
+        str,
+        typer.Option("--endpoint", help="Provider base URL, without an API path."),
+    ] = REMOTE_EVALUATION_ENDPOINT,
+    timeout: Annotated[int, typer.Option("--timeout", min=1, max=3600)] = 120,
+    home: Annotated[
+        Path | None,
+        typer.Option("--home", file_okay=False, resolve_path=True),
+    ] = None,
+    json_output: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Point Archiv at a model outside this machine, for evaluation without local hardware.
+
+    This only records the policy. Nothing is sent anywhere unless the archive also
+    carries the evaluation mark from `archiv model evaluation enable`.
+    """
+
+    try:
+        config = ModelConfig(
+            adapter="remote-evaluation",
+            endpoint=endpoint,
+            model=model,
+            api_key_env=api_key_env,
+            timeout_seconds=timeout,
+        )
+        saved_path = save_model_config(config, home)
+    except Exception as error:
+        typer.echo(f"configuration failed: {error}", err=True)
+        raise typer.Exit(code=1) from error
+
+    payload = {
+        "schema_version": "1",
+        "status": "configured",
+        "config_path": str(saved_path),
+        "config": config.model_dump(mode="json"),
+    }
+    if json_output:
+        _emit_json(payload)
+        return
+
+    typer.echo(f"Configured a model outside this machine: {config.model}")
+    typer.echo(f"Endpoint: {config.endpoint}")
+    typer.echo(f"API key read at call time from: {config.api_key_env}")
+    typer.echo(f"Config saved to: {saved_path}")
+    typer.echo("")
+    typer.echo(
+        "Nothing is sent anywhere until this archive is also marked for evaluation with "
+        "'archiv model evaluation enable'."
+    )
