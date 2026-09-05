@@ -73,5 +73,6 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 [tool.pyright]
 include = ["src", "tests"]
 stubPath = "typings"
+extraPaths = ["scripts"]
 pythonVersion = "3.12"
 typeCheckingMode = "strict"

@@ -590,6 +590,7 @@ Also: [Code of Conduct](CODE_OF_CONDUCT.md) ·
 - [Public repository policy](docs/public-repository-policy.md)
 - [Definition of done](docs/definition-of-done.md)
 - [Roadmap](docs/roadmap.md)
+- [Work queue](docs/plan/README.md)
 
 </details>
 
