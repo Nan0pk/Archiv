@@ -5,6 +5,8 @@ byte-for-byte under their content hash, everything else is a rebuildable derivat
 no answer is reported unless an independent validator confirms it.
 
 > **Models propose. Validators decide whether work succeeded.**
+>
+> **And whatever is reported, it is reported in plain words.**
 
 This file is the entry point for any session — human or AI — picking up work on this
 repository. Read it first, then follow the resume procedure below.
@@ -105,6 +107,23 @@ re-planning, not an exception.
   working with no vision stack and no weights.
 - Originals are immutable. Validation happens before `_store_original`, so rejected
   material can never create or replace a canonical original.
+
+**Language**
+
+- Write in plain English. This covers everything a person reads: chat replies, pull
+  request text, commit messages, and code comments.
+- Never use jargon, acronyms, or internal shorthand in place of saying what actually
+  happened. This is not a style preference. Jargon hides problems: a reader who cannot
+  tell whether something worked cannot catch a mistake, and neither can the person who
+  wrote it. This repository exists because work was reported as finished when it was
+  not — see the milestone failure recorded under **Evidence** above. Unclear writing is
+  how that happens.
+- The only exceptions: the reader used the term first, or asked for it.
+- Identifiers still belong in the text. Step numbers, file paths, command names and test
+  names are how a reader finds the thing being discussed. Name the thing in ordinary
+  words, then point at it. `S03` on its own is not a sentence.
+- State plainly what failed, what was skipped, and what is uncertain. A passing check is
+  not a result — say what the result was.
 
 **Process**
 
