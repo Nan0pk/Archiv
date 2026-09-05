@@ -16,6 +16,7 @@ from archiv.contracts import RunStatus
 from archiv.doctor import diagnostics_report, doctor_report, save_diagnostics
 from archiv.executor.source_marker import run_source_marker
 from archiv.format_matrix_cli import register_format_matrix_command
+from archiv.images.cli import register_image_commands
 from archiv.ingestion import ingest_file, rebuild_derived
 from archiv.ingestion.formats import UnsupportedFormatError, suffix_for
 from archiv.model_cli import model_app
@@ -36,6 +37,7 @@ register_source_location_command(app)
 register_format_matrix_command(app)
 register_ocr_benchmark_command(app)
 register_ui_command(app)
+register_image_commands(app)
 
 
 @app.command()
