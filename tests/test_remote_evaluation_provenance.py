@@ -183,10 +183,18 @@ def test_no_remote_ask_can_produce_an_unstamped_result(
     ]
     assert len(endings) >= 6, "expected every terminal branch to build an AskRunResult"
     for call in endings:
-        supplied = {keyword.arg for keyword in call.keywords}
+        supplied = {keyword.arg: keyword.value for keyword in call.keywords}
         assert "model" in supplied, (
             f"the AskRunResult at grounding.py:{call.lineno} does not carry the model "
             "config, so its provenance would be missing from the run evidence"
+        )
+        # And it must be the loaded configuration, not some other value that merely
+        # occupies the argument. Passing a freshly-built default here would type-check,
+        # serialise cleanly, and silently report every remote answer as local.
+        assert ast.unparse(supplied["model"]) == "model_config", (
+            f"the AskRunResult at grounding.py:{call.lineno} passes "
+            f"{ast.unparse(supplied['model'])!r} as its model rather than the "
+            "configuration this run actually loaded"
         )
 
     # Now exercise the endings that can be reached without a live model, and confirm
@@ -211,7 +219,11 @@ def test_no_remote_ask_can_produce_an_unstamped_result(
     assert "not marked for evaluation" in shown.output
     assert "outside this machine" in shown.output
 
-    # 2. Succeeded with no evidence found, which never calls a model.
+    # 2. Succeeded with no evidence found, which never calls a model. The transport is
+    # stubbed anyway rather than relying on that branch never being reached: a test that
+    # is safe only because of what it happens not to do is one refactor away from
+    # opening a real connection.
+    monkeypatch.setattr("archiv.grounding.build_model_adapter", stub_builder(good_reply()))
     no_evidence = run_grounded_ask("a phrase that appears in no document", home=home)
     assert no_evidence.status == RunStatus.SUCCEEDED
     assert no_evidence.model.provenance == "remote-evaluation"
@@ -261,3 +273,117 @@ def test_the_desktop_console_carries_the_stamp_too(
     assert inspect_run_output("{}").model_provenance is None
     assert inspect_run_output("not json").model_provenance is None
     assert inspect_run_output(json.dumps({"model": "a string"})).model_provenance is None
+
+
+def test_the_warning_never_claims_something_that_did_not_happen(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The banner describes the archive, not a past event, so it is true on every ending.
+
+    An earlier version asserted "the text of the sources below was sent to ..." as a
+    fact and printed it unchanged on the run that finds no evidence and never calls a
+    model -- announcing a privacy event that had not happened, directly above an empty
+    source list. In the one piece of text this step exists to make truthful, that is the
+    worst possible defect.
+    """
+
+    home = prepare_remote_archive(tmp_path, monkeypatch)
+    monkeypatch.setattr("archiv.grounding.build_model_adapter", stub_builder(good_reply()))
+
+    shown = runner.invoke(app, ["ask", "a phrase that appears in no document", "--home", str(home)])
+    assert shown.exit_code == 0
+    assert "NOT A LOCAL ANSWER" in shown.output
+    # It may say what this archive does. It may not say what this run did.
+    assert "was sent to" not in shown.output
+    assert "the answer was written by" not in shown.output
+    assert "the text of any source used to answer is sent there" in shown.output
+
+
+def test_a_failed_remote_run_still_warns_that_this_archive_reaches_outside(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The run that really did reach outside must not be the quiet one.
+
+    A remote run that reaches the model and gets an unusable reply used to print only
+    `ask failed: ...`, so the run where the archive's text genuinely left the machine
+    said nothing while runs that sent nothing showed the loudest possible banner.
+    """
+
+    home = prepare_remote_archive(tmp_path, monkeypatch)
+    monkeypatch.setattr("archiv.grounding.build_model_adapter", stub_builder("not json at all"))
+
+    failed = runner.invoke(app, ["ask", "unique fixture marker", "--home", str(home)])
+    assert failed.exit_code == 1
+    assert "NOT A LOCAL ANSWER" in failed.output
+    assert "ask failed:" in failed.output
+
+
+def test_a_refusal_does_not_get_the_banner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Nothing was sent -- that is the entire point of a refusal -- so a banner
+    announcing that this archive reaches outside would contradict the refusal itself."""
+
+    home = tmp_path / "unmarked"
+    corpus = tmp_path / "corpus"
+    create_sample_vault(corpus)
+    runner.invoke(app, ["add", str(corpus), "--home", str(home)])
+    save_model_config(remote_config(), home)
+    monkeypatch.setenv(API_KEY_ENV, "a-secret")
+
+    refused = runner.invoke(app, ["ask", "unique fixture marker", "--home", str(home)])
+    assert refused.exit_code == 1
+    assert "NOT A LOCAL ANSWER" not in refused.output
+    assert "not marked for evaluation" in refused.output
+
+
+def test_the_remediation_command_carries_the_archive_it_applies_to(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Telling someone to run a command that would act on a different archive is worse
+    than telling them nothing."""
+
+    home = prepare_remote_archive(tmp_path, monkeypatch)
+    monkeypatch.setattr("archiv.grounding.build_model_adapter", stub_builder(good_reply()))
+
+    shown = runner.invoke(app, ["ask", "unique fixture marker", "--home", str(home)])
+    assert f"archiv model evaluation disable --home {home}" in shown.output
+
+    # And when the mark came from the environment rather than the archive, the command
+    # alone would not switch it off, so the banner has to say so.
+    from archiv.evaluation_config import ENV_OVERRIDE
+
+    monkeypatch.setenv(ENV_OVERRIDE, "1")
+    with_override = runner.invoke(app, ["ask", "unique fixture marker", "--home", str(home)])
+    assert ENV_OVERRIDE in with_override.output
+    assert "Unset it as well" in with_override.output
+
+
+def test_the_default_desktop_window_has_a_notice_and_reads_the_origin() -> None:
+    """The window `archiv ui` opens is the one people use, and it shows raw JSON.
+
+    Without this the origin arrives buried inside that dump. The wiring itself needs a
+    display to drive, so what is asserted here is the text it shows and the fact that it
+    reads the origin from the same place the diagnostic console does.
+    """
+
+    # Read rather than imported: this module needs tkinter, which is not installed
+    # everywhere the test suite runs, and the notice must be checked regardless.
+    source_path = Path(__file__).parent.parent / "src" / "archiv" / "ui" / "tk_product.py"
+    source = source_path.read_text(encoding="utf-8")
+
+    tree = ast.parse(source)
+    notice = next(
+        ast.literal_eval(node.value)
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == "_NOT_LOCAL_NOTICE"
+            for target in node.targets
+        )
+    )
+    assert "NOT A LOCAL ANSWER" in notice
+    assert "computers you do not control" in notice
+    assert "archiv model evaluation disable" in notice
+    assert "was sent to" not in notice, "same rule as the terminal banner: no past-tense claim"
+
+    assert "inspect_run_output" in source
+    assert "model_provenance" in source

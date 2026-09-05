@@ -22,6 +22,7 @@ from archiv.contracts import (
     RunStatus,
     SearchIndexBuild,
 )
+from archiv.evaluation_config import ENV_OVERRIDE as EVALUATION_ENV_OVERRIDE
 from archiv.grounding import run_grounded_ask
 from archiv.ingestion import (
     PreparedCandidate,
@@ -194,23 +195,40 @@ def _provenance_phrase(provenance: str) -> str:
     return "a model running on this machine"
 
 
-def _echo_provenance_banner(model: ModelConfig) -> None:
-    """Say, before the answer, when the answer did not come from this machine.
+def _echo_provenance_banner(model: ModelConfig, home: Path | None = None) -> None:
+    """Say, before the answer, when answers in this archive do not come from this machine.
 
     Only shown for a non-local model. Printing a banner on every local answer would
     train people to skip it, which would make it useless on the one run that matters.
+
+    The wording describes the archive's configuration, not what this particular run did.
+    That is deliberate. An earlier version asserted "the text of the sources below was
+    sent to ..." as a fact, and printed it unchanged on the run that finds no evidence
+    and never calls a model at all -- announcing a privacy event that had not happened,
+    directly above an empty source list. A standing statement about how this archive is
+    configured is true on every ending, which is the only way this text can be trusted.
     """
 
     if model.provenance != "remote-evaluation":
         return
+    disable = "archiv model evaluation disable"
+    if home is not None:
+        disable = f"{disable} --home {home}"
     typer.echo("=" * 72)
     typer.echo("NOT A LOCAL ANSWER")
     typer.echo(
-        "This archive is in evaluation mode. The text of the sources below was sent to "
-        f"{model.endpoint or 'a remote service'} and the answer was written by "
-        f"{model.model or 'a remote model'}, running on computers you do not control."
+        "This archive is in evaluation mode: answers come from "
+        f"{model.model or 'a remote model'} running at "
+        f"{model.endpoint or 'a remote service'}, on computers you do not control, and "
+        "the text of any source used to answer is sent there."
     )
-    typer.echo("Run 'archiv model evaluation disable' to stop this archive doing that.")
+    typer.echo(f"Turn it off with:  {disable}")
+    if os.environ.get(EVALUATION_ENV_OVERRIDE):
+        typer.echo(
+            f"Note: {EVALUATION_ENV_OVERRIDE} is set in this environment, which turns "
+            "evaluation mode on for this process regardless of the archive's own mark. "
+            "Unset it as well."
+        )
     typer.echo("=" * 72)
     typer.echo("")
 
@@ -540,6 +558,13 @@ def register_user_commands(app: typer.Typer) -> tuple[Callable[..., None], ...]:
             return
 
         if run_result.status is not RunStatus.SUCCEEDED:
+            # A refusal is the one failure that needs no banner: nothing was sent, that
+            # is the whole point of it, and its own message says so. Every other failure
+            # may well have sent the archive's text before going wrong, so the warning
+            # belongs there too -- otherwise the run that really did reach outside says
+            # nothing while quieter runs shout.
+            if run_result.status is not RunStatus.BLOCKED_BY_POLICY:
+                _echo_provenance_banner(run_result.model, home)
             err_msg = "; ".join(run_result.errors) or str(run_result.status)
             typer.echo(f"ask failed: {err_msg}", err=True)
             raise typer.Exit(code=1)
@@ -547,7 +572,7 @@ def register_user_commands(app: typer.Typer) -> tuple[Callable[..., None], ...]:
         # Above the answer, not below it. A warning that documents left the machine is
         # not a footnote -- by the time a reader reaches the bottom they have already
         # read and believed the answer.
-        _echo_provenance_banner(run_result.model)
+        _echo_provenance_banner(run_result.model, home)
 
         typer.echo(f"Question: {query}")
         typer.echo("")

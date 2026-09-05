@@ -10,6 +10,7 @@ from tkinter import TclError, filedialog, messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
 
 from archiv.doctor import diagnostics_report, save_diagnostics
+from archiv.ui.outputs import inspect_run_output
 from archiv.ui.product import (
     DesktopState,
     check_prerequisites,
@@ -25,6 +26,18 @@ from archiv.ui.product import (
 from archiv.ui.runner import ConsoleRunner, console_executable_argv
 
 _POLL_MS = 100
+
+
+_NOT_LOCAL_NOTICE = (
+    "\n"
+    "========================================================================\n"
+    "NOT A LOCAL ANSWER\n"
+    "This archive is in evaluation mode: answers come from a model running on\n"
+    "computers you do not control, and the text of any source used to answer\n"
+    "is sent there.\n"
+    "Turn it off with:  archiv model evaluation disable\n"
+    "========================================================================\n"
+)
 
 
 class ProductApp:
@@ -302,7 +315,14 @@ class ProductApp:
             self.root.after(_POLL_MS, self._poll)
             return
         outcome = self.runner.wait(timeout=0)
-        self.status.set("Finished" if outcome.succeeded else "Needs attention — review details")
+        state = "Finished" if outcome.succeeded else "Needs attention — review details"
+        # This is the window people actually open. It shows the run's raw JSON, so
+        # without this a remote answer arrives looking exactly like a local one with
+        # the origin buried inside the dump. Say it in words, where they are looking.
+        if inspect_run_output(outcome.output).model_provenance == "remote-evaluation":
+            self._append(_NOT_LOCAL_NOTICE)
+            state = f"{state} — NOT A LOCAL ANSWER: this archive is in evaluation mode"
+        self.status.set(state)
 
     def _on_output(self, chunk: bytes) -> None:
         if not hasattr(self, "output"):
