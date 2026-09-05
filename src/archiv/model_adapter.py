@@ -15,6 +15,8 @@ from pydantic import Field, model_validator
 from archiv.contracts import StrictModel
 from archiv.storage.layout import ArchivLayout
 
+Provenance = Literal["local-loopback", "remote-evaluation"]
+
 
 class ModelConfig(StrictModel):
     """Persisted model policy. Only disabled or loopback HTTP is allowed."""
@@ -25,14 +27,31 @@ class ModelConfig(StrictModel):
     model: str | None = None
     api_key_env: str | None = None
     timeout_seconds: int = Field(default=120, ge=1, le=3600)
+    provenance: Provenance = "local-loopback"
+    """Where inference happens. Derived from ``adapter``; never taken from input."""
 
     @model_validator(mode="after")
     def validate_adapter_fields(self) -> ModelConfig:
-        if self.adapter == "disabled":
-            if any(value is not None for value in (self.endpoint, self.model, self.api_key_env)):
-                raise ValueError("disabled adapter must not declare endpoint, model, or API key")
-            return self
+        return self._apply_adapter_rules()
 
+    def _apply_adapter_rules(self) -> ModelConfig:
+        # One branch per adapter literal, and a raise for anything unhandled. A
+        # fallthrough here would silently apply the loopback rules to a future
+        # adapter -- or, once relaxed to fit one, silently exempt the local
+        # adapter from them. The boundary has to hold by construction.
+        if self.adapter == "disabled":
+            self._validate_disabled()
+            return self._derive_provenance("local-loopback")
+        if self.adapter == "openai-compatible-loopback":
+            self._validate_loopback()
+            return self._derive_provenance("local-loopback")
+        raise ValueError(f"unhandled model adapter: {self.adapter!r}")
+
+    def _validate_disabled(self) -> None:
+        if any(value is not None for value in (self.endpoint, self.model, self.api_key_env)):
+            raise ValueError("disabled adapter must not declare endpoint, model, or API key")
+
+    def _validate_loopback(self) -> None:
         if not self.endpoint or not self.model:
             raise ValueError("loopback adapter requires endpoint and model")
         parsed = urlparse(self.endpoint)
@@ -48,6 +67,16 @@ class ModelConfig(StrictModel):
             raise ValueError("local model endpoint must be a server root without an API path")
         if self.api_key_env is not None and not self.api_key_env.isidentifier():
             raise ValueError("api_key_env must be a valid environment-variable name")
+
+    def _derive_provenance(self, derived: Provenance) -> ModelConfig:
+        """Set provenance from the adapter, refusing a caller-supplied contradiction."""
+
+        if "provenance" in self.model_fields_set and self.provenance != derived:
+            raise ValueError(
+                f"provenance is derived from the adapter and must not be supplied: "
+                f"adapter {self.adapter!r} implies {derived!r}, not {self.provenance!r}"
+            )
+        self.provenance = derived
         return self
 
 
@@ -133,6 +162,10 @@ def save_model_config(config: ModelConfig, home: Path | None = None) -> Path:
 
 
 def build_model_adapter(config: ModelConfig) -> ModelAdapter:
+    # Exhaustive for the same reason the validator is: a new adapter literal must
+    # fail loudly here rather than inherit the loopback client by fallthrough.
     if config.adapter == "disabled":
         return DisabledModelAdapter()
-    return OpenAICompatibleLoopbackAdapter(config)
+    if config.adapter == "openai-compatible-loopback":
+        return OpenAICompatibleLoopbackAdapter(config)
+    raise ValueError(f"unhandled model adapter: {config.adapter!r}")
