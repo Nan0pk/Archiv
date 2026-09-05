@@ -10,6 +10,12 @@ from typing import Annotated
 import typer
 from pydantic import BaseModel
 
+from archiv.evaluation_config import (
+    ACKNOWLEDGEMENT,
+    clear_evaluation_mark,
+    load_evaluation_config,
+    mark_for_evaluation,
+)
 from archiv.model_adapter import (
     ModelConfig,
     build_model_adapter,
@@ -20,6 +26,11 @@ from archiv.model_adapter import (
 model_app = typer.Typer(
     no_args_is_help=True, help="Manage local OpenAI-compatible model configuration."
 )
+evaluation_app = typer.Typer(
+    no_args_is_help=True,
+    help="Mark this archive as an evaluation archive, where documents may leave this machine.",
+)
+model_app.add_typer(evaluation_app, name="evaluation")
 
 
 def _emit_json(value: object) -> None:
@@ -230,3 +241,84 @@ def model_disable_command(
         return
 
     typer.echo(f"Model integration disabled. Config saved to: {saved_path}")
+
+
+@evaluation_app.command("status")
+def evaluation_status_command(
+    home: Annotated[
+        Path | None,
+        typer.Option("--home", file_okay=False, resolve_path=True),
+    ] = None,
+    json_output: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Show whether this archive is marked for evaluation, and what was agreed to."""
+
+    config = load_evaluation_config(home)
+    if json_output:
+        _emit_json(config)
+        return
+
+    if not config.evaluation:
+        typer.echo("Evaluation: not marked")
+        typer.echo("Nothing in this archive is sent to a model outside this machine.")
+        return
+
+    typer.echo("Evaluation: MARKED")
+    typer.echo("Documents in this archive may be sent to a model outside this machine.")
+    typer.echo(f"Agreed at: {config.acknowledged_at}")
+    typer.echo(f"Agreed to: {config.acknowledgement}")
+
+
+@evaluation_app.command("enable")
+def evaluation_enable_command(
+    acknowledge: Annotated[
+        bool,
+        typer.Option(
+            "--acknowledge-documents-leave-this-machine",
+            help="Required. Confirms you understand documents are sent off this machine.",
+        ),
+    ] = False,
+    home: Annotated[
+        Path | None,
+        typer.Option("--home", file_okay=False, resolve_path=True),
+    ] = None,
+    json_output: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Mark this archive for evaluation. Requires the explicit acknowledgement flag."""
+
+    # Deliberately not a bare --yes. The flag has to name the consequence, so it cannot
+    # be typed by reflex or copied from an unrelated command.
+    if not acknowledge:
+        typer.echo(ACKNOWLEDGEMENT, err=True)
+        typer.echo("", err=True)
+        typer.echo(
+            "Re-run with --acknowledge-documents-leave-this-machine to confirm.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    config = mark_for_evaluation(home)
+    if json_output:
+        _emit_json(config)
+        return
+    typer.echo("This archive is now marked for evaluation.")
+    typer.echo("Documents in it may be sent to a model running outside this machine.")
+    typer.echo(f"Agreed at: {config.acknowledged_at}")
+
+
+@evaluation_app.command("disable")
+def evaluation_disable_command(
+    home: Annotated[
+        Path | None,
+        typer.Option("--home", file_okay=False, resolve_path=True),
+    ] = None,
+    json_output: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Remove the evaluation mark, so nothing may be sent off this machine again."""
+
+    config = clear_evaluation_mark(home)
+    if json_output:
+        _emit_json(config)
+        return
+    typer.echo("Evaluation mark removed.")
+    typer.echo("Nothing in this archive will be sent to a model outside this machine.")
