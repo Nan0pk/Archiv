@@ -272,6 +272,20 @@ def _row_position(locator: dict[str, object], kind: str) -> tuple[str, int, int]
     coordinates (``{"sheet", "row", "column"}``, sometimes plus ``"formula"``).
     """
 
+    if kind == "pdf":
+        page = locator.get("page")
+        t_idx = locator.get("table_index")
+        row = locator.get("row")
+        col = locator.get("column")
+        if (
+            isinstance(page, int)
+            and isinstance(t_idx, int)
+            and isinstance(row, int)
+            and isinstance(col, int)
+        ):
+            return f"page_{page}_table_{t_idx}", row, col
+        return None
+
     if kind not in _SPREADSHEET_KINDS:
         return None
     sheet = locator.get("sheet")
@@ -347,7 +361,7 @@ def _row_aware_phrase_matches(
                 continue
             cells.sort(key=lambda entry: entry[0])
             row_text = " ".join(str(cell_row["text"]) for _, cell_row in cells).casefold()
-            if phrase not in row_text:
+            if phrase.casefold() not in row_text:
                 continue
             _, best_row = max(
                 cells,

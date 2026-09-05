@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import csv
 import io
 import json
@@ -506,11 +507,35 @@ def _render_pdf_page(
     *,
     page: int,
     root: Path,
-    executable: str,
+    executable: str | None,
 ) -> tuple[Path, dict[str, object]]:
     relative = Path("previews") / "pages" / f"page-{page:04d}.png"
     image = root / relative
     image.parent.mkdir(parents=True, exist_ok=True)
+
+    if executable is None:
+        with contextlib.suppress(Exception):
+            import pypdfium2 as pdfium  # pyright: ignore[reportMissingTypeStubs]
+
+            doc = pdfium.PdfDocument(original)
+            if 1 <= page <= len(doc):
+                p_obj = doc[page - 1]
+                scale = max(1, int(RENDER_DPI / 72.0))
+                pil_img = p_obj.render(scale=scale).to_pil()  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+                pil_img.save(image, format="PNG")  # pyright: ignore[reportUnknownMemberType]
+                width, height = _image_dimensions(image)
+                return image, {
+                    "path": relative.as_posix(),
+                    "sha256": sha256_file(image),
+                    "width": width,
+                    "height": height,
+                    "dpi": RENDER_DPI,
+                    "sandbox": "none",
+                    "renderer": "pypdfium2",
+                    "warnings": [],
+                }
+        raise VisualOcrError("no PDF page renderer (pdftoppm or pypdfium2) available")
+
     _, stderr, sandbox = _run(
         [
             executable,
@@ -678,23 +703,39 @@ def run_visual_ocr(
             manifest["reason"] = "native text is available for every PDF page"
             return _finish(root, manifest, [])
         renderer = shutil.which("pdftoppm")
-        if renderer is None:
-            manifest["reason"] = "pdftoppm is required for image-only PDF pages"
+        pdfium_mod = None
+        with contextlib.suppress(ImportError):
+            import pypdfium2 as _pdfium  # pyright: ignore[reportMissingTypeStubs]
+
+            pdfium_mod = _pdfium
+
+        if renderer is None and pdfium_mod is None:
+            manifest["reason"] = "pdftoppm or pypdfium2 is required for image-only PDF pages"
             return _finish(root, manifest, [])
-        try:
-            renderer_version, renderer_sandbox = _tool_version(renderer, ["-v"], root=root)
-        except VisualOcrError as error:
-            manifest.update({"status": "failed", "reason": str(error)})
-            return _finish(root, manifest, [], error=str(error))
-        manifest.update(
-            {
-                "renderer": "pdftoppm",
-                "renderer_version": renderer_version,
-                "renderer_executable_sha256": _executable_hash(renderer),
-                "renderer_sandbox": renderer_sandbox,
-                "render_dpi": RENDER_DPI,
-            }
-        )
+
+        if renderer is not None:
+            try:
+                renderer_version, renderer_sandbox = _tool_version(renderer, ["-v"], root=root)
+            except VisualOcrError as error:
+                manifest.update({"status": "failed", "reason": str(error)})
+                return _finish(root, manifest, [], error=str(error))
+            manifest.update(
+                {
+                    "renderer": "pdftoppm",
+                    "renderer_version": renderer_version,
+                    "renderer_executable_sha256": _executable_hash(renderer),
+                    "renderer_sandbox": renderer_sandbox,
+                    "render_dpi": RENDER_DPI,
+                }
+            )
+        else:
+            manifest.update(
+                {
+                    "renderer": "pypdfium2",
+                    "renderer_version": getattr(pdfium_mod, "__version__", "5.x"),
+                    "render_dpi": RENDER_DPI,
+                }
+            )
         for page in empty_pages:
             try:
                 image, render = _render_pdf_page(

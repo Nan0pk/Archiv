@@ -5,10 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from docx import Document
-from pypdf import PdfReader
 
 from archiv.contracts import NormalizedDocument, NormalizedSegment
-from archiv.ingestion.limits import check_native_pages
+from archiv.ingestion.normalize_pdf import normalize_pdf
+
+__all__ = ["normalize_docx", "normalize_pdf", "normalize_text"]
 
 
 def normalize_text(
@@ -32,32 +33,6 @@ def normalize_text(
         source_name=source_name,
         segments=segments,
         metadata={"encoding": "utf-8"},
-    )
-
-
-def normalize_pdf(
-    path: Path,
-    digest: str,
-    *,
-    source_name: str,
-    media_type: str,
-) -> NormalizedDocument:
-    reader = PdfReader(path, strict=True)
-    check_native_pages(len(reader.pages))
-    segments = [
-        NormalizedSegment(
-            locator={"page": index},
-            text=(page.extract_text() or "").strip(),
-        )
-        for index, page in enumerate(reader.pages, 1)
-    ]
-    return NormalizedDocument(
-        object_sha256=digest,
-        media_type=media_type,
-        kind="pdf",
-        source_name=source_name,
-        segments=segments,
-        metadata={"pages": len(reader.pages)},
     )
 
 
