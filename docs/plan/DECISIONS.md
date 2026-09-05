@@ -58,9 +58,21 @@ client shape rather than adding a vendor SDK.
   drop-in property: when hardware arrives, only the endpoint and the policy change.
 - No new default dependency. `pip install archiv-core` keeps working unchanged.
 
-**Open.** The specific default provider and model. The author has indicated a provider
-other than Anthropic but has not yet named it; step S04 records the choice when made.
-Nothing else in the plan is blocked by it.
+**Provider chosen: OpenAI.** The stand-in calls
+`https://api.openai.com/v1/chat/completions`. This is the reference implementation of the
+wire format the adapter already targets, so it needs no special-casing, and the eventual
+local runtime (Ollama) speaks the same format — the switch is an endpoint change, not a
+code change.
+
+The API key follows the mechanism the loopback adapter already uses
+(`model_adapter.py:26`, `:78-85`): configuration stores `api_key_env`, the **name** of an
+environment variable, and the adapter reads the value at call time. The secret is never
+written into `config/model.json`, never committed, and never appears in a backup, export
+or diagnostics bundle. `config/` is durable and travels in backups
+(`archive.py:25`), which is exactly why the secret must not live there.
+
+The specific model name is a configuration field, not a code constant. Pick it at S04
+from what the account has access to, and record it in that step's pull request.
 
 ---
 
