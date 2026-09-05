@@ -1,0 +1,521 @@
+{
+  "schema_version": "1",
+  "plan_id": "ARCHIV-PLAN-1",
+  "description": "Ordered, self-verifying work queue. Progress is derived by running each step's acceptance check, never by reading a status line. One step is one pull request.",
+  "baseline_commit": "d9a9b8d",
+  "phases": [
+    {
+      "id": "A",
+      "title": "Make the product testable without local hardware",
+      "goal": "archiv ask and archiv report can be exercised end to end against a clearly-labelled remote model, with local runtime predicted from a measured workload fingerprint. The loopback privacy boundary is pinned by tests before the remote adapter exists."
+    },
+    {
+      "id": "B",
+      "title": "Stop the tool overclaiming",
+      "goal": "Every name, score and confidence value shown to a user is backed by a measurement or removed. The two genuinely useful capabilities in the September batch keep working under honest names."
+    },
+    {
+      "id": "C",
+      "title": "Recover the content being silently dropped",
+      "goal": "Word, Excel and PowerPoint files yield their tables, notes, computed values and hyperlinks. Parity with the OpenDocument reader, which already does this correctly, is the acceptance test."
+    },
+    {
+      "id": "D",
+      "title": "Audio and video",
+      "goal": "Recordings from phones and dictaphones are ingested and transcribed with timestamp citations. Video is decomposed into transcript, keyframes and metadata using the existing containment model."
+    },
+    {
+      "id": "E",
+      "title": "Faces and identity, properly",
+      "goal": "A real detector, name candidates only from evidence a user can open, and entity extraction that works in Arabic script."
+    }
+  ],
+  "acceptance_kinds": {
+    "pytest": "targets are pytest node ids; the step is complete when all pass",
+    "artifact": "targets are repo-relative paths; the step is complete when all exist and parse as valid JSON where the suffix is .json",
+    "command": "targets are shell commands; the step is complete when all exit zero"
+  },
+  "steps": [
+    {
+      "id": "S00",
+      "phase": "A",
+      "title": "Plan scaffolding and the status tool",
+      "doc": "docs/plan/steps/S00.md",
+      "detail": "full",
+      "depends_on": [],
+      "acceptance": {
+        "kind": "pytest",
+        "targets": [
+          "tests/test_plan_status.py::test_queue_json_matches_queue_markdown",
+          "tests/test_plan_status.py::test_status_tool_reports_first_incomplete_step",
+          "tests/test_plan_status.py::test_status_tool_detects_regression_in_a_completed_step",
+          "tests/test_plan_status.py::test_every_step_has_a_doc_and_a_declared_acceptance_check"
+        ]
+      }
+    },
+    {
+      "id": "S01",
+      "phase": "A",
+      "title": "Pin the loopback privacy boundary with tests before changing anything",
+      "doc": "docs/plan/steps/S01.md",
+      "detail": "full",
+      "depends_on": ["S00"],
+      "acceptance": {
+        "kind": "pytest",
+        "targets": [
+          "tests/test_model_boundary.py::test_https_endpoint_is_rejected",
+          "tests/test_model_boundary.py::test_non_loopback_host_is_rejected",
+          "tests/test_model_boundary.py::test_embedded_credentials_query_and_fragment_are_rejected",
+          "tests/test_model_boundary.py::test_endpoint_with_api_path_is_rejected",
+          "tests/test_model_boundary.py::test_disabled_adapter_forbids_endpoint_model_and_key",
+          "tests/test_model_boundary.py::test_disabled_adapter_refuses_to_complete_without_fallback"
+        ]
+      }
+    },
+    {
+      "id": "S02",
+      "phase": "A",
+      "title": "Add provenance to ModelConfig and branch dispatch on the adapter literal",
+      "doc": "docs/plan/steps/S02.md",
+      "detail": "full",
+      "depends_on": ["S01"],
+      "acceptance": {
+        "kind": "pytest",
+        "targets": [
+          "tests/test_model_boundary.py::test_unknown_adapter_value_raises_instead_of_falling_through",
+          "tests/test_model_boundary.py::test_provenance_is_derived_from_adapter_and_not_settable",
+          "tests/test_model_boundary.py::test_existing_model_json_without_provenance_still_loads"
+        ]
+      }
+    },
+    {
+      "id": "S03",
+      "phase": "A",
+      "title": "Evaluation-only archive marker with a raising opt-in check",
+      "doc": "docs/plan/steps/S03.md",
+      "detail": "full",
+      "depends_on": ["S02"],
+      "acceptance": {
+        "kind": "pytest",
+        "targets": [
+          "tests/test_evaluation_marker.py::test_missing_marker_means_not_an_evaluation_archive",
+          "tests/test_evaluation_marker.py::test_check_raises_with_remediation_naming_the_exact_command",
+          "tests/test_evaluation_marker.py::test_corrupt_marker_file_fails_closed",
+          "tests/test_evaluation_marker.py::test_marker_records_an_acknowledgement_timestamp"
+        ]
+      }
+    },
+    {
+      "id": "S04",
+      "phase": "A",
+      "title": "The remote evaluation adapter, refused unless the archive is marked",
+      "doc": "docs/plan/steps/S04.md",
+      "detail": "full",
+      "depends_on": ["S03"],
+      "acceptance": {
+        "kind": "pytest",
+        "targets": [
+          "tests/test_remote_evaluation_adapter.py::test_remote_adapter_requires_the_evaluation_marker",
+          "tests/test_remote_evaluation_adapter.py::test_remote_adapter_is_blocked_by_policy_without_the_marker",
+          "tests/test_remote_evaluation_adapter.py::test_remote_adapter_requires_an_api_key_environment_variable",
+          "tests/test_remote_evaluation_adapter.py::test_remote_adapter_fails_closed_with_no_network",
+          "tests/test_model_boundary.py::test_https_endpoint_is_rejected"
+        ]
+      }
+    },
+    {
+      "id": "S04A",
+      "phase": "A",
+      "title": "Structured-output robustness, so a backend swap fails loudly instead of quietly",
+      "doc": "docs/plan/steps/S04A.md",
+      "detail": "full",
+      "depends_on": ["S04"],
+      "acceptance": {
+        "kind": "pytest",
+        "targets": [
+          "tests/test_structured_output.py::test_backend_declares_whether_it_can_enforce_a_schema",
+          "tests/test_structured_output.py::test_unenforceable_schema_request_fails_loudly",
+          "tests/test_structured_output.py::test_invalid_json_is_retried_with_the_validation_error",
+          "tests/test_structured_output.py::test_retry_budget_is_bounded_and_recorded",
+          "tests/test_structured_output.py::test_schema_violation_and_valid_but_unsupported_are_counted_separately"
+        ]
+      }
+    },
+    {
+      "id": "S05",
+      "phase": "A",
+      "title": "Stamp the ask path with model origin",
+      "doc": "docs/plan/steps/S05.md",
+      "detail": "full",
+      "depends_on": ["S04"],
+      "acceptance": {
+        "kind": "pytest",
+        "targets": [
+          "tests/test_remote_evaluation_provenance.py::test_ask_result_json_records_remote_provenance",
+          "tests/test_remote_evaluation_provenance.py::test_ask_human_output_states_the_answer_is_not_local",
+          "tests/test_remote_evaluation_provenance.py::test_no_remote_ask_can_produce_an_unstamped_result"
+        ]
+      }
+    },
+    {
+      "id": "S06",
+      "phase": "A",
+      "title": "Stamp the report path, and fix the DOCX that always claims 'disabled'",
+      "doc": "docs/plan/steps/S06.md",
+      "detail": "full",
+      "depends_on": ["S05"],
+      "acceptance": {
+        "kind": "pytest",
+        "targets": [
+          "tests/test_remote_evaluation_provenance.py::test_report_manifest_records_model_origin",
+          "tests/test_remote_evaluation_provenance.py::test_generated_docx_provenance_section_states_the_true_origin",
+          "tests/test_remote_evaluation_provenance.py::test_generate_report_cli_no_longer_claims_disabled_when_a_model_ran",
+          "tests/test_remote_evaluation_provenance.py::test_mcp_generate_docx_records_its_true_model_identity"
+        ]
+      }
+    },
+    {
+      "id": "S07",
+      "phase": "A",
+      "title": "Pre-flight token count, projected cost, and a hard spend ceiling",
+      "doc": "docs/plan/steps/S07.md",
+      "detail": "full",
+      "depends_on": ["S04"],
+      "acceptance": {
+        "kind": "pytest",
+        "targets": [
+          "tests/test_remote_evaluation_cost.py::test_prompt_tokens_are_counted_before_any_request",
+          "tests/test_remote_evaluation_cost.py::test_run_exceeding_the_ceiling_is_refused_before_the_network_call",
+          "tests/test_remote_evaluation_cost.py::test_cumulative_spend_is_recorded_per_archive",
+          "tests/test_remote_evaluation_cost.py::test_projected_cost_is_shown_before_a_remote_run"
+        ]
+      }
+    },
+    {
+      "id": "S08",
+      "phase": "A",
+      "title": "archiv model calibrate — measure the workload and the remote model",
+      "doc": "docs/plan/steps/S08.md",
+      "detail": "full",
+      "depends_on": ["S07"],
+      "acceptance": {
+        "kind": "pytest",
+        "targets": [
+          "tests/test_model_calibration.py::test_calibrate_emits_a_workload_fingerprint",
+          "tests/test_model_calibration.py::test_calibration_json_carries_provenance_and_honest_negatives",
+          "tests/test_model_calibration.py::test_calibration_output_is_redacted_through_the_private_key_allowlist",
+          "tests/test_model_calibration.py::test_quality_gates_are_measured_never_predicted"
+        ]
+      }
+    },
+    {
+      "id": "S09",
+      "phase": "A",
+      "title": "Predict local runtime from cited hardware profiles, labelled estimated or measured",
+      "doc": "docs/plan/steps/S09.md",
+      "detail": "full",
+      "depends_on": ["S08"],
+      "acceptance": {
+        "kind": "pytest",
+        "targets": [
+          "tests/test_model_calibration.py::test_every_hardware_profile_row_cites_a_source_and_a_date",
+          "tests/test_model_calibration.py::test_predictions_from_published_figures_are_labelled_estimated",
+          "tests/test_model_calibration.py::test_calibrate_local_overwrites_a_row_as_measured",
+          "tests/test_model_calibration.py::test_prediction_lands_within_the_stated_band_for_a_known_fingerprint"
+        ]
+      }
+    },
+    {
+      "id": "S10",
+      "phase": "B",
+      "title": "Rename image search to find-similar and delete the text embedder",
+      "doc": "docs/plan/steps/S10.md",
+      "detail": "stub",
+      "depends_on": ["S00"],
+      "acceptance": {
+        "kind": "pytest",
+        "targets": [
+          "tests/test_image_similarity.py::test_no_text_query_surface_remains",
+          "tests/test_image_similarity.py::test_image_to_image_similarity_still_works",
+          "tests/test_image_similarity.py::test_results_below_the_match_floor_return_nothing"
+        ]
+      }
+    },
+    {
+      "id": "S11",
+      "phase": "B",
+      "title": "Faces to clustering only; remove filename name guessing; add negative fixtures",
+      "doc": "docs/plan/steps/S11.md",
+      "detail": "stub",
+      "depends_on": ["S10"],
+      "acceptance": {
+        "kind": "pytest",
+        "targets": [
+          "tests/test_faces_negative_fixtures.py::test_no_detections_on_vase_table_sunset_or_wall",
+          "tests/test_faces_negative_fixtures.py::test_no_name_candidate_is_ever_derived_from_a_filename"
+        ]
+      }
+    },
+    {
+      "id": "S12",
+      "phase": "B",
+      "title": "Graph person becomes candidate_mention; remove hardcoded confidences",
+      "doc": "docs/plan/steps/S12.md",
+      "detail": "stub",
+      "depends_on": ["S11"],
+      "acceptance": {
+        "kind": "pytest",
+        "targets": [
+          "tests/test_entity_graph_precision.py::test_known_false_positives_are_not_typed_person",
+          "tests/test_entity_graph_precision.py::test_no_unmeasured_confidence_value_reaches_user_output"
+        ]
+      }
+    },
+    {
+      "id": "S13",
+      "phase": "B",
+      "title": "Index staleness: refresh on add, report N of M, incremental image index",
+      "doc": "docs/plan/steps/S13.md",
+      "detail": "stub",
+      "depends_on": ["S00"],
+      "acceptance": {
+        "kind": "pytest",
+        "targets": [
+          "tests/test_index_freshness.py::test_add_refreshes_the_image_index_and_graph",
+          "tests/test_index_freshness.py::test_status_reports_indexed_count_against_object_count",
+          "tests/test_index_freshness.py::test_image_index_update_is_incremental"
+        ]
+      }
+    },
+    {
+      "id": "S14",
+      "phase": "B",
+      "title": "Doctor probes, README command coverage test, and status-line honesty",
+      "doc": "docs/plan/steps/S14.md",
+      "detail": "stub",
+      "depends_on": ["S13"],
+      "acceptance": {
+        "kind": "pytest",
+        "targets": [
+          "tests/test_doctor_optional_dependencies.py::test_doctor_reports_libreoffice_tesseract_and_tkinter",
+          "tests/test_doctor_optional_dependencies.py::test_advisory_rows_name_the_command_they_unblock",
+          "tests/test_documentation_coverage.py::test_every_registered_cli_command_appears_in_the_readme",
+          "tests/test_documentation_coverage.py::test_no_plan_status_line_claims_done_without_its_artefact"
+        ]
+      }
+    },
+    {
+      "id": "S15",
+      "phase": "C",
+      "title": "DOCX: tables, headers, footers, footnotes, comments, hyperlinks, headings",
+      "doc": "docs/plan/steps/S15.md",
+      "detail": "stub",
+      "depends_on": ["S00"],
+      "acceptance": {
+        "kind": "pytest",
+        "targets": [
+          "tests/test_ooxml_recovery.py::test_docx_table_cells_are_extracted",
+          "tests/test_ooxml_recovery.py::test_docx_headers_footers_and_footnotes_are_extracted",
+          "tests/test_ooxml_recovery.py::test_docx_hyperlink_targets_are_preserved"
+        ]
+      }
+    },
+    {
+      "id": "S16",
+      "phase": "C",
+      "title": "XLSX: computed values and formulas, hyperlinks, merged ranges, hidden markers, charts",
+      "doc": "docs/plan/steps/S16.md",
+      "detail": "stub",
+      "depends_on": ["S15"],
+      "acceptance": {
+        "kind": "pytest",
+        "targets": [
+          "tests/test_ooxml_recovery.py::test_formula_cell_indexes_the_computed_value",
+          "tests/test_ooxml_recovery.py::test_formula_text_is_preserved_in_the_locator",
+          "tests/test_ooxml_recovery.py::test_hidden_sheet_content_is_retrievable_and_marked_hidden",
+          "tests/test_ooxml_recovery.py::test_merged_header_reaches_its_whole_span"
+        ]
+      }
+    },
+    {
+      "id": "S17",
+      "phase": "C",
+      "title": "PPTX: speaker notes, tables, charts, grouped shapes, placeholder roles, hidden slides",
+      "doc": "docs/plan/steps/S17.md",
+      "detail": "stub",
+      "depends_on": ["S16"],
+      "acceptance": {
+        "kind": "pytest",
+        "targets": [
+          "tests/test_ooxml_recovery.py::test_slide_table_cells_are_extracted",
+          "tests/test_ooxml_recovery.py::test_speaker_notes_are_extracted",
+          "tests/test_ooxml_recovery.py::test_grouped_shapes_are_recursed",
+          "tests/test_ooxml_recovery.py::test_hidden_slides_are_flagged"
+        ]
+      }
+    },
+    {
+      "id": "S18",
+      "phase": "C",
+      "title": "OpenDocument to OOXML parity fixtures and format-matrix update",
+      "doc": "docs/plan/steps/S18.md",
+      "detail": "stub",
+      "depends_on": ["S17"],
+      "acceptance": {
+        "kind": "pytest",
+        "targets": [
+          "tests/test_ooxml_odf_parity.py::test_equivalent_documents_yield_equivalent_recovery",
+          "tests/test_ooxml_odf_parity.py::test_equivalent_workbooks_yield_equivalent_recovery",
+          "tests/test_ooxml_odf_parity.py::test_equivalent_presentations_yield_equivalent_recovery",
+          "tests/test_format_matrix.py::test_matrix_matches_live_ingestion"
+        ]
+      }
+    },
+    {
+      "id": "S19",
+      "phase": "D",
+      "title": "Audio formats catalogued with signature checks and a declared media budget",
+      "doc": "docs/plan/steps/S19.md",
+      "detail": "stub",
+      "depends_on": ["S00"],
+      "acceptance": {
+        "kind": "pytest",
+        "targets": [
+          "tests/test_audio_ingestion.py::test_common_recorder_formats_are_accepted",
+          "tests/test_audio_ingestion.py::test_mislabelled_audio_fails_closed",
+          "tests/test_audio_ingestion.py::test_truncated_input_preserves_the_original",
+          "tests/test_audio_ingestion.py::test_media_resource_budget_is_declared_and_enforced"
+        ]
+      }
+    },
+    {
+      "id": "S20",
+      "phase": "D",
+      "title": "Local transcription with timestamp locators, skipping cleanly when absent",
+      "doc": "docs/plan/steps/S20.md",
+      "detail": "stub",
+      "depends_on": ["S19"],
+      "acceptance": {
+        "kind": "pytest",
+        "targets": [
+          "tests/test_audio_transcription.py::test_missing_engine_records_skipped_and_fabricates_nothing",
+          "tests/test_audio_transcription.py::test_transcript_segments_carry_an_asr_origin_and_offsets",
+          "tests/test_audio_transcription.py::test_citation_resolves_to_a_timestamp_range",
+          "tests/test_audio_transcription.py::test_asr_text_is_never_silently_mixed_with_native_text"
+        ]
+      }
+    },
+    {
+      "id": "S21",
+      "phase": "D",
+      "title": "Measured word error rate per language on generated fixtures",
+      "doc": "docs/plan/steps/S21.md",
+      "detail": "stub",
+      "depends_on": ["S20"],
+      "acceptance": {
+        "kind": "pytest",
+        "targets": [
+          "tests/test_audio_transcription.py::test_benchmark_reports_word_error_rate_per_language",
+          "tests/test_audio_transcription.py::test_no_accuracy_claim_exists_without_a_measurement"
+        ]
+      }
+    },
+    {
+      "id": "S22",
+      "phase": "D",
+      "title": "Video container metadata and audio-track extraction",
+      "doc": "docs/plan/steps/S22.md",
+      "detail": "stub",
+      "depends_on": ["S20"],
+      "acceptance": {
+        "kind": "pytest",
+        "targets": [
+          "tests/test_video_ingestion.py::test_common_video_formats_are_accepted",
+          "tests/test_video_ingestion.py::test_audio_only_container_routes_to_the_audio_path",
+          "tests/test_video_ingestion.py::test_transcript_citations_carry_a_video_offset"
+        ]
+      }
+    },
+    {
+      "id": "S23",
+      "phase": "D",
+      "title": "Keyframes as contained objects, with declared ceilings and clean degradation",
+      "doc": "docs/plan/steps/S23.md",
+      "detail": "stub",
+      "depends_on": ["S22"],
+      "acceptance": {
+        "kind": "pytest",
+        "targets": [
+          "tests/test_video_ingestion.py::test_keyframes_are_contained_child_objects_of_the_video",
+          "tests/test_video_ingestion.py::test_keyframe_text_is_recovered_through_the_existing_ocr_path",
+          "tests/test_video_ingestion.py::test_exceeding_a_ceiling_degrades_cleanly_keeping_original_and_transcript",
+          "tests/test_video_ingestion.py::test_rebuild_derived_reproduces_keyframes_deterministically"
+        ]
+      }
+    },
+    {
+      "id": "S24",
+      "phase": "E",
+      "title": "Replace the skin-tone heuristic with a real detector on pinned weights",
+      "doc": "docs/plan/steps/S24.md",
+      "detail": "stub",
+      "depends_on": ["S11"],
+      "acceptance": {
+        "kind": "pytest",
+        "targets": [
+          "tests/test_faces_detector.py::test_missing_weights_record_skipped",
+          "tests/test_faces_detector.py::test_weights_are_verified_against_a_recorded_digest",
+          "tests/test_faces_negative_fixtures.py::test_no_detections_on_vase_table_sunset_or_wall",
+          "tests/test_faces_detector.py::test_no_confidence_value_is_derived_from_blob_geometry"
+        ]
+      }
+    },
+    {
+      "id": "S25",
+      "phase": "E",
+      "title": "Lawful synthetic face fixtures and measured detection metrics",
+      "doc": "docs/plan/steps/S25.md",
+      "detail": "stub",
+      "depends_on": ["S24"],
+      "acceptance": {
+        "kind": "pytest",
+        "targets": [
+          "tests/test_faces_detector.py::test_fixtures_contain_no_photographs_of_real_people",
+          "tests/test_faces_detector.py::test_detection_recall_and_precision_are_reported"
+        ]
+      }
+    },
+    {
+      "id": "S26",
+      "phase": "E",
+      "title": "Name candidates only from evidence the user can open",
+      "doc": "docs/plan/steps/S26.md",
+      "detail": "stub",
+      "depends_on": ["S25"],
+      "acceptance": {
+        "kind": "pytest",
+        "targets": [
+          "tests/test_faces_attribution.py::test_no_candidate_exists_without_a_resolvable_citation",
+          "tests/test_faces_attribution.py::test_candidates_come_only_from_metadata_or_naming_documents",
+          "tests/test_faces_attribution.py::test_erasure_also_removes_derived_graph_edges"
+        ]
+      }
+    },
+    {
+      "id": "S27",
+      "phase": "E",
+      "title": "Unicode-script-aware name extraction and measured graph precision",
+      "doc": "docs/plan/steps/S27.md",
+      "detail": "stub",
+      "depends_on": ["S12", "S26"],
+      "acceptance": {
+        "kind": "pytest",
+        "targets": [
+          "tests/test_entity_graph_precision.py::test_arabic_script_names_are_extracted",
+          "tests/test_entity_graph_precision.py::test_precision_and_recall_are_reported_per_script",
+          "tests/test_entity_graph_precision.py::test_promotion_to_person_requires_a_measured_threshold"
+        ]
+      }
+    }
+  ]
+}
