@@ -34,7 +34,7 @@ from archiv.ingestion.formats import UnsupportedFormatError, suffix_for
 from archiv.ingestion.ledger import now_iso, record_processing
 from archiv.ingestion.summary import IngestionCounts, write_summary
 from archiv.ingestion.visual_ocr import run_visual_ocr
-from archiv.model_adapter import load_model_config
+from archiv.model_adapter import ModelConfig, load_model_config
 from archiv.search import rebuild_search_index, search_documents, update_search_index
 from archiv.search.index import search_index_path
 from archiv.search.schema import connect_index
@@ -184,6 +184,35 @@ def _add_sources(
             failed=failed,
         ),
     )
+
+
+def _provenance_phrase(provenance: str) -> str:
+    """Plain words for where the answer came from, for a reader who knows no jargon."""
+
+    if provenance == "remote-evaluation":
+        return "a model running on computers you do not control (evaluation mode)"
+    return "a model running on this machine"
+
+
+def _echo_provenance_banner(model: ModelConfig) -> None:
+    """Say, before the answer, when the answer did not come from this machine.
+
+    Only shown for a non-local model. Printing a banner on every local answer would
+    train people to skip it, which would make it useless on the one run that matters.
+    """
+
+    if model.provenance != "remote-evaluation":
+        return
+    typer.echo("=" * 72)
+    typer.echo("NOT A LOCAL ANSWER")
+    typer.echo(
+        "This archive is in evaluation mode. The text of the sources below was sent to "
+        f"{model.endpoint or 'a remote service'} and the answer was written by "
+        f"{model.model or 'a remote model'}, running on computers you do not control."
+    )
+    typer.echo("Run 'archiv model evaluation disable' to stop this archive doing that.")
+    typer.echo("=" * 72)
+    typer.echo("")
 
 
 def _locator_text(locator: dict[str, object]) -> str:
@@ -515,6 +544,11 @@ def register_user_commands(app: typer.Typer) -> tuple[Callable[..., None], ...]:
             typer.echo(f"ask failed: {err_msg}", err=True)
             raise typer.Exit(code=1)
 
+        # Above the answer, not below it. A warning that documents left the machine is
+        # not a footnote -- by the time a reader reaches the bottom they have already
+        # read and believed the answer.
+        _echo_provenance_banner(run_result.model)
+
         typer.echo(f"Question: {query}")
         typer.echo("")
         grounded = run_result.grounded_response
@@ -563,6 +597,7 @@ def register_user_commands(app: typer.Typer) -> tuple[Callable[..., None], ...]:
         typer.echo("")
         model_name = run_result.model.model or run_result.model.adapter
         typer.echo(f"Model: {run_result.model.adapter} ({model_name})")
+        typer.echo(f"Answered by: {_provenance_phrase(run_result.model.provenance)}")
         typer.echo(f"Run ID: {run_result.run_id}")
 
     @app.command("report")
