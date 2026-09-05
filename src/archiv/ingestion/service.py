@@ -3,18 +3,33 @@
 from __future__ import annotations
 
 import contextlib
+import fcntl
 import os
 import shutil
 import tarfile
+import tempfile
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 from zipfile import ZipFile
 
-from archiv.contracts import IngestionResult, IngestionStatus, ProcessingEvidence
-from archiv.hashing import copy_and_hash, sha256_file
-from archiv.ingestion.derive import derive, reuse_derived
-from archiv.ingestion.ledger import canonical_source_name, now_iso
+from archiv.contracts import (
+    IngestionResult,
+    IngestionStatus,
+    NormalizedDocument,
+    ProcessingEvidence,
+)
+from archiv.hashing import copy_and_hash, sha256_bytes, sha256_file
+from archiv.ingestion.derive import (
+    derive,
+    derive_artifacts,
+    reuse_derived_artifacts,
+)
+from archiv.ingestion.ledger import (
+    now_iso,
+    record_processing_batch,
+)
 from archiv.ingestion.limits import (
     MAX_EXPANDED_BYTES,
     MAX_RECURSION_DEPTH,
@@ -29,6 +44,7 @@ from archiv.ingestion.normalizers import (
 )
 from archiv.storage.database import ArchivDatabase
 from archiv.storage.layout import ArchivLayout
+from archiv.storage.queue import enqueue_job
 
 
 def _store_original(source: Path, target: Path, digest: str) -> bool:
@@ -144,91 +160,135 @@ def _record_ingestion_failure(
         connection.commit()
 
 
-def ingest_file(
+@dataclass(frozen=True)
+class PreparedCandidate:
+    source: Path
+    source_name: str
+    digest: str
+    media_type: str
+    source_extension: str
+    target: Path
+    duplicate: bool
+    evidence: list[ProcessingEvidence]
+    pending_records: list[tuple[ProcessingEvidence, str, str]]
+    queue_jobs: list[tuple[str, str, str, str]]
+    normalized: NormalizedDocument
+
+
+def prepare_candidate(
     source: Path,
+    layout: ArchivLayout,
     *,
-    home: Path | None = None,
+    rebuild_derived: bool = False,
+) -> PreparedCandidate:
+    """Validate, hash, copy original, and derive artifacts without database writes."""
+
+    source = source.expanduser()
+    check_input(source)
+    source = source.resolve(strict=True)
+    if not source.is_file():
+        raise ValueError("source must be a regular file")
+
+    digest = sha256_file(source)
+    source_name = source.name
+    media_type = media_type_for(source_name)
+    source_extension = suffix_for(source_name)
+    normalized = normalize(source, digest, source_name=source_name)
+
+    target = layout.original_path(digest)
+    lock_prefix = sha256_bytes(str(layout.root).encode("utf-8"))[:12]
+    lock_path = Path(tempfile.gettempdir()) / f"archiv-lock-{lock_prefix}-{digest}.lock"
+    with open(lock_path, "a") as lock_file:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        try:
+            duplicate = _store_original(source, target, digest)
+
+            if duplicate and not rebuild_derived:
+                evidence, pending_records = reuse_derived_artifacts(digest, layout)
+                queue_jobs: list[tuple[str, str, str, str]] = []
+                derived_doc = normalized
+            else:
+                derived = derive_artifacts(
+                    target,
+                    digest,
+                    source_name,
+                    layout,
+                    replace=True,
+                    normalized=normalized,
+                )
+                evidence = derived.evidence
+                pending_records = derived.pending_records
+                queue_jobs = derived.queue_jobs
+                derived_doc = derived.normalized
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+    if sha256_file(source) != digest:
+        raise RuntimeError("source hash changed during ingestion")
+    if sha256_file(target) != digest:
+        raise RuntimeError("stored original failed post-processing integrity check")
+
+    return PreparedCandidate(
+        source=source,
+        source_name=source_name,
+        digest=digest,
+        media_type=media_type,
+        source_extension=source_extension,
+        target=target,
+        duplicate=duplicate,
+        evidence=evidence,
+        pending_records=pending_records,
+        queue_jobs=queue_jobs,
+        normalized=derived_doc,
+    )
+
+
+def commit_candidate(
+    database: ArchivDatabase,
+    layout: ArchivLayout,
+    prepared: PreparedCandidate,
+    *,
     rebuild_derived: bool = False,
     _depth: int = 0,
     _aggregate_bytes: list[int] | None = None,
 ) -> IngestionResult:
-    """Validate, content-address, record, and derive one local file."""
+    """Durably record a prepared candidate into SQLite and handle archive containment."""
 
-    if _depth > MAX_RECURSION_DEPTH:
-        raise LimitExceededError(
-            f"archive recursion depth limit exceeded: {_depth} > {MAX_RECURSION_DEPTH}"
-        )
     aggregate_bytes = _aggregate_bytes if _aggregate_bytes is not None else [0]
+    target = prepared.target
+    digest = prepared.digest
+    normalized = prepared.normalized
 
-    source = source.expanduser()
-    layout = ArchivLayout.resolve(home)
-    # A rejected file must not conjure an archive home into existence (see
-    # test_malformed_input_fails_before_archive_creation) -- but once a home is
-    # real, every attempt against it is worth remembering, so only skip the
-    # durable failure record in the narrow case where nothing has used this
-    # home yet.
-    home_already_exists = layout.root.exists()
+    with database.connect() as connection:
+        existing_ingestion = connection.execute(
+            "SELECT 1 FROM ingestions WHERE object_sha256 = ? AND status = 'succeeded'",
+            (digest,),
+        ).fetchone()
+    duplicate = prepared.duplicate or (existing_ingestion is not None)
 
-    digest: str | None = None
-    try:
-        # Inspect the directory entry before resolution so symlink inputs cannot
-        # silently cross the caller's intended trust boundary.
-        check_input(source)
-        source = source.resolve(strict=True)
-        if not source.is_file():
-            raise ValueError("source must be a regular file")
-
-        digest = sha256_file(source)
-        source_name = source.name
-        media_type = media_type_for(source_name)
-        source_extension = suffix_for(source_name)
-        normalized = normalize(source, digest, source_name=source_name)
-    except Exception as error:
-        if home_already_exists:
-            layout.ensure()
-            database = ArchivDatabase(layout.database)
-            database.initialize()
-            _record_ingestion_failure(database, source=source, digest=digest, error=error)
-        raise
-
-    layout.ensure()
-    database = ArchivDatabase(layout.database)
-    database.initialize()
-
-    target = layout.original_path(digest)
-    duplicate = _store_original(source, target, digest)
     ingestion_id = uuid4().hex
     _insert_pending_ingestion(
         database,
         ingestion_id=ingestion_id,
         digest=digest,
-        source=source,
-        source_name=source_name,
-        media_type=media_type,
-        source_extension=source_extension,
+        source=prepared.source,
+        source_name=prepared.source_name,
+        media_type=prepared.media_type,
+        source_extension=prepared.source_extension,
         target=target,
         duplicate=duplicate,
     )
 
     try:
-        stable_name = canonical_source_name(database, digest, source_name)
-        processing = (
-            reuse_derived(digest, layout, database)
-            if duplicate and not rebuild_derived
-            else derive(
-                target,
-                digest,
-                stable_name,
-                layout,
+        for q_digest, q_processor, q_version, q_state in prepared.queue_jobs:
+            enqueue_job(
                 database,
-                replace=True,
-                normalized=normalized,
+                q_digest,
+                q_processor,
+                processor_version=q_version,
+                state=q_state,
             )
-        )
-        if sha256_file(source) != digest:
-            raise RuntimeError("source hash changed during ingestion")
-        if sha256_file(target) != digest:
-            raise RuntimeError("stored original failed post-processing integrity check")
+        record_processing_batch(database, digest, prepared.pending_records)
 
         if (
             normalized.kind == "archive"
@@ -259,8 +319,9 @@ def ingest_file(
                             date_iso = None
                             with contextlib.suppress(Exception):
                                 date_iso = (
-                                    f"{member.date_time[0]:04d}-{member.date_time[1]:02d}-{member.date_time[2]:02d}"
-                                    f"T{member.date_time[3]:02d}:{member.date_time[4]:02d}:{member.date_time[5]:02d}Z"
+                                    f"{member.date_time[0]:04d}-{member.date_time[1]:02d}-"
+                                    f"{member.date_time[2]:02d}T{member.date_time[3]:02d}:"
+                                    f"{member.date_time[4]:02d}:{member.date_time[5]:02d}Z"
                                 )
                             compression = "deflate" if member.compress_type == 8 else "stored"
                             try:
@@ -348,11 +409,57 @@ def ingest_file(
         status=IngestionStatus.SUCCEEDED,
         object_sha256=digest,
         duplicate=duplicate,
-        media_type=media_type,
+        media_type=prepared.media_type,
         original_path=str(target),
         derived_root=str(layout.derived_root(digest)),
         source_hash_unchanged=True,
-        processing=processing,
+        processing=prepared.evidence,
+    )
+
+
+def ingest_file(
+    source: Path,
+    *,
+    home: Path | None = None,
+    rebuild_derived: bool = False,
+    _depth: int = 0,
+    _aggregate_bytes: list[int] | None = None,
+) -> IngestionResult:
+    """Validate, content-address, record, and derive one local file."""
+
+    if _depth > MAX_RECURSION_DEPTH:
+        raise LimitExceededError(
+            f"archive recursion depth limit exceeded: {_depth} > {MAX_RECURSION_DEPTH}"
+        )
+    aggregate_bytes = _aggregate_bytes if _aggregate_bytes is not None else [0]
+
+    source = source.expanduser()
+    layout = ArchivLayout.resolve(home)
+    home_already_exists = layout.root.exists()
+
+    digest: str | None = None
+    try:
+        prepared = prepare_candidate(source, layout, rebuild_derived=rebuild_derived)
+        digest = prepared.digest
+    except Exception as error:
+        if home_already_exists:
+            layout.ensure()
+            database = ArchivDatabase(layout.database)
+            database.initialize()
+            _record_ingestion_failure(database, source=source, digest=digest, error=error)
+        raise
+
+    layout.ensure()
+    database = ArchivDatabase(layout.database)
+    database.initialize()
+
+    return commit_candidate(
+        database,
+        layout,
+        prepared,
+        rebuild_derived=rebuild_derived,
+        _depth=_depth,
+        _aggregate_bytes=aggregate_bytes,
     )
 
 
@@ -399,3 +506,15 @@ def rebuild_derived(
     if sha256_file(original) != original_hash:
         raise RuntimeError("immutable original changed during derived-data rebuild")
     return evidence
+
+
+record_ingestion_failure = _record_ingestion_failure
+
+__all__ = [
+    "PreparedCandidate",
+    "commit_candidate",
+    "ingest_file",
+    "prepare_candidate",
+    "rebuild_derived",
+    "record_ingestion_failure",
+]

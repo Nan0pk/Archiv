@@ -17,7 +17,7 @@ from archiv.doctor import diagnostics_report, doctor_report, save_diagnostics
 from archiv.executor.source_marker import run_source_marker
 from archiv.format_matrix_cli import register_format_matrix_command
 from archiv.ingestion import ingest_file, rebuild_derived
-from archiv.ingestion.formats import SUPPORTED_SUFFIXES
+from archiv.ingestion.formats import UnsupportedFormatError, suffix_for
 from archiv.model_cli import model_app
 from archiv.ocr_benchmark_cli import register_ocr_benchmark_command
 from archiv.report_cli import register_report_commands
@@ -160,10 +160,15 @@ def ingest_command(
             typer.echo(json.dumps(result.model_dump(mode="json"), indent=2, sort_keys=True))
             return
 
+        def _is_supported_candidate(p: Path) -> bool:
+            try:
+                suffix_for(p.name)
+                return True
+            except UnsupportedFormatError:
+                return False
+
         candidates = sorted(
-            path
-            for path in source.rglob("*")
-            if path.is_file() and path.suffix.lower() in SUPPORTED_SUFFIXES
+            path for path in source.rglob("*") if path.is_file() and _is_supported_candidate(path)
         )
         if not candidates:
             raise ValueError("directory contains no supported files")

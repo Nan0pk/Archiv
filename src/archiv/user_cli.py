@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 from collections.abc import Callable
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from typing import Annotated, cast
 from uuid import uuid4
@@ -21,13 +23,19 @@ from archiv.contracts import (
     SearchIndexBuild,
 )
 from archiv.grounding import run_grounded_ask
-from archiv.ingestion import ingest_file
-from archiv.ingestion.formats import SUPPORTED_SUFFIXES, UnsupportedFormatError
+from archiv.ingestion import (
+    PreparedCandidate,
+    commit_candidate,
+    ingest_file,
+    prepare_candidate,
+    record_ingestion_failure,
+)
+from archiv.ingestion.formats import UnsupportedFormatError, suffix_for
 from archiv.ingestion.ledger import now_iso, record_processing
 from archiv.ingestion.summary import IngestionCounts, write_summary
 from archiv.ingestion.visual_ocr import run_visual_ocr
 from archiv.model_adapter import load_model_config
-from archiv.search import rebuild_search_index, search_documents
+from archiv.search import rebuild_search_index, search_documents, update_search_index
 from archiv.search.index import search_index_path
 from archiv.search.schema import connect_index
 from archiv.storage.database import ArchivDatabase
@@ -48,12 +56,33 @@ def _emit_json(value: object) -> None:
     typer.echo(json.dumps(_json_value(value), indent=2, sort_keys=True))
 
 
+def _is_supported_path(path: Path) -> bool:
+    try:
+        suffix_for(path.name)
+        return True
+    except UnsupportedFormatError:
+        return False
+
+
 def _candidates(source: Path) -> tuple[list[Path], int]:
     if source.is_file():
         return [source], 0
     files = sorted(path for path in source.rglob("*") if path.is_file())
-    supported = [path for path in files if path.suffix.lower() in SUPPORTED_SUFFIXES]
+    supported = [path for path in files if _is_supported_path(path)]
     return supported, len(files) - len(supported)
+
+
+def _prepare_candidate_task(
+    candidate: Path,
+    home: Path | None,
+    rebuild_derived: bool,
+) -> tuple[Path, PreparedCandidate | None, Exception | None]:
+    layout = ArchivLayout.resolve(home)
+    try:
+        prepared = prepare_candidate(candidate, layout, rebuild_derived=rebuild_derived)
+        return candidate, prepared, None
+    except Exception as error:
+        return candidate, None, error
 
 
 def _add_sources(
@@ -61,32 +90,89 @@ def _add_sources(
     *,
     home: Path | None,
     rebuild_derived: bool,
+    full_index: bool = False,
 ) -> tuple[list[IngestionResult], SearchIndexBuild | None, IngestionCounts]:
     candidates, rejected = _candidates(source)
-    # `add` always means to populate this home, unlike a single ingest_file() call
-    # (which must not create a home for one rejected file) -- so a failure on the
-    # very first candidate is still durably recorded, regardless of candidate order.
-    ArchivLayout.resolve(home).ensure()
+    layout = ArchivLayout.resolve(home)
+    layout.ensure()
+    database = ArchivDatabase(layout.database)
+    database.initialize()
     results: list[IngestionResult] = []
     failed = 0
     degraded = 0
     skipped = 0
-    active = source
-    for active in candidates:
-        try:
-            result = ingest_file(active, home=home, rebuild_derived=rebuild_derived)
-            results.append(result)
-            processor_skipped = any(item.status == "skipped" for item in result.processing)
-            skipped += processor_skipped
-            # Family-level "partial" support (declared once in the format matrix) is not
-            # the same claim as "this file's extraction was incomplete" -- most files in
-            # a partial-support family still extract in full. Count only the latter.
-            degraded += processor_skipped
-        except UnsupportedFormatError:
-            rejected += 1
-        except (OSError, RuntimeError, ValueError):
-            failed += 1
-    index = rebuild_search_index(home=home) if results else None
+
+    if len(candidates) <= 1:
+        for active in candidates:
+            try:
+                result = ingest_file(active, home=home, rebuild_derived=rebuild_derived)
+                results.append(result)
+                processor_skipped = any(item.status == "skipped" for item in result.processing)
+                skipped += processor_skipped
+                degraded += processor_skipped
+            except UnsupportedFormatError:
+                rejected += 1
+            except (OSError, RuntimeError, ValueError):
+                failed += 1
+    else:
+        num_workers = min(os.cpu_count() or 4, 8, len(candidates))
+        candidate_order = {p: i for i, p in enumerate(candidates)}
+        ordered_results: list[tuple[int, IngestionResult]] = []
+
+        with ProcessPoolExecutor(max_workers=num_workers) as executor:
+            future_to_cand = {
+                executor.submit(
+                    _prepare_candidate_task,
+                    cand,
+                    home,
+                    rebuild_derived,
+                ): cand
+                for cand in candidates
+            }
+            for future in as_completed(future_to_cand):
+                cand, prepared, error = future.result()
+                if error is not None:
+                    if isinstance(error, UnsupportedFormatError):
+                        rejected += 1
+                    else:
+                        failed += 1
+                        record_ingestion_failure(
+                            database,
+                            source=cand,
+                            digest=None,
+                            error=error,
+                        )
+                    continue
+
+                assert prepared is not None
+                try:
+                    result = commit_candidate(
+                        database,
+                        layout,
+                        prepared,
+                        rebuild_derived=rebuild_derived,
+                    )
+                    ordered_results.append((candidate_order[cand], result))
+                    processor_skipped = any(item.status == "skipped" for item in result.processing)
+                    skipped += processor_skipped
+                    degraded += processor_skipped
+                except UnsupportedFormatError:
+                    rejected += 1
+                except (OSError, RuntimeError, ValueError):
+                    failed += 1
+
+        ordered_results.sort(key=lambda item: item[0])
+        results = [res for _, res in ordered_results]
+
+    if results:
+        index = (
+            rebuild_search_index(home=home)
+            if full_index
+            else update_search_index([r.object_sha256 for r in results], home=home)
+        )
+    else:
+        index = None
+
     return (
         results,
         index,
@@ -285,6 +371,13 @@ def register_user_commands(app: typer.Typer) -> tuple[Callable[..., None], ...]:
             Path | None,
             typer.Option("--summary-out", help="Write local aggregate counts only as JSON."),
         ] = None,
+        full_index: Annotated[
+            bool,
+            typer.Option(
+                "--full-index",
+                help="Rebuild the search index from scratch rather than incrementally updating.",
+            ),
+        ] = False,
     ) -> None:
         """Add supported files and immediately refresh the local search index."""
 
@@ -293,6 +386,7 @@ def register_user_commands(app: typer.Typer) -> tuple[Callable[..., None], ...]:
                 source,
                 home=home,
                 rebuild_derived=rebuild_derived,
+                full_index=full_index,
             )
         except (OSError, RuntimeError, ValueError) as error:
             typer.echo(f"add failed: {error}", err=True)
