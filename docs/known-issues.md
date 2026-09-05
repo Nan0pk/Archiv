@@ -41,3 +41,24 @@
 
 General alpha limitations remain documented in [Offline alpha](offline-alpha.md) and the
 [format compatibility matrix](format-compatibility.json).
+
+## A `config/model.json` written after S02 is rejected by an earlier Archiv build
+
+- `ModelConfig` gained a `provenance` field (`src/archiv/model_adapter.py`), derived from
+  `adapter` and written into `config/model.json` by `save_model_config`.
+- Reading is forward-compatible in the direction that matters day to day: a `model.json`
+  written *before* this change has no `provenance` key and still loads, taking the derived
+  value. `tests/test_model_boundary.py::test_existing_model_json_without_provenance_still_loads`
+  covers this.
+- The reverse does not hold. `ModelConfig` subclasses `StrictModel`
+  (`src/archiv/contracts.py`, `extra="forbid"`), so an earlier build reading a file this
+  build wrote fails with `provenance | Extra inputs are not permitted
+  [type=extra_forbidden]` rather than ignoring the unknown key.
+- This is reachable in practice because `config` is one of `DURABLE_DIRECTORIES`
+  (`src/archiv/archive.py`), so `model.json` travels inside portable archives and backups.
+  Restoring a new archive into an older installation hits it.
+- No remedy is planned. [Architecture](architecture.md) already states Archiv never
+  performs an in-place downgrade, so this is consistent with the documented contract
+  rather than a departure from it. The recovery is to delete `config/model.json` and
+  re-run `archiv model configure`, which loses no canonical data: the file is policy, not
+  evidence, and originals are untouched.

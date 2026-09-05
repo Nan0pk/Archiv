@@ -204,3 +204,84 @@ def test_a_tampered_config_file_is_rejected_on_load(tmp_path: Path) -> None:
 
     with pytest.raises(ValidationError, match="must resolve explicitly to loopback"):
         load_model_config(home)
+
+
+# --- S02: derived provenance and exhaustive adapter dispatch -------------------
+
+
+def test_unknown_adapter_value_raises_instead_of_falling_through() -> None:
+    """A new adapter literal must fail loudly, not inherit the loopback rules.
+
+    Both the validator and the factory used to branch on `disabled` and treat
+    everything else as loopback. Reached through normal input the `Literal` stops
+    an unknown value first, so this constructs one past validation to prove the
+    guard underneath is real rather than decorative.
+    """
+
+    bogus = ModelConfig.model_construct(adapter="frontier-cloud")
+
+    with pytest.raises(ValueError, match="unhandled model adapter"):
+        bogus._apply_adapter_rules()  # pyright: ignore[reportPrivateUsage]
+    with pytest.raises(ValueError, match="unhandled model adapter"):
+        build_model_adapter(bogus)
+
+    # The declared literals are still the only ones ordinary input accepts.
+    with pytest.raises(ValidationError):
+        ModelConfig.model_validate_json(json.dumps({"adapter": "frontier-cloud"}))
+
+
+def test_provenance_is_derived_from_adapter_and_not_settable() -> None:
+    """Provenance follows the adapter. A caller contradicting it is refused, not ignored."""
+
+    assert ModelConfig().provenance == "local-loopback"
+    assert (
+        ModelConfig(
+            adapter=LOOPBACK_ADAPTER, endpoint="http://127.0.0.1:11434", model="qwen2.5"
+        ).provenance
+        == "local-loopback"
+    )
+
+    reason = "provenance is derived from the adapter and must not be supplied"
+    with pytest.raises(ValidationError, match=reason):
+        ModelConfig(adapter="disabled", provenance="remote-evaluation")
+    with pytest.raises(ValidationError, match=reason):
+        ModelConfig(
+            adapter=LOOPBACK_ADAPTER,
+            endpoint="http://127.0.0.1:11434",
+            model="qwen2.5",
+            provenance="remote-evaluation",
+        )
+    _persisted(reason, _loopback_payload(provenance="remote-evaluation"))
+    _persisted(reason, {"adapter": "disabled", "provenance": "remote-evaluation"})
+
+    # Not a free-text field either.
+    with pytest.raises(ValidationError):
+        ModelConfig.model_validate_json(
+            json.dumps({"adapter": "disabled", "provenance": "somewhere-else"})
+        )
+
+    # A config Archiv itself wrote must load back unchanged.
+    saved = ModelConfig(adapter=LOOPBACK_ADAPTER, endpoint="http://127.0.0.1:11434", model="q")
+    assert ModelConfig.model_validate_json(json.dumps(saved.model_dump(mode="json"))) == saved
+
+
+def test_existing_model_json_without_provenance_still_loads(tmp_path: Path) -> None:
+    """A config written before this field existed keeps working, and gains the derived value."""
+
+    home = tmp_path / "home"
+    path = model_config_path(home)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    for payload in (
+        {"schema_version": "1", "adapter": "disabled"},
+        {
+            "schema_version": "1",
+            "adapter": LOOPBACK_ADAPTER,
+            "endpoint": "http://127.0.0.1:11434",
+            "model": "qwen2.5",
+            "timeout_seconds": 120,
+        },
+    ):
+        assert "provenance" not in payload
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        assert load_model_config(home).provenance == "local-loopback"
