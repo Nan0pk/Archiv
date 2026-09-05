@@ -133,6 +133,18 @@ class ModelAdapter(Protocol):
 
     def complete(self, prompt: str) -> str: ...
 
+    def can_enforce_schema(self) -> bool:
+        """Whether this backend can actually hold a reply to a JSON schema.
+
+        Declared rather than assumed, and false unless proven. Swapping the model behind
+        Archiv can silently stop enforcement happening at all -- the request is accepted,
+        the reply comes back looking fine, and nothing says the constraint was dropped.
+        Something that has not demonstrated enforcement must not claim it, because the
+        whole point is that the difference is otherwise invisible.
+        """
+
+        return False
+
 
 @dataclass(frozen=True, slots=True)
 class DisabledModelAdapter:
@@ -142,12 +154,23 @@ class DisabledModelAdapter:
         del prompt
         raise RuntimeError("model use is disabled; Archiv will not select a hidden fallback")
 
+    def can_enforce_schema(self) -> bool:
+        return False
+
 
 @dataclass(frozen=True, slots=True)
 class OpenAICompatibleLoopbackAdapter:
     """Small loopback-only OpenAI-compatible client using the Python standard library."""
 
     config: ModelConfig
+
+    def can_enforce_schema(self) -> bool:
+        # False, and deliberately so. This adapter sends no schema constraint at all, and
+        # the servers it talks to are exactly where enforcement has been observed to be
+        # accepted and then silently ignored -- a request answered with a success code
+        # while the reply was generated unconstrained. Claiming enforcement here would be
+        # an unverified promise about somebody else's server.
+        return False
 
     def complete(self, prompt: str) -> str:
         endpoint = cast(str, self.config.endpoint).rstrip("/") + "/v1/chat/completions"
@@ -235,6 +258,13 @@ class RemoteEvaluationAdapter:
 
     config: ModelConfig
     home: Path | None = None
+
+    def can_enforce_schema(self) -> bool:
+        # False for now. This provider does offer a schema-constrained reply mode, but
+        # this adapter does not request one and no request has ever been sent to the real
+        # service from here, so there is nothing measured to base a `True` on. Flipping
+        # it should be a deliberate change that arrives with evidence.
+        return False
 
     def complete(self, prompt: str) -> str:
         # First, before the API key is read and long before a socket is opened.
