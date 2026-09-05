@@ -10,6 +10,7 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+from uuid import uuid4
 
 from PIL import Image
 
@@ -23,6 +24,7 @@ MAX_IMAGE_PIXELS = 80_000_000
 MAX_PDF_PAGES = 250
 OCR_TIMEOUT_SECONDS = 60
 RENDER_DPI = 200
+PAGE_BATCH_SIZE = 16
 
 type OcrWord = tuple[str, int, int, int, int, float | None]
 
@@ -385,6 +387,100 @@ def _ocr_image(
     }
 
 
+def _split_batch_tsv(stdout: str, batch_size: int) -> dict[int, str]:
+    tsv_lines = stdout.splitlines()
+    if not tsv_lines:
+        return {idx: "" for idx in range(1, batch_size + 1)}
+    header = tsv_lines[0]
+    by_page: dict[int, list[str]] = {idx: [header] for idx in range(1, batch_size + 1)}
+    for line in tsv_lines[1:]:
+        if not line.strip():
+            continue
+        parts = line.split("\t")
+        if len(parts) > 1:
+            try:
+                p_num = int(parts[1])
+                if p_num in by_page:
+                    by_page[p_num].append(line)
+            except ValueError:
+                continue
+    return {idx: "\n".join(lines) + "\n" for idx, lines in by_page.items()}
+
+
+def _ocr_batch(
+    batch: list[tuple[int, Path, str, str | None, str, dict[str, object] | None]],
+    *,
+    root: Path,
+    executable: str,
+    languages: list[str],
+) -> list[tuple[list[NormalizedSegment], dict[str, object]]]:
+    batch_list_path = root / "ocr" / f".batch-{uuid4().hex}.txt"
+    batch_list_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        batch_list_path.write_text(
+            "\n".join(str(img.resolve()) for _, img, _, _, _, _ in batch) + "\n",
+            encoding="utf-8",
+        )
+        extra_ro_binds = tuple(
+            sorted(
+                set(
+                    img.resolve().parent
+                    for _, img, origin, _, _, _ in batch
+                    if origin == "canonical_original"
+                )
+            )
+        )
+        timeout = max(OCR_TIMEOUT_SECONDS, 10 * len(batch))
+        stdout, stderr, sandbox = _run(
+            [
+                executable,
+                str(batch_list_path),
+                "stdout",
+                "-l",
+                "+".join(languages),
+                "--psm",
+                "3",
+                "tsv",
+            ],
+            root=root,
+            timeout=timeout,
+            extra_ro_binds=extra_ro_binds,
+        )
+    finally:
+        batch_list_path.unlink(missing_ok=True)
+
+    split_tsv = _split_batch_tsv(stdout, len(batch))
+    warnings = [f"tesseract diagnostic: {stderr.strip()[:500]}"] if stderr.strip() else []
+    results: list[tuple[list[NormalizedSegment], dict[str, object]]] = []
+
+    for idx, (page, image, origin, relative_path, image_sha256, render) in enumerate(batch, 1):
+        width, height = _image_dimensions(image)
+        page_tsv = split_tsv.get(idx, "")
+        raw_relative = Path("ocr") / f"page-{page:04d}.tsv"
+        raw_path = root / raw_relative
+        raw_path.write_text(page_tsv, encoding="utf-8")
+        segments = _parse_tsv(page_tsv, page=page, languages=languages)
+        page_evidence: dict[str, object] = {
+            "page": page,
+            "status": "succeeded",
+            "image_origin": origin,
+            "image_path": relative_path,
+            "image_sha256": image_sha256,
+            "width": width,
+            "height": height,
+            "raw_output_path": raw_relative.as_posix(),
+            "raw_output_sha256": sha256_file(raw_path),
+            "segment_count": len(segments),
+            "sandbox": sandbox,
+            "warnings": list(warnings),
+        }
+        if render is not None:
+            page_evidence["rendered_page"] = render
+        results.append((segments, page_evidence))
+
+    return results
+
+
 MIN_NATIVE_CHARS_PER_PAGE = 25
 
 
@@ -633,33 +729,77 @@ def run_visual_ocr(
 
     segments: list[NormalizedSegment] = []
     completed = 0
-    for page, image, origin, relative, image_hash, render in inputs:
-        try:
-            page_segments, evidence = _ocr_image(
-                image,
-                page=page,
-                root=root,
-                executable=tesseract,
-                languages=languages,
-                origin=origin,
-                relative_path=relative,
-                image_sha256=image_hash,
-            )
-            if render is not None:
-                evidence["rendered_page"] = render
-            segments.extend(page_segments)
-            pages.append(evidence)
-            completed += 1
-        except (OSError, VisualOcrError) as error:
-            pages.append(
-                {
-                    "page": page,
-                    "status": "failed",
-                    "stage": "recognition",
-                    "error": str(error),
-                }
-            )
-            warnings.append(f"page {page} OCR failed: {error}")
+    for batch_start in range(0, len(inputs), PAGE_BATCH_SIZE):
+        batch = inputs[batch_start : batch_start + PAGE_BATCH_SIZE]
+        if len(batch) == 1:
+            page, image, origin, relative, image_hash, render = batch[0]
+            try:
+                page_segments, evidence = _ocr_image(
+                    image,
+                    page=page,
+                    root=root,
+                    executable=tesseract,
+                    languages=languages,
+                    origin=origin,
+                    relative_path=relative,
+                    image_sha256=image_hash,
+                )
+                if render is not None:
+                    evidence["rendered_page"] = render
+                segments.extend(page_segments)
+                pages.append(evidence)
+                completed += 1
+            except (OSError, VisualOcrError) as error:
+                pages.append(
+                    {
+                        "page": page,
+                        "status": "failed",
+                        "stage": "recognition",
+                        "error": str(error),
+                    }
+                )
+                warnings.append(f"page {page} OCR failed: {error}")
+        else:
+            try:
+                batch_results = _ocr_batch(
+                    batch,
+                    root=root,
+                    executable=tesseract,
+                    languages=languages,
+                )
+                for page_segments, evidence in batch_results:
+                    segments.extend(page_segments)
+                    pages.append(evidence)
+                    completed += 1
+            except Exception as batch_error:
+                warnings.append(f"batch OCR failed ({batch_error}); falling back to single-page")
+                for page, image, origin, relative, image_hash, render in batch:
+                    try:
+                        page_segments, evidence = _ocr_image(
+                            image,
+                            page=page,
+                            root=root,
+                            executable=tesseract,
+                            languages=languages,
+                            origin=origin,
+                            relative_path=relative,
+                            image_sha256=image_hash,
+                        )
+                        if render is not None:
+                            evidence["rendered_page"] = render
+                        segments.extend(page_segments)
+                        pages.append(evidence)
+                        completed += 1
+                    except (OSError, VisualOcrError) as error:
+                        pages.append(
+                            {
+                                "page": page,
+                                "status": "failed",
+                                "stage": "recognition",
+                                "error": str(error),
+                            }
+                        )
+                        warnings.append(f"page {page} OCR failed: {error}")
 
     failed = sum(1 for page in pages if page.get("status") == "failed")
     manifest.update(

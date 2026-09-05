@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 
 from PIL import Image
@@ -37,12 +38,19 @@ def _write_json(path: Path, payload: object) -> str:
     return sha256_file(path)
 
 
-def reuse_derived(
+@dataclass(frozen=True)
+class DerivedArtifacts:
+    evidence: list[ProcessingEvidence]
+    pending_records: list[tuple[ProcessingEvidence, str, str]]
+    queue_jobs: list[tuple[str, str, str, str]]
+    normalized: NormalizedDocument
+
+
+def reuse_derived_artifacts(
     digest: str,
     layout: ArchivLayout,
-    database: ArchivDatabase,
-) -> list[ProcessingEvidence]:
-    """Record reuse of an already-built normalized representation."""
+) -> tuple[list[ProcessingEvidence], list[tuple[ProcessingEvidence, str, str]]]:
+    """Return cached evidence without database side-effects."""
 
     normalized_path = layout.derived_root(digest) / "normalized" / "document.json"
     if not normalized_path.is_file():
@@ -56,14 +64,25 @@ def reuse_derived(
         output_sha256=sha256_file(normalized_path),
     )
     timestamp = now_iso()
+    return [item], [(item, timestamp, timestamp)]
+
+
+def reuse_derived(
+    digest: str,
+    layout: ArchivLayout,
+    database: ArchivDatabase,
+) -> list[ProcessingEvidence]:
+    """Record reuse of an already-built normalized representation."""
+
+    evidence, pending = reuse_derived_artifacts(digest, layout)
     record_processing(
         database,
         digest,
-        item,
-        started_at=timestamp,
-        finished_at=timestamp,
+        evidence[0],
+        started_at=pending[0][1],
+        finished_at=pending[0][2],
     )
-    return [item]
+    return evidence
 
 
 def _append(
@@ -77,17 +96,16 @@ def _append(
     pending_records.append((item, started_at, now_iso()))
 
 
-def derive(
+def derive_artifacts(
     original: Path,
     digest: str,
     source_name: str,
     layout: ArchivLayout,
-    database: ArchivDatabase,
     *,
     replace: bool,
     normalized: NormalizedDocument | None = None,
-) -> list[ProcessingEvidence]:
-    """Build normalized, extracted, table, and processor-status artifacts."""
+) -> DerivedArtifacts:
+    """Build normalized, extracted, table, and preview artifacts without database mutations."""
 
     root = layout.derived_root(digest)
     if replace and root.exists():
@@ -97,36 +115,21 @@ def derive(
 
     started_at = now_iso()
     if normalized is None:
-        try:
-            normalized = normalize(original, digest, source_name=source_name)
-        except Exception as error:
-            item = ProcessingEvidence(
-                processor="archiv.normalizer",
-                processor_version="1",
-                status="failed",
-                output_kind="normalized-document",
-                error=f"{type(error).__name__}: {error}",
-            )
-            record_processing(
-                database,
-                digest,
-                item,
-                started_at=started_at,
-                finished_at=now_iso(),
-            )
-            raise
+        normalized = normalize(original, digest, source_name=source_name)
 
+    queue_jobs: list[tuple[str, str, str, str]] = []
     ocr_run: VisualOcrRun | None = None
     if normalized.kind in {"image", "pdf"}:
         ocr_run = run_visual_ocr(original, normalized, root)
         normalized.segments.extend(ocr_run.segments)
         normalized.metadata["visual_ocr"] = ocr_run.summary
-        enqueue_job(
-            database,
-            digest,
-            "archiv.visual-ocr",
-            processor_version="1",
-            state="completed" if ocr_run.status == "succeeded" else "failed",
+        queue_jobs.append(
+            (
+                digest,
+                "archiv.visual-ocr",
+                "1",
+                "completed" if ocr_run.status == "succeeded" else "failed",
+            )
         )
 
     evidence: list[ProcessingEvidence] = []
@@ -208,11 +211,60 @@ def derive(
         _derive_audio_status(evidence, pending_records, digest, root, started_at)
     if normalized.kind == "archive":
         _derive_archive_status(
-            evidence, pending_records, database, digest, root, normalized.metadata, started_at
+            evidence, pending_records, queue_jobs, digest, root, normalized.metadata, started_at
         )
 
-    record_processing_batch(database, digest, pending_records)
-    return evidence
+    return DerivedArtifacts(
+        evidence=evidence,
+        pending_records=pending_records,
+        queue_jobs=queue_jobs,
+        normalized=normalized,
+    )
+
+
+def derive(
+    original: Path,
+    digest: str,
+    source_name: str,
+    layout: ArchivLayout,
+    database: ArchivDatabase,
+    *,
+    replace: bool,
+    normalized: NormalizedDocument | None = None,
+) -> list[ProcessingEvidence]:
+    """Build normalized, extracted, table, and processor-status artifacts."""
+
+    started_at = now_iso()
+    try:
+        derived = derive_artifacts(
+            original,
+            digest,
+            source_name,
+            layout,
+            replace=replace,
+            normalized=normalized,
+        )
+    except Exception as error:
+        item = ProcessingEvidence(
+            processor="archiv.normalizer",
+            processor_version="1",
+            status="failed",
+            output_kind="normalized-document",
+            error=f"{type(error).__name__}: {error}",
+        )
+        record_processing(
+            database,
+            digest,
+            item,
+            started_at=started_at,
+            finished_at=now_iso(),
+        )
+        raise
+
+    for q_digest, q_processor, q_version, q_state in derived.queue_jobs:
+        enqueue_job(database, q_digest, q_processor, processor_version=q_version, state=q_state)
+    record_processing_batch(database, digest, derived.pending_records)
+    return derived.evidence
 
 
 def _derive_image_preview(
@@ -410,7 +462,7 @@ def _derive_audio_status(
 def _derive_archive_status(
     evidence: list[ProcessingEvidence],
     pending_records: list[tuple[ProcessingEvidence, str, str]],
-    database: ArchivDatabase,
+    queue_jobs: list[tuple[str, str, str, str]],
     digest: str,
     root: Path,
     metadata: dict[str, object],
@@ -432,10 +484,20 @@ def _derive_archive_status(
         ),
         started_at=started_at,
     )
-    enqueue_job(
-        database,
-        digest,
-        "archiv.archive-extract",
-        processor_version="1",
-        state="completed" if not is_locked else "failed",
+    queue_jobs.append(
+        (
+            digest,
+            "archiv.archive-extract",
+            "1",
+            "completed" if not is_locked else "failed",
+        )
     )
+
+
+__all__ = [
+    "DerivedArtifacts",
+    "derive",
+    "derive_artifacts",
+    "reuse_derived",
+    "reuse_derived_artifacts",
+]
