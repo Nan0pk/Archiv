@@ -278,9 +278,13 @@ def run_grounded_ask(
         },
     )
 
-    adapter = build_model_adapter(model_config, layout.root)
     raw_response: str | None = None
     try:
+        # Built inside the guard, not before it. A failure here -- an adapter that
+        # refuses to be constructed, or one whose configuration is rejected -- would
+        # otherwise escape with no run result at all, which is worse than an unstamped
+        # one: there would be nothing on disk saying what was attempted.
+        adapter = build_model_adapter(model_config, layout.root)
         structured = request_grounded_response(adapter, prompt, set(citations_map.keys()))
         _write_json(
             evidence_dir / "structured_output.json",

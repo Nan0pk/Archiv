@@ -290,12 +290,20 @@ class ConsoleApp:
         self._stop_button.configure(state=tk.DISABLED)
         self._progress.stop()
         state = "succeeded" if outcome.succeeded else f"failed (exit {outcome.exit_code})"
-        self._status_var.set(f"Finished: {state}")
         self._outputs = inspect_run_output(
             outcome.output,
             home=self._home,
             user_paths=collect_user_paths(self._form_values),
         )
+        # Say it in the status line, where the operator is already looking, rather than
+        # leaving a remote answer looking identical to a local one.
+        if self._outputs.model_provenance == "remote-evaluation":
+            self._status_var.set(
+                f"Finished: {state} — NOT A LOCAL ANSWER: this archive is in evaluation "
+                "mode and its sources were sent to a service you do not control"
+            )
+        else:
+            self._status_var.set(f"Finished: {state}")
         artifact_labels = [
             f"{artifact.origin}: {artifact.path}" for artifact in self._outputs.artifacts
         ]

@@ -58,6 +58,13 @@ class RunOutputs:
     run_json: object | None
     citation_count: int = 0
     artifacts: list[OpenableArtifact] = field(default_factory=lambda: list[OpenableArtifact]())
+    model_provenance: str | None = None
+    """Where the answer came from, when the run said. `None` when it did not say.
+
+    Carried out of the run's own JSON rather than assumed, so the desktop console can
+    tell the operator that an answer was not produced on this machine. Without it the
+    console shows a remote answer exactly like a local one.
+    """
 
 
 def parse_run_json(output: str) -> object | None:
@@ -102,6 +109,18 @@ def _citation_candidates(payload: object) -> list[object]:
                 return list(cast(list[object], value))
         return [payload]
     return []
+
+
+def _model_provenance(payload: object) -> str | None:
+    """Read `model.provenance` out of a run's JSON, if the run recorded one."""
+
+    if not isinstance(payload, dict):
+        return None
+    model = cast(dict[str, object], payload).get("model")
+    if not isinstance(model, dict):
+        return None
+    provenance = cast(dict[str, object], model).get("provenance")
+    return provenance if isinstance(provenance, str) else None
 
 
 def _citation_candidate_count(payload: object) -> int:
@@ -211,6 +230,7 @@ def inspect_run_output(
     if payload is None:
         return result
     result.citation_count = _citation_candidate_count(payload)
+    result.model_provenance = _model_provenance(payload)
 
     seen: set[Path] = set()
     for key, value in _walk_strings(payload):

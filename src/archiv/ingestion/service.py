@@ -266,7 +266,17 @@ def commit_candidate(
             "SELECT 1 FROM ingestions WHERE object_sha256 = ? AND status = 'succeeded'",
             (digest,),
         ).fetchone()
-    duplicate = prepared.duplicate or (existing_ingestion is not None)
+    # Decided here, from the database, and not from prepared.duplicate. That flag is
+    # set inside a parallel worker by asking whether the original was already on disk,
+    # which is a race: two candidates with identical content are prepared concurrently,
+    # one stores the bytes and the other finds them already there, but the order they
+    # are committed in is independent of who won. When the one that stored the bytes
+    # commits second it sees the other's row and is also marked a duplicate, so a batch
+    # could record every copy as a duplicate of an original it never recorded.
+    #
+    # "Already successfully ingested" is a question only the database can answer, and it
+    # is answered here, in the ordered phase, where the answer does not depend on timing.
+    duplicate = existing_ingestion is not None
 
     ingestion_id = uuid4().hex
     _insert_pending_ingestion(

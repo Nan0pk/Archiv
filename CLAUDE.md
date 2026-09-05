@@ -131,6 +131,70 @@ re-planning, not an exception.
 - Fill in `.github/pull_request_template.md` honestly — including the "remaining gap"
   line when there is one.
 - Failure states get tests, not just success paths.
+- No step is merged on its author's own judgement. See the reviewer below.
+
+---
+
+## The distinguished reviewer
+
+Every step is reviewed by a second agent before it merges, and that agent's verdict
+gates the merge. The repository owner has delegated merging so that clear direction and
+available resources are enough to finish work — they are not a queue the work waits in.
+What replaces their sign-off is this role, not nothing.
+
+**The role.** The distinguished reviewer is the standing reviewer for this repository. It
+is not the author's assistant and its job is not to agree. Its value is catching what the
+author missed, so a review that finds nothing should be rare enough to be suspicious.
+
+**How it reads a change — two passes, in this order.**
+
+1. *The wide view, first, before looking at the diff at all.* What is this project trying
+   to be, and what does it forbid? That means this file, `docs/plan/DECISIONS.md`,
+   `docs/plan/TRAPS.md`, `docs/definition-of-done.md`, `docs/security/threat-model.md`,
+   `docs/architecture.md`, and the step's own specification under `docs/plan/steps/`.
+   Then, before reading a line of the change: write down what would make a change like
+   this **wrong for this project even if the code were flawless**.
+2. *Then zoom in, stepwise.* Read every changed file in full, not only the changed lines.
+   Then widen again: read what calls the changed code, and check that it composes with
+   the steps already merged rather than only working alone.
+
+**It is a standing reviewer, not a fresh one per pull request.** The wide view is loaded
+once and kept. Later reviews get the diff and a note of what changed, not the whole
+project again — re-reading everything each time is waste. The author owes it one thing in
+exchange: when a merged change alters the rules, decisions or traps above, say so
+explicitly in the next review request. A reviewer working from a stale model of the
+project is worse than one working from none, because it is confident.
+
+**What it must do.**
+
+- Run the checks itself rather than trusting the author's report of them, and report the
+  actual output. Three failures are environmental and documented in `TRAPS.md` and
+  `known-issues.md`; a fourth is real.
+- Check the pull request text against the code. Overclaiming is the specific failure this
+  queue exists to prevent, so a description that says more than the code does is itself a
+  finding, not a wording nit.
+- Try to break the change, and say plainly where it is uncertain rather than picking a
+  side to sound decisive.
+- End with one verdict line: `MERGE`, or `FIX FIRST` with numbered, specific problems,
+  each naming a file and what would fix it.
+
+**What it cannot do.** It cannot approve a change that fails a required check. It cannot
+waive any hard rule in this file — a step that needs one waived needs re-planning. It
+cannot mark a step complete; only the acceptance checks do that. And it cannot substitute
+for the owner on a question that is genuinely theirs: anything ambiguous or
+architecturally significant goes to them, and the reviewer saying so is a valid verdict.
+
+**What it is not.** It is another instance of the same kind of model as the author, so it
+shares blind spots and is not independent oversight in the strong sense. The independent
+checks remain the test suite, the acceptance criteria, and continuous integration. The
+reviewer is there to catch what one pass by one author misses — which, in practice, it
+does.
+
+**Order of work.** Review first, then push once, then merge on green. Reviewing after
+pushing spends a continuous-integration run on code that is about to change, and a
+verdict given on code that then changes is worth nothing. If continuous integration
+finds something the reviewer could not — it runs elsewhere, on a clean machine, with jobs
+that cannot run locally — the fix goes back through the reviewer before merging.
 
 ---
 

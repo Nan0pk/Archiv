@@ -216,3 +216,62 @@ def test_ocr_page_batching_multipage_tiff(tmp_path: Path, monkeypatch: pytest.Mo
     m2 = search_documents("SecondPageWord", home=home)
     assert len(m1) >= 1
     assert len(m2) >= 1
+
+
+def test_identical_content_records_exactly_one_original_in_any_commit_order(
+    tmp_path: Path,
+) -> None:
+    """The duplicate flag must not depend on which parallel worker finished first.
+
+    Two candidates with identical content are prepared concurrently. One stores the
+    bytes and reports itself an original; the other finds them already there and reports
+    itself a duplicate. But the order they are committed in is independent of who won
+    that race, and when the one that stored the bytes commits second it used to see the
+    other's row and be marked a duplicate too -- so a batch could report every copy as a
+    duplicate of an original it never recorded.
+
+    The parallel test above only catches this when the scheduler happens to produce the
+    bad order, which was roughly one run in four. This forces both orders directly, so
+    the regression cannot hide behind timing.
+    """
+
+    from archiv.ingestion.service import commit_candidate, prepare_candidate
+    from archiv.storage.database import ArchivDatabase
+    from archiv.storage.layout import ArchivLayout
+
+    for commit_first in ("the one that stored the bytes", "the one that found them"):
+        home = tmp_path / f"home-{commit_first.replace(' ', '-')}"
+        source = tmp_path / f"src-{commit_first.replace(' ', '-')}"
+        source.mkdir()
+        (source / "first.txt").write_text("Identical content.\n", encoding="utf-8")
+        (source / "second.txt").write_text("Identical content.\n", encoding="utf-8")
+
+        layout = ArchivLayout.resolve(home)
+        layout.ensure()
+        database = ArchivDatabase(layout.database)
+        database.initialize()
+
+        stored = prepare_candidate(source / "first.txt", layout, rebuild_derived=False)
+        found = prepare_candidate(source / "second.txt", layout, rebuild_derived=False)
+        assert stored.duplicate is False, "the first to prepare stores the bytes"
+        assert found.duplicate is True, "the second finds them already on disk"
+
+        order = (
+            [stored, found]
+            if commit_first.startswith("the one that stored")
+            else [
+                found,
+                stored,
+            ]
+        )
+        results = [
+            commit_candidate(database, layout, prepared, rebuild_derived=False)
+            for prepared in order
+        ]
+
+        originals = sum(not result.duplicate for result in results)
+        assert originals == 1, (
+            f"committing {commit_first} first recorded {originals} originals; "
+            "exactly one copy must be the original whichever order they commit in"
+        )
+        assert sum(result.duplicate for result in results) == 1
