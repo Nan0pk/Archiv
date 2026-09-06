@@ -92,7 +92,11 @@ def test_queue_json_matches_queue_markdown() -> None:
     _, steps = load_queue(QUEUE_PATH)
     markdown = QUEUE_MARKDOWN.read_text(encoding="utf-8")
 
-    listed = re.findall(r"^\| \*\*(S\d+A?)\*\* \| (.+?) \|", markdown, flags=re.MULTILINE)
+    # A step identifier is a number plus an optional letter for a follow-up filed from
+    # review. The letter used to be matched as literally "A", because A was the only one
+    # that existed -- which silently made a second follow-up on the same step invisible
+    # to this check rather than reported as a mismatch.
+    listed = re.findall(r"^\| \*\*(S\d+[A-Z]?)\*\* \| (.+?) \|", markdown, flags=re.MULTILINE)
     assert listed, "QUEUE.md declares no steps"
 
     assert [step_id for step_id, _ in listed] == [step.id for step in steps], (

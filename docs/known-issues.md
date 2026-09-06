@@ -182,3 +182,31 @@ more, and anything reading these files should treat the version as meaningful ra
 assuming the nesting. The window in which version 1 could have been written was one
 commit on `main`, so it is unlikely any archive holds one — but "unlikely" is not
 "cannot", which is why this is written down rather than assumed away.
+
+## A run refused part-way through records itself as allowed
+
+The cost decision for a question is taken once, before the model is called, and written
+to `runs/ask/<id>/cost.json`. But the retry layer can send the same question up to three
+times, and each attempt passes the spend gate again.
+
+So a question whose first attempt was allowed, and whose second is refused because the
+first pushed recorded spend past the ceiling, leaves a run that says `failed` with a cost
+record that says `"decision": "allowed"`. The reason it actually stopped appears only
+inside an error string.
+
+No money leaks: the ceiling held and nothing was sent after the refusal. What is wrong is
+the evidence — it tells a later reader the run was allowed to spend when it was stopped
+from spending. Queued as step S07B.
+
+## `Unmeasured.status` can say `externally_blocked`, and nothing ever says it
+
+`src/archiv/calibration.py` allows three reasons a number is absent:
+`not_measurable`, `not_measured` and `externally_blocked`. Only the first two are ever
+produced. The third was included to match the shape
+`benchmarks/field_trial/public-results.json` already uses for a blocked cell, but a
+calibration run against an archive that refuses the model comes out as `not_measured`,
+with the per-question `run_status` carrying `blocked_by_policy` instead.
+
+Nothing is lost — the information is in the artefact either way — but an option no code
+path produces is an invitation to assume it means something. Either produce it for a
+policy refusal or drop it.

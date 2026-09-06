@@ -245,6 +245,24 @@
       }
     },
     {
+      "id": "S07B",
+      "phase": "A",
+      "title": "A run refused part-way through must not record itself as allowed",
+      "doc": "docs/plan/steps/S07B.md",
+      "detail": "full",
+      "depends_on": [
+        "S07A"
+      ],
+      "acceptance": {
+        "kind": "pytest",
+        "targets": [
+          "tests/test_remote_evaluation_cost.py::test_a_run_refused_on_a_retry_does_not_record_itself_as_allowed",
+          "tests/test_remote_evaluation_cost.py::test_a_ceiling_reached_part_way_through_ends_as_blocked_by_policy",
+          "tests/test_remote_evaluation_cost.py::test_a_part_way_refusal_still_reports_that_text_was_sent"
+        ]
+      }
+    },
+    {
       "id": "S08",
       "phase": "A",
       "title": "archiv model calibrate \u2014 measure the workload and the remote model",
