@@ -419,13 +419,12 @@ def stub_local_server(
             del tz
             return fake_clock.now
 
+    def build_probe(config: object) -> Probe:
+        del config
+        return Probe()
+
     monkeypatch.setattr(calibration_module, "datetime", FrozenDatetime)
-    monkeypatch.setattr(
-        calibration_module, "OpenAICompatibleLoopbackAdapter", lambda config: Probe(), raising=False
-    )
-    monkeypatch.setattr(
-        "archiv.model_adapter.OpenAICompatibleLoopbackAdapter", lambda config: Probe()
-    )
+    monkeypatch.setattr("archiv.model_adapter.OpenAICompatibleLoopbackAdapter", build_probe)
 
 
 def test_every_hardware_profile_row_cites_a_source_and_a_date() -> None:
@@ -651,25 +650,27 @@ def test_prediction_lands_within_the_stated_band_for_a_known_fingerprint() -> No
     second = predict_ask_latency(
         with_bandwidth, prompt_tokens=1000, completion_tokens=200, retrieval_ms=500.0
     )
-    # Published 10 a second against a derived 14 is a 29% gap: under the threshold, so
-    # recorded without a warning.
-    assert second.anchors_disagree_by == pytest.approx(0.2857, abs=0.001)
-    assert second.anchor_disagreement_note == ""
+    # Published 10 a second against a derived 14 is a 40% gap measured against the figure
+    # being checked, so it is over the threshold and reported rather than averaged away.
+    # Measured instead against the larger of the two it would read as 29% and stay quiet;
+    # that choice was made deliberately, because a threshold whose job is to surface
+    # disagreement should not be the version that surfaces less of it.
+    assert second.anchors_disagree_by == pytest.approx(0.4)
+    assert "differ by 40%" in second.anchor_disagreement_note
+    assert "reported rather than averaged away" in second.anchor_disagreement_note
 
 
-def test_the_plans_prefill_heavy_expectation_is_wrong_for_a_cited_answer() -> None:
-    """The step's own premise does not survive the figures it sent me to find.
+def test_which_half_of_the_wait_dominates_depends_on_the_machine() -> None:
+    """Neither the step's premise nor its first correction survives the figures.
 
-    `docs/plan/steps/S09.md` was written expecting the wait on a processor without a
-    graphics card to be almost all prompt reading. Against published measurements it is
-    not: generating the answer dominates on every row in the table, because those
-    measurements put processor prompt reading at 130-268 tokens a second rather than the
-    60 the step assumed, while generation runs at 4-14.
+    `docs/plan/steps/S09.md` first said prompt reading dominates on a machine without a
+    graphics card. A correction written during the step said the opposite -- generation
+    dominates on every row -- and that was wrong too, because the processor figures had
+    been taken from a fork's column of a source publishing two side by side.
 
-    This test pins the finding so nobody quietly reverts to the original expectation. It
-    also pins the thing that is actually true and is what the two terms are reported
-    separately for: which half dominates depends on how long the answer is, and the
-    turning point is short enough that a cited answer is past it.
+    On the mainline figures it goes both ways, and the deciding quantity is the ratio
+    between the two rates. This pins that, including the one row where prompt reading
+    genuinely wins, so neither of the two over-simple claims can come back.
     """
 
     from archiv.hardware_profiles import load_published_profiles
@@ -677,25 +678,43 @@ def test_the_plans_prefill_heavy_expectation_is_wrong_for_a_cited_answer() -> No
     profiles = {
         row.id: row for row in load_published_profiles(ROOT / "docs/plan/hardware-profiles.json")
     }
-    prompt_tokens = 1400
+    prompt_tokens, answer_tokens = 1400, 300
 
-    for row_id in (
-        "amd-ryzen-7950x-cpu-only-llama31-8b-q8-0",
-        "apple-m2-max-cpu-only-llama31-8b-q8-0",
-        "nvidia-rtx-4090-llama2-7b-q4-0",
-    ):
+    def halves(row_id: str) -> tuple[float, float]:
         row = profiles[row_id]
-        prefill_seconds = prompt_tokens / row.prefill_tokens_per_second.middle
-        generation_seconds = 300 / row.decode_tokens_per_second.middle
-        assert generation_seconds > prefill_seconds, (
-            f"{row_id}: the plan expected prompt reading to dominate, but generating a "
-            f"300-token answer takes {generation_seconds:.1f}s against {prefill_seconds:.1f}s"
+        return (
+            prompt_tokens / row.prefill_tokens_per_second.middle,
+            answer_tokens / row.decode_tokens_per_second.middle,
         )
-        # The turning point: below this answer length, prompt reading really does dominate.
-        crossover = prompt_tokens * (
-            row.decode_tokens_per_second.middle / row.prefill_tokens_per_second.middle
+
+    # Apple silicon on the processor alone: reading the prompt is the larger half, which
+    # is what the step originally claimed and what its first correction denied.
+    apple_prompt, apple_answer = halves("apple-m2-max-cpu-only-llama31-8b-q8-0")
+    assert apple_prompt > apple_answer, (
+        "on this row prompt reading dominates; a claim that generation always dominates "
+        "is contradicted here"
+    )
+
+    # An x86 processor, and a graphics card: generation is the larger half, which is what
+    # the step's original premise denied.
+    for row_id in ("amd-ryzen-7950x-cpu-only-llama31-8b-q8-0", "nvidia-rtx-4090-llama2-7b-q4-0"):
+        row_prompt, row_answer = halves(row_id)
+        assert row_answer > row_prompt, (
+            f"on {row_id} generation dominates; a claim that the wait is almost all "
+            "before the first word is contradicted here"
         )
-        assert crossover < 200, (
-            f"{row_id}: prompt reading dominates only for answers under "
-            f"{crossover:.0f} tokens, which is shorter than a cited answer"
-        )
+
+    # So no single claim covers the table, and the spread in the deciding ratio is what
+    # makes that so rather than it being a coincidence of two rows.
+    ratios = [
+        row.prefill_tokens_per_second.middle / row.decode_tokens_per_second.middle
+        for row in profiles.values()
+    ]
+    assert max(ratios) / min(ratios) > 10, (
+        "the ratio that decides which half dominates barely varies, which would make a "
+        "single claim about all machines defensible after all"
+    )
+    # And the answer length where the two halves are equal spans an order of magnitude.
+    crossovers = sorted(prompt_tokens / ratio for ratio in ratios)
+    assert crossovers[0] < 30
+    assert crossovers[-1] > 300

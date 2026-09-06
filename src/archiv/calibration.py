@@ -806,7 +806,6 @@ def local_profile_from(measured: LocalThroughput) -> HardwareProfile:
     return HardwareProfile(
         id="this-machine",
         model=measured.model_identity,
-        parameter_count_billions=0.001,
         quantisation="as served by the local endpoint",
         hardware=measured.machine,
         backend="the OpenAI-compatible server configured for this archive",

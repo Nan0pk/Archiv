@@ -204,3 +204,34 @@ with the per-question `run_status` carrying `blocked_by_policy` instead.
 Nothing is lost — the information is in the artefact either way — but an option no code
 path produces is an invitation to assume it means something. Either produce it for a
 policy refusal or drop it.
+
+## Every runtime prediction rests on one anchor, not two
+
+Step S09 requires each predicted runtime to be built from two independent estimates: a
+published throughput figure, and a ceiling derived from the machine's memory bandwidth and
+the size of the model file. Where they disagree by more than 30%, that disagreement is
+supposed to be reported as the honest uncertainty rather than averaged away.
+
+The second estimate is implemented and tested. No row in `docs/plan/hardware-profiles.json`
+carries a memory bandwidth figure, so it is never actually computed: every prediction says
+`not_derivable` for its second anchor and rests on the published figure alone.
+
+The reason is that the vendor pages publishing memory bandwidth are unreachable from the
+environment the table was built in, and a bandwidth number recalled from memory is not a
+cited number — which is the one thing this table exists to avoid. Adding bandwidth figures
+from a reachable, citable source would close this, and would also make the disagreement
+threshold do something.
+
+## A published throughput figure can be the wrong column
+
+`docs/plan/hardware-profiles.json` records four processor-only rows from a source that
+publishes mainline `llama.cpp` and `ik_llama.cpp` results side by side, in adjacent
+columns. The first version of that table took the fork's column and labelled it mainline,
+inflating prompt-reading figures by up to five times and producing a wrong conclusion about
+which half of a question's wait dominates. Review caught it by opening the page.
+
+Nothing in the repository can catch that class of error: the figures are plausible, the
+URL is correct, the date is correct, and only reading the source shows the mistake. Any
+future row added to that table needs the same treatment — a person or a reviewer opening
+the page and checking which column was taken — and the row's `backend` field exists to
+make the answer explicit rather than assumed.

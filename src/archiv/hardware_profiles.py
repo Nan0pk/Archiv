@@ -5,11 +5,15 @@ everything about it is built to keep that number from being mistaken for a measu
 
 The prediction splits in two because the machine does. Reading the prompt happens all at
 once and is limited by how fast the processor can compute; producing the reply happens one
-token at a time and is limited by how fast the weights can be read out of memory. Archiv's
-questions are prompt-heavy -- about eight passages of evidence plus an instruction block,
-against a few hundred tokens of answer -- so on a machine without a graphics card almost
-the whole wait happens before the first word appears. A single "tokens per second" figure
-hides that entirely, which is the mistake this module exists to avoid.
+token at a time and is limited by how fast the weights can be read out of memory.
+
+Which of the two dominates is **a property of the machine, not of Archiv**. Across the
+published figures in `docs/plan/hardware-profiles.json` the ratio between the two rates
+runs from about 4 to about 64, so for a 1,400-token prompt the answer length at which the
+two halves take equal time runs from 22 to 360 tokens. On an Apple machine using only its
+processor, prompt reading dominates for any answer worth citing; on an x86 processor or any
+graphics card in that table, generation does. A single "tokens per second" figure collapses
+that distinction entirely, which is the mistake this module exists to avoid.
 
 Three rules, and they are not negotiable:
 
@@ -71,7 +75,7 @@ class ProfileError(ValueError):
 class Unavailable(StrictModel):
     """Something that could not be worked out, and why. Never an omission."""
 
-    status: Literal["no_matching_profile", "not_derivable", "not_measured"]
+    status: Literal["not_derivable", "not_measured"]
     reason: str = Field(min_length=1)
 
 
@@ -99,7 +103,10 @@ class HardwareProfile(StrictModel):
 
     id: str = Field(min_length=1)
     model: str = Field(min_length=1)
-    parameter_count_billions: float = Field(gt=0)
+    parameter_count_billions: float | None = None
+    """Absent when unknown. It used to be required, which meant a locally measured profile
+    had to invent one to be constructible -- and the invented value was then printed to the
+    user as a fact about their model."""
     quantisation: str = Field(min_length=1)
     hardware: str = Field(min_length=1)
     backend: str = Field(min_length=1)
@@ -183,7 +190,10 @@ class PredictedLatency(StrictModel):
     completion_tokens: int
     retrieval_ms: float
     time_to_first_token: Band
-    """Reading the prompt. On a machine without a graphics card this is most of the wait."""
+    """Retrieval plus reading the prompt: everything before the first word appears.
+
+    Whether this or the generation term below is the larger one depends on the machine.
+    Reported separately so a reader can see which, rather than being handed one total."""
     generation: Band
     total: Band
     second_anchor: BandwidthAnchor | Unavailable
@@ -334,9 +344,14 @@ def predict_ask_latency(
 ) -> PredictedLatency:
     """Predict one question's wall clock from a measured workload and a throughput profile.
 
-    Reading the prompt and producing the reply are added separately and reported
-    separately, because on the hardware somebody is most likely to buy first the first
-    term dominates and the second is almost irrelevant.
+    The two terms are added separately and reported separately, because which one dominates
+    varies by a factor of fifteen across the machines in the profile table. Handing back a
+    single total would hide the one thing a person deciding what to buy needs to see.
+
+    The two figures may also come from different measurement configurations: on the
+    processor-only rows the source measured prompt reading and generation at different
+    thread counts. Their sum is therefore an estimate assembled from two observations of
+    the same machine, not one measurement of it.
     """
 
     if prompt_tokens < 0 or completion_tokens < 0:
@@ -353,7 +368,11 @@ def predict_ask_latency(
     if isinstance(anchor, BandwidthAnchor):
         published = profile.decode_tokens_per_second.middle
         derived = anchor.decode_tokens_per_second_middle
-        disagreement = round(abs(published - derived) / max(published, derived), 4)
+        # Relative to the published figure, which is the number being checked, rather
+        # than to whichever is larger. Dividing by the larger makes every disagreement
+        # look smaller than it is and so warns less often -- the wrong direction to be
+        # wrong in for a threshold whose whole job is to surface disagreement.
+        disagreement = round(abs(published - derived) / published, 4)
         if disagreement > ANCHOR_DISAGREEMENT_THRESHOLD:
             note = (
                 f"The published figure ({published:.2f} tokens a second) and the figure "
