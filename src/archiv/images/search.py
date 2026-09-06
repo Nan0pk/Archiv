@@ -1,4 +1,13 @@
-"""Semantic image search and near-duplicate detection over the image embedding index."""
+"""Finding images that look like a given image, over the image embedding index.
+
+There is no text query here. The one that used to exist gave every string a vector, so
+`"a photo of a person smiling"` returned a ranked table of documents and `"xyzzy plugh
+frobnicate"` returned one just as confidently. `docs/plan/steps/S10.md` records what it
+did, measured, on a corpus containing no people.
+
+What remains takes an image and finds images like it. Its limits are measured and stated
+on `MATCH_FLOOR` below.
+"""
 
 from __future__ import annotations
 
@@ -17,15 +26,61 @@ def _cosine_similarity(v1: list[float], v2: list[float]) -> float:
     return max(-1.0, min(1.0, dot))
 
 
-def search_images(
-    query: str | Path,
+MATCH_FLOOR = 0.995
+"""Below this similarity, nothing is returned. Measured, not chosen.
+
+Measured across three classes of content, because the class matters more than anything
+else here. Each measurement takes three groups of generated images, each group being one
+image filed four ways: the original, re-encoded as JPEG at quality 72, resized to half,
+and brightened by 12%. Within a group is a true duplicate pair; across groups is
+unrelated.
+
+| Content | Lowest true match | Highest unrelated |
+|---|---|---|
+| Maximally distinct palettes | 0.9994 | 0.9000 |
+| Pictures sharing a colour character | 1.0000 | 0.9903 |
+| Light pages of dark text | 1.0000 | 1.0000 |
+
+This floor is the midpoint of the gap in the tightest class that separates at all. It
+keeps every true duplicate in all three, and admits no unrelated pair in the two where
+the populations can be told apart. It was 0.99 until review generated the middle class
+and found that value let a quarter of unrelated pictures through -- a photograph of a
+tree came back as a match for a photograph of three people.
+
+**What no floor can do.** The deciding property is how close two images' overall colour
+statistics are, and when they are close enough this embedding cannot tell a duplicate
+from an unrelated image at any threshold. Light pages of dark text are the extreme case,
+where every pair lands at 1.0000 whether it matches or not, but the effect is a continuum
+and not a property of documents: any two pictures with nearly the same colour balance
+are affected. The floor stops a weak match being shown as a match. It cannot promise that
+what passes it is a duplicate.
+
+The sample is three groups of four generated images per class. Enough to place a floor
+between two populations and to show that a third class moves them; not enough for a fourth
+decimal place, and not real photographs or real scans at all.
+"""
+
+
+class NotAnImageError(ValueError):
+    """The path given as a query is missing, or is not an image this embedder can read."""
+
+
+def find_similar_images(
+    image: Path,
     *,
     top_k: int = 10,
-    min_score: float = 0.0,
+    min_score: float = MATCH_FLOOR,
     home: Path | None = None,
     embedder: ImageEmbedder | None = None,
 ) -> list[ImageSearchResult]:
-    """Retrieve images matching a text query or reference image, ranked by similarity."""
+    """Find indexed images that look like the given one.
+
+    Takes a path, and only a path. The version this replaced accepted either a string or
+    a path and guessed which it had been handed by testing whether the string named an
+    existing file -- so a typo in a filename silently became a text query and returned
+    ranked nonsense instead of an error.
+    """
+
     layout = ArchivLayout.resolve(home)
     index_file = image_index_path(layout)
     if not index_file.is_file():
@@ -33,17 +88,20 @@ def search_images(
 
     active_embedder = embedder or get_default_image_embedder()
 
-    # Determine whether query is an existing image file or semantic text
-    query_path: Path | None = None
-    if isinstance(query, Path) and query.is_file():
-        query_path = query
-    elif isinstance(query, str) and Path(query).is_file():
-        query_path = Path(query)
-
-    if query_path is not None:
+    query_path = Path(image).expanduser()
+    if not query_path.is_file():
+        raise NotAnImageError(
+            f"no such image: {query_path}. This command searches for images that look "
+            "like an image you already have, so it needs the path to one. It has no text "
+            "query: the one it used to have gave every string a vector and returned "
+            "confident-looking results for words like 'xyzzy'."
+        )
+    try:
         query_vec = active_embedder.embed_image(query_path)
-    else:
-        query_vec = active_embedder.embed_text(str(query))
+    except OSError as error:
+        raise NotAnImageError(
+            f"cannot read {query_path} as an image: {type(error).__name__}: {error}"
+        ) from error
 
     candidates: list[tuple[float, str, str, str, int, int]] = []
 

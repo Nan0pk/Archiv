@@ -1,4 +1,4 @@
-"""Contracts for image embeddings, semantic image search, and near-duplicate detection."""
+"""Contracts for the image embedding index and near-duplicate results."""
 
 from __future__ import annotations
 

@@ -39,7 +39,8 @@ Every name, score and confidence value shown to a user is backed by a measuremen
 
 | Step | Work | Depends on | Detail |
 |---|---|---|---|
-| **S10** | Rename image search to find-similar and delete the text embedder | `S00` | [**stub**](steps/S10.md) |
+| **S10** | Rename image search to find-similar and delete the text embedder | `S00` | [full](steps/S10.md) |
+| **S10A** | Stop reporting unrelated documents as duplicates | `S10` | [full](steps/S10A.md) |
 | **S11** | Faces to clustering only; remove filename name guessing; add negative fixtures | `S10` | [**stub**](steps/S11.md) |
 | **S12** | Graph person becomes candidate_mention; remove hardcoded confidences | `S11` | [**stub**](steps/S12.md) |
 | **S13** | Index staleness: refresh on add, report N of M, incremental image index | `S00` | [**stub**](steps/S13.md) |

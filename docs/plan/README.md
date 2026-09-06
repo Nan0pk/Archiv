@@ -67,10 +67,17 @@ to project work rather than to schema.
 
 5. **Run the checks.**
 
+   Each on its own, reading its own exit code. Not chained, and never piped into
+   `tail` or `head`: a pipeline takes the exit status of the last command in it, so a
+   failing check passes silently and anything after it still runs. That has happened
+   here — see the rule in `CLAUDE.md`.
+
    ```bash
-   ruff format --check . && ruff check . \
-     && pyright --pythonpath .venv/bin/python \
-     && pytest -q && archiv doctor --json
+   ruff format --check .
+   ruff check .
+   pyright --pythonpath .venv/bin/python
+   PATH="$PWD/.venv/bin:$PATH" pytest -q
+   archiv doctor --json
    ```
 
 6. **Open one pull request**, filling in

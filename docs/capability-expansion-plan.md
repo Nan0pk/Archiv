@@ -586,8 +586,11 @@ Concretely, when this plan is done:
   can search.
 - **You can search what's *in* pictures.** Ask for a phrase and get back the image, the
   page, and the exact region where those words appear.
-- **You can find pictures by description**, or by "more like this one" — without tagging
-  anything by hand.
+- **You can find pictures like another picture** — "more like this one" — without tagging
+  anything by hand. *(Amended 2026-09-06: this said "You can find pictures by
+  description". Step S10 deleted that surface, because the thing answering those queries
+  was a nineteen-entry colour lookup table. Finding pictures like another picture works,
+  with limits measured in `docs/plan/steps/S10.md`.)*
 - **You can ask who someone is.** Archiv groups the same face across your whole archive
   and shows you *every name that face has ever been called* in your own documents —
   captions, filenames, photo credits, nearby text — with the evidence for each. It never

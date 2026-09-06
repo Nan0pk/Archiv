@@ -15,12 +15,17 @@ from archiv.images.index import (
     image_index_path,
     rebuild_image_index,
 )
-from archiv.images.search import find_near_duplicates, search_images
+from archiv.images.search import (
+    MATCH_FLOOR,
+    NotAnImageError,
+    find_near_duplicates,
+    find_similar_images,
+)
 from archiv.storage.layout import ArchivLayout
 
 images_app = typer.Typer(
     no_args_is_help=True,
-    help="Semantic image search, embeddings index, and near-duplicate detection.",
+    help="Find images that look like a given image, and manage the image index.",
 )
 console = Console()
 
@@ -42,29 +47,62 @@ def rebuild_index_command(
         )
 
 
-@images_app.command("search")
-def search_command(
-    query: Annotated[str, typer.Argument(help="Semantic description or image path to search for.")],
+@images_app.command("find-similar")
+def find_similar_command(
+    image: Annotated[
+        Path,
+        typer.Option(
+            "--image",
+            dir_okay=False,
+            help="Path to an image to find near-duplicates of.",
+        ),
+    ],
     top_k: Annotated[int, typer.Option("--top-k", "-k", min=1, help="Max results to return.")] = 10,
     min_score: Annotated[
-        float, typer.Option("--min-score", min=-1.0, max=1.0, help="Minimum cosine similarity.")
-    ] = 0.0,
+        float,
+        typer.Option(
+            "--min-score",
+            min=-1.0,
+            max=1.0,
+            help=f"Similarity floor. Default {MATCH_FLOOR}, which is a measured figure.",
+        ),
+    ] = MATCH_FLOOR,
     home: Annotated[Path | None, typer.Option("--home", file_okay=False)] = None,
     json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
 ) -> None:
-    """Search images by text description or reference image similarity."""
-    results = search_images(query, top_k=top_k, min_score=min_score, home=home)
+    """Find indexed images that look like the given image."""
+
+    try:
+        results = find_similar_images(image, top_k=top_k, min_score=min_score, home=home)
+    except NotAnImageError as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(code=2) from error
+
     if json_output:
         typer.echo(json.dumps([r.model_dump(mode="json") for r in results], indent=2))
         return
 
     if not results:
-        console.print(f"[yellow]No matching images found for:[/yellow] {query}")
+        # Two different situations, and saying the wrong one is a false statement about
+        # the archive. An unbuilt index also returns nothing, and the earlier wording
+        # reported that as "nothing looks like this" -- for an image that is in the
+        # archive and matches itself exactly.
+        if not image_index_path(ArchivLayout.resolve(home)).is_file():
+            console.print(
+                "[yellow]This archive has no image index yet, so nothing can be "
+                "compared.[/yellow] Build one with [bold]archiv images "
+                "rebuild-index[/bold]."
+            )
+            return
+        console.print(
+            f"[yellow]Nothing in this archive looks like[/yellow] {image.name} "
+            f"[yellow]at a similarity of {min_score} or above.[/yellow]"
+        )
         return
 
-    table = Table(title=f"Image Search: {query}")
+    table = Table(title=f"Images similar to {image.name}")
     table.add_column("Rank", justify="right", style="cyan")
-    table.add_column("Score", justify="right", style="green")
+    table.add_column("Similarity", justify="right", style="green")
     table.add_column("Source Name", style="bold")
     table.add_column("Dimensions")
     table.add_column("SHA-256 (prefix)", style="dim")
@@ -72,13 +110,24 @@ def search_command(
     for rank, res in enumerate(results, 1):
         table.add_row(
             str(rank),
-            f"{res.score:.4f}",
+            # Two decimals, not four. Four implied a calibrated confidence that does not
+            # exist: this is a raw cosine similarity over colour and edge features, and
+            # nothing has ever established what a given value means.
+            f"{res.score:.2f}",
             res.source_name,
             f"{res.width}x{res.height}",
             res.object_sha256[:12],
         )
 
     console.print(table)
+    console.print(
+        "[dim]Similarity is a raw cosine over colour and edge features, not a calibrated "
+        "confidence. What decides whether it can be trusted is how close two images' "
+        "overall colour balance is: the closer it is, the less this can tell a duplicate "
+        "from an unrelated picture, and on light pages of dark text it cannot tell them "
+        "apart at all. Two unrelated photographs sharing a colour character can score "
+        "above 0.99. See docs/known-issues.md.[/dim]"
+    )
 
 
 @images_app.command("duplicates")
@@ -112,10 +161,23 @@ def duplicates_command(
         )
         for member in group.members:
             m_prefix = member.object_sha256[:12]
-            sim_str = f"{member.similarity_to_lead:.4f}"
+            # Two decimals, for the same reason as the ranking surface: four implied a
+            # calibrated confidence that has never existed. This surface needs it more,
+            # not less -- a ranked row invites judgement, a duplicate group invites a
+            # deletion.
+            sim_str = f"{member.similarity_to_lead:.2f}"
             console.print(
                 f"  - [green]{member.source_name}[/green] ({m_prefix}) similarity: {sim_str}"
             )
+
+    console.print(
+        "\n[dim]Check these before deleting anything. Grouping is a raw cosine over "
+        "colour and edge features, and the closer two images' overall colour balance is, "
+        "the less it can tell a duplicate from an unrelated picture. On light pages of "
+        "dark text it cannot tell them apart at all, so unrelated scanned documents are "
+        "reported as duplicates of each other. This is a known defect with its own queue "
+        "step; see docs/known-issues.md.[/dim]"
+    )
 
 
 @images_app.command("status")
