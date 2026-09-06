@@ -61,11 +61,11 @@ These are the `Fast checks / quality` required gate (`.github/workflows/fast-che
 Any change under `src/**` additionally triggers `office-validation`, `field-trial` and
 `offline-alpha`, so a source change is never as small as it looks.
 
-**Known-good baseline** on `ec96869`, run as `PATH="$PWD/.venv/bin:$PATH" pytest -q`:
-490 passed, **1** failed (the one environmental case — a tracked file mentioning the
-container's home directory), 2 skipped; ruff clean; pyright clean. Keep this current: a
-stale baseline is how a real failure gets waved through, which is `TRAPS.md`'s own
-argument.
+**Known-good baseline** on `main`, run as `PATH="$PWD/.venv/bin:$PATH" pytest -q`:
+**491 passed, 0 failed**, 2 skipped; ruff clean; pyright clean. There is no expected
+failure any more — the one that was called environmental was a real leak this file's own
+test was catching, and it is fixed. Keep this current, and treat any failure as real: a
+tolerated red test is how the next one gets ignored.
 
 ---
 
@@ -241,8 +241,11 @@ that cannot run locally — the fix goes back through the reviewer before mergin
 
 **What merging requires, exactly.** Three things, and green checks are only one of them:
 
-1. A reviewer verdict of `MERGE`, stated. Not inferred from silence, and not from a round
-   whose findings are still open.
+1. A stated reviewer verdict, and every finding in it closed. `MERGE` means merge. A
+   `FIX FIRST` whose numbered findings have all been fixed and verified is also finished
+   — the batching rule above says a round ends when what it found is fixed, and going
+   back for a second verdict on the fix is the round nobody needed. What is never enough
+   is silence, or a round with findings still open.
 2. Green checks **on the commit being merged**. Verify that by reading the workflow run's
    own `head_sha`, not the list of check runs on the pull request — that list has more
    than once shown results belonging to a previous head. Pass the expected head to the

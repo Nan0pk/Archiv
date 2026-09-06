@@ -10,7 +10,10 @@ Things that have already cost time. Read before debugging anything that looks br
 uv venv --python 3.12 .venv && uv pip install -e '.[dev]'
 ```
 
-`uv` lives at `/root/.local/bin/uv` in the standard remote environment.
+`uv` lives at `$HOME/.local/bin/uv` in the standard remote environment. Written with
+`$HOME` rather than the literal path on purpose: a tracked file containing a real home
+directory is what `tests/test_privacy_and_artifacts.py` exists to catch, and this file
+used to trip it.
 
 ## `pyright` reports thousands of phantom errors
 
@@ -40,12 +43,17 @@ as the `archiv` binary. Do not "fix" either by changing product code.
 PATH="$PWD/.venv/bin:$PATH" pytest -q
 ```
 
-Run that way, exactly one failure remains:
-`tests/test_privacy_and_artifacts.py::test_no_private_paths_or_secrets_in_tracked_files`,
-because `TRAPS.md` itself mentions `/root`, which is this container's home directory. So
-in a correctly-invoked run, **one** failure is environmental and anything else is real.
+Run that way, **nothing fails**. Every failure is real.
+
+This file used to be the exception: it wrote out a literal home directory, which is
+exactly what `tests/test_privacy_and_artifacts.py` is for, so that test failed and the
+failure was recorded here as "environmental". It was not environmental — the test was
+right and the document was wrong. A permanently-failing test that everyone has agreed to
+ignore is how the next real failure gets ignored too, so it is fixed rather than
+explained.
+
 Reports of "three environmental failures" come from running `pytest` without that `PATH`,
-and a count that loose is how a real failure gets waved through.
+which gives the suite a Python 3.11 and no `archiv` binary.
 
 ## Optional binaries are absent, so those paths skip
 
