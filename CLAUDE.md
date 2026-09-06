@@ -236,6 +236,30 @@ verdict given on code that then changes is worth nothing. If continuous integrat
 finds something the reviewer could not — it runs elsewhere, on a clean machine, with jobs
 that cannot run locally — the fix goes back through the reviewer before merging.
 
+**What merging requires, exactly.** Three things, and green checks are only one of them:
+
+1. A reviewer verdict of `MERGE`, stated. Not inferred from silence, and not from a round
+   whose findings are still open.
+2. Green checks **on the commit being merged**. Verify that by reading the workflow run's
+   own `head_sha`, not the list of check runs on the pull request — that list has more
+   than once shown results belonging to a previous head. Pass the expected head to the
+   merge itself so the merge fails rather than succeeding on the wrong commit.
+3. No merge conflict.
+
+Green checks alone are never enough. A change merged on checks alone has been reviewed by
+nobody: continuous integration proves the code runs, not that it does what its description
+says, and overclaiming is the specific failure this queue exists to prevent. That has
+happened here — a step merged with review findings still outstanding, putting a defect on
+`main`. If auto-merge is enabled on the repository, do not arm it; it merges on checks and
+therefore skips requirement 1.
+
+**Report a check only after reading its output.** Never pipe a check into `tail` or `head`
+inside an `&&` chain: the pipeline takes the exit status of `tail`, which always succeeds,
+so a failing check passes silently and the chain continues. That has happened here too —
+type checking failed, the failure was invisible, and "type checking clean" went into a
+pull request description and a report to the owner. Run each check on its own, read its
+exit code, and quote what it actually said.
+
 ---
 
 ## Orientation
