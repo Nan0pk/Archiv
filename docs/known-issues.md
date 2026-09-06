@@ -128,3 +128,19 @@ into `src/archiv/ui/tk_console.py`, which is the diagnostic view behind `--diagn
 Half the named gap was closed; the half ordinary users see was not, and nothing was
 recorded. The default window was corrected afterwards, so the code is now right in both
 places — but the sentence on `main` was not true when it was written.
+
+## The request field names for a paid model are unverified
+
+`src/archiv/model_adapter.py` sends `max_tokens` to cap the reply, and
+`src/archiv/cost_control.py` reads `usage.prompt_tokens` and `usage.completion_tokens`
+back to record what was spent. Both follow the wire format the adapter already targeted.
+
+Neither has been checked against a real provider, because no request has ever been sent
+from this project's development environment. Newer OpenAI models expect
+`max_completion_tokens` rather than `max_tokens`, and a request using the older name may
+be rejected or the cap silently ignored — in which case the reply is unbounded and the
+recorded spend understates it.
+
+Check both on the first real call: that the cap is honoured, and that the usage block
+arrives in the shape the recorder expects. Until then, the reply cap is an intention
+rather than a measured behaviour.
