@@ -22,7 +22,7 @@ errors that are all variations of "type of X is unknown" — every one an artefa
 unresolved third-party stubs, not a real defect.
 
 ```bash
-pyright --pythonpath .venv/bin/python     # 0 errors, 174 files, ~10s
+pyright --pythonpath .venv/bin/python     # 0 errors, 189 files, ~10s
 ```
 
 If you see a four-digit error count, this is why. Do not start "fixing" them.
@@ -52,8 +52,11 @@ right and the document was wrong. A permanently-failing test that everyone has a
 ignore is how the next real failure gets ignored too, so it is fixed rather than
 explained.
 
-Reports of "three environmental failures" come from running `pytest` without that `PATH`,
-which gives the suite a Python 3.11 and no `archiv` binary.
+Reports of "three environmental failures" come from running `pytest` without that `PATH`.
+That count is also wrong, and generously so: measured here, a bare `pytest -q` does not
+fail three tests, it fails to collect at all — 58 collection errors and exit 2, because
+the `pytest` first on `PATH` belongs to an interpreter that has none of this project's
+dependencies. A run that never executed a test is not a run with three known failures.
 
 ## Optional binaries are absent, so those paths skip
 
@@ -70,17 +73,26 @@ Consequences that look like problems but are not:
 
 ## Known-good baseline
 
-Measured on `d9a9b8d` in a clean 3.12 venv:
+Measured on `1edeb92`, the head of
+[#139](https://github.com/Nan0pk/Archiv/pull/139), in a clean 3.12 venv. Each check was
+run on its own and its exit code read:
 
 | Check | Result |
 |---|---:|
-| `ruff format --check .` | 256 files already formatted |
+| `ruff format --check .` | 311 files already formatted |
 | `ruff check .` | All checks passed |
-| `pyright --pythonpath .venv/bin/python` | 0 errors, 174 files |
-| `pytest -q` | 490 passed, 1 failed, 2 skipped on `ec96869` with `.venv/bin` on `PATH`; without it, 3 failed |
-| line coverage | 82% (9,545 statements) |
+| `pyright --pythonpath .venv/bin/python` | 0 errors, 189 files analysed |
+| `PATH="$PWD/.venv/bin:$PATH" pytest -q` | 491 passed, 0 failed, 2 skipped |
+| plain `pytest -q`, no venv on `PATH` | collects nothing: 58 collection errors, exit 2 |
 
 If your numbers differ materially from these, something you did caused it.
+
+Two rows changed meaning rather than drifting, and both are worth knowing. There is no
+longer a failing test in the first run — see above for why the one that used to be there
+was not environmental. And the second run does not fail three tests; it never reaches a
+test at all, because the interpreter it finds has none of the dependencies installed.
+Line coverage is not listed because it was not measured here, and the figure that used to
+sit in this table was carried over from a commit no longer reachable in this repository.
 
 ## Two code-path traps worth knowing before you touch the model
 

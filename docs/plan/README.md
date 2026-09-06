@@ -39,6 +39,7 @@ to project work rather than to schema.
 | [`QUEUE.md`](QUEUE.md) | Human-readable view of the same data. A test asserts the two agree, so they cannot drift. |
 | [`steps/`](steps/) | One file per step, carrying the project's own capability-declaration block. |
 | [`DECISIONS.md`](DECISIONS.md) | Decisions already settled. Read before proposing an alternative; do not re-litigate. |
+| [`decisions/`](decisions/) | One file per decision a step was blocked on, where the reasoning is too long to sit in `DECISIONS.md`. The short form still goes in `DECISIONS.md`, so that file stays the index. |
 | [`TRAPS.md`](TRAPS.md) | Environment gotchas that have already cost real time. |
 
 ## The procedure
