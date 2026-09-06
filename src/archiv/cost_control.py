@@ -28,12 +28,19 @@ import os
 from pathlib import Path
 from typing import Literal, Protocol, cast
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from archiv.contracts import StrictModel
 from archiv.storage.layout import ArchivLayout
 
 TokenizerStatus = Literal["pinned", "not-configured", "unavailable"]
+
+SpendRefusalReason = Literal[
+    "no-spend-policy",
+    "spend-record-unreadable",
+    "ceiling-already-reached",
+    "would-exceed-ceiling",
+]
 
 
 class Tokenizer(Protocol):
@@ -130,6 +137,45 @@ class CostPreflight(StrictModel):
     spent_before_usd: float
     ceiling_usd: float
     max_output_tokens: int
+
+
+class SpendDecision(StrictModel):
+    """Whether a call may be made, and what that was decided from.
+
+    Written into the run's evidence whether or not the call was allowed. An earlier
+    version wrote the cost record as the argument to the check, so a refused run left no
+    record at all -- which is exactly backwards. A refusal is the run somebody later
+    asks about: what the ceiling was, what had already been spent, and whether there was
+    a projection to refuse it on.
+    """
+
+    schema_version: str = "2"
+    """Version two of this file. Version one was the pre-flight numbers alone, at the top
+    level; they are now nested under `preflight` beside the decision that used them. A
+    reader who cannot tell the two shapes apart by version has to guess, so the version
+    moved."""
+    decision: Literal["allowed", "refused"]
+    refused_because: SpendRefusalReason | None = None
+    explanation: str = ""
+    """What the person is told, kept on disk as well as raised, so the numbers that
+    refused the call outlive the error message on their terminal."""
+    preflight: CostPreflight | None = None
+    """The numbers the decision was made from. Absent only when there were none: no
+    policy at all, or a spend record that could not be read."""
+
+    @model_validator(mode="after")
+    def _decision_matches_its_evidence(self) -> SpendDecision:
+        if self.decision == "allowed":
+            if self.refused_because is not None:
+                raise ValueError("an allowed call cannot carry a reason for being refused")
+            if self.preflight is None:
+                raise ValueError("an allowed call must record the numbers it was allowed on")
+        else:
+            if self.refused_because is None:
+                raise ValueError("a refused call must record what refused it")
+            if not self.explanation.strip():
+                raise ValueError("a refused call must record what the person was told")
+        return self
 
 
 def spend_policy_path(home: Path | None = None) -> Path:
@@ -258,30 +304,47 @@ def usd_for_tokens(tokens: int, per_million_usd: float) -> float:
     return round(tokens * per_million_usd / 1_000_000, 6)
 
 
-def check_spend_allowance(prompt: str, home: Path | None = None) -> CostPreflight:
-    """Decide whether this call may be made, before anything is sent.
+_NO_POLICY_MESSAGE = (
+    "This archive has no spend policy, so Archiv will not make a paid request.\n"
+    "\n"
+    "A remote model charges per call, and a question can be retried up to three times, "
+    "so a run with no ceiling has no upper bound on what it costs.\n"
+    "\n"
+    "Set one with:\n"
+    "    archiv model spend set --ceiling-usd <amount> "
+    "--input-per-million <usd> --output-per-million <usd> "
+    "--prices-recorded-on <YYYY-MM-DD> --prices-source <where you read them>\n"
+    "There is no default price table: a rate nobody entered is a number nobody checked."
+)
 
-    Sits beside the evaluation-marker check and is called from the same place, so the
-    two read as one gate rather than two policies scattered across the path.
+
+def decide_spend(prompt: str, home: Path | None = None) -> SpendDecision:
+    """Decide whether this call may be made, and hand the decision back rather than raise.
+
+    Every ending returns a record, so a caller can write what it found into the run's
+    evidence and then act on it -- in that order. `check_spend_allowance` is this
+    function plus the raise, for callers that only need the gate.
     """
 
     policy = load_spend_policy(home)
     if policy is None:
-        raise SpendPolicyMissingError(
-            "This archive has no spend policy, so Archiv will not make a paid request.\n"
-            "\n"
-            "A remote model charges per call, and a question can be retried up to three "
-            "times, so a run with no ceiling has no upper bound on what it costs.\n"
-            "\n"
-            "Set one with:\n"
-            "    archiv model spend set --ceiling-usd <amount> "
-            "--input-per-million <usd> --output-per-million <usd> "
-            "--prices-recorded-on <YYYY-MM-DD> --prices-source <where you read them>\n"
-            "There is no default price table: a rate nobody entered is a number nobody "
-            "checked."
+        return SpendDecision(
+            decision="refused",
+            refused_because="no-spend-policy",
+            explanation=_NO_POLICY_MESSAGE,
         )
 
-    ledger = load_ledger(home)
+    try:
+        ledger = load_ledger(home)
+    except SpendLedgerUnreadableError as error:
+        # Refused with no numbers, because there are none: the total this would be
+        # measured against is the thing that could not be read.
+        return SpendDecision(
+            decision="refused",
+            refused_because="spend-record-unreadable",
+            explanation=str(error),
+        )
+
     prompt_tokens, status, detail = count_prompt_tokens(policy, prompt)
 
     projected_input: float | None = None
@@ -306,25 +369,58 @@ def check_spend_allowance(prompt: str, home: Path | None = None) -> CostPrefligh
     )
 
     if ledger.spent_usd >= policy.ceiling_usd:
-        raise SpendCeilingReachedError(
-            f"This archive has spent ${ledger.spent_usd:.4f} of its "
-            f"${policy.ceiling_usd:.2f} ceiling, so Archiv will not make another paid "
-            "request.\n"
-            "Raise the ceiling with 'archiv model spend set --ceiling-usd <amount>', or "
-            "reset what has been spent with 'archiv model spend reset' if the recorded "
-            "total no longer reflects what you are being billed."
+        return SpendDecision(
+            decision="refused",
+            refused_because="ceiling-already-reached",
+            explanation=(
+                f"This archive has spent ${ledger.spent_usd:.4f} of its "
+                f"${policy.ceiling_usd:.2f} ceiling, so Archiv will not make another paid "
+                "request.\n"
+                "Raise the ceiling with 'archiv model spend set --ceiling-usd <amount>', or "
+                "reset what has been spent with 'archiv model spend reset' if the recorded "
+                "total no longer reflects what you are being billed."
+            ),
+            preflight=preflight,
         )
 
     if projected_worst is not None and ledger.spent_usd + projected_worst > policy.ceiling_usd:
-        raise SpendCeilingReachedError(
-            f"This request would cost up to ${projected_worst:.4f} "
-            f"({prompt_tokens} prompt tokens plus at most {policy.max_output_tokens} in "
-            f"reply), and ${ledger.spent_usd:.4f} of the ${policy.ceiling_usd:.2f} "
-            "ceiling is already spent. Nothing has been sent.\n"
-            "Raise the ceiling, or ask with fewer sources using --max-sources."
+        return SpendDecision(
+            decision="refused",
+            refused_because="would-exceed-ceiling",
+            explanation=(
+                f"This request would cost up to ${projected_worst:.4f} "
+                f"({prompt_tokens} prompt tokens plus at most {policy.max_output_tokens} in "
+                f"reply), and ${ledger.spent_usd:.4f} of the ${policy.ceiling_usd:.2f} "
+                "ceiling is already spent. Nothing has been sent.\n"
+                "Raise the ceiling, or ask with fewer sources using --max-sources."
+            ),
+            preflight=preflight,
         )
 
-    return preflight
+    return SpendDecision(decision="allowed", preflight=preflight)
+
+
+_REFUSAL_ERRORS: dict[SpendRefusalReason, type[RuntimeError]] = {
+    "no-spend-policy": SpendPolicyMissingError,
+    "spend-record-unreadable": SpendLedgerUnreadableError,
+    "ceiling-already-reached": SpendCeilingReachedError,
+    "would-exceed-ceiling": SpendCeilingReachedError,
+}
+
+
+def check_spend_allowance(prompt: str, home: Path | None = None) -> CostPreflight:
+    """Decide whether this call may be made, before anything is sent, and raise if not.
+
+    Sits beside the evaluation-marker check and is called from the same place, so the
+    two read as one gate rather than two policies scattered across the path.
+    """
+
+    decision = decide_spend(prompt, home)
+    if decision.refused_because is not None:
+        raise _REFUSAL_ERRORS[decision.refused_because](decision.explanation)
+    if decision.preflight is None:  # pragma: no cover - the model rejects this combination
+        raise SpendPolicyMissingError("an allowed call arrived with no numbers behind it")
+    return decision.preflight
 
 
 def record_spend(

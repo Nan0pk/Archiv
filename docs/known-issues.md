@@ -144,3 +144,69 @@ recorded spend understates it.
 Check both on the first real call: that the cap is honoured, and that the usage block
 arrives in the shape the recorder expects. Until then, the reply cap is an intention
 rather than a measured behaviour.
+
+## What a calibration run cannot measure here, and why
+
+`archiv model calibrate` records what one grounded question costs. Three of the numbers
+step S08 asks for are written as refusals to measure rather than as figures, and this is
+not a gap to be closed by trying harder:
+
+- **Time to first token.** Both adapters ask for a whole reply rather than a stream, so
+  there is no first token to time.
+- **Prompt-processing rate, and generation rate, separately.** Telling them apart needs
+  the time to first token above. What can be measured without it — reply tokens divided
+  by the whole wall clock, prompt processing included — is recorded instead, under a name
+  that says so.
+- **Answer quality.** It is copied from a field-trial run's scored results, or it is
+  absent with a reason. It is never computed here. There is one definition in this
+  project of whether an answer was good; a second one would eventually disagree with the
+  first, and then two numbers would both claim to be the quality.
+
+Streaming would make the first two measurable. It would also mean a second request shape
+on the one path where document text leaves the machine, which is not a change to make in
+passing.
+
+Separately: **no calibration run has ever measured a paid model.** Everything exercised
+so far used a stand-in that answers instantly. The timings are real timings of that
+stand-in, which is to say they measure this machine and this archive, not a provider.
+
+## `cost.json` has two shapes, and only the second says which it is
+
+Step S07 wrote a run's cost record as the pre-flight numbers alone, at the top level of
+`runs/ask/<id>/cost.json`, marked `schema_version: "1"`. Step S07A changed it: the file
+now carries the decision — allowed or refused, and why — with those same numbers nested
+under `preflight`, and is marked `schema_version: "2"`.
+
+So a file marked version 1 is the older, flatter shape. Nothing writes version 1 any
+more, and anything reading these files should treat the version as meaningful rather than
+assuming the nesting. The window in which version 1 could have been written was one
+commit on `main`, so it is unlikely any archive holds one — but "unlikely" is not
+"cannot", which is why this is written down rather than assumed away.
+
+## A run refused part-way through records itself as allowed
+
+The cost decision for a question is taken once, before the model is called, and written
+to `runs/ask/<id>/cost.json`. But the retry layer can send the same question up to three
+times, and each attempt passes the spend gate again.
+
+So a question whose first attempt was allowed, and whose second is refused because the
+first pushed recorded spend past the ceiling, leaves a run that says `failed` with a cost
+record that says `"decision": "allowed"`. The reason it actually stopped appears only
+inside an error string.
+
+No money leaks: the ceiling held and nothing was sent after the refusal. What is wrong is
+the evidence — it tells a later reader the run was allowed to spend when it was stopped
+from spending. Queued as step S07B.
+
+## `Unmeasured.status` can say `externally_blocked`, and nothing ever says it
+
+`src/archiv/calibration.py` allows three reasons a number is absent:
+`not_measurable`, `not_measured` and `externally_blocked`. Only the first two are ever
+produced. The third was included to match the shape
+`benchmarks/field_trial/public-results.json` already uses for a blocked cell, but a
+calibration run against an archive that refuses the model comes out as `not_measured`,
+with the per-question `run_status` carrying `blocked_by_policy` instead.
+
+Nothing is lost — the information is in the artefact either way — but an option no code
+path produces is an invitation to assume it means something. Either produce it for a
+policy refusal or drop it.

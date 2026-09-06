@@ -28,6 +28,7 @@ archiv ask and archiv report can be exercised end to end against a clearly-label
 | **S06** | Stamp the report path, and fix the DOCX that always claims 'disabled' | `S05` | [full](steps/S06.md) |
 | **S07** | Pre-flight token count, projected cost, and a hard spend ceiling | `S04` | [full](steps/S07.md) |
 | **S07A** | A refused run records why it was refused | `S07` | [full](steps/S07A.md) |
+| **S07B** | A run refused part-way through must not record itself as allowed | `S07A` | [full](steps/S07B.md) |
 | **S08** | archiv model calibrate — measure the workload and the remote model | `S07` | [full](steps/S08.md) |
 | **S09** | Predict local runtime from cited hardware profiles, labelled estimated or measured | `S08` | [full](steps/S09.md) |
 ---

@@ -10,6 +10,13 @@ from typing import Annotated, cast
 import typer
 from pydantic import BaseModel
 
+from archiv.calibration import (
+    CalibrationInputError,
+    Distribution,
+    Unmeasured,
+    calibration_path,
+    run_calibration,
+)
 from archiv.cost_control import (
     PinnedTokenizer,
     SpendLedgerUnreadableError,
@@ -172,6 +179,84 @@ def model_configure_loopback_command(
     )
     path = save_model_config(config, home)
     _emit_json({"config_path": str(path), "config": config.model_dump(mode="json")})
+
+
+@model_app.command("calibrate")
+def model_calibrate_command(
+    home: Annotated[
+        Path | None,
+        typer.Option("--home", file_okay=False, resolve_path=True),
+    ] = None,
+    benchmark: Annotated[
+        Path | None,
+        typer.Option("--benchmark", dir_okay=False, help="The frozen benchmark to ask from."),
+    ] = None,
+    questions: Annotated[
+        Path | None,
+        typer.Option(
+            "--questions",
+            dir_okay=False,
+            help="A JSON list of questions, for an archive the frozen benchmark does not fit.",
+        ),
+    ] = None,
+    quality_from: Annotated[
+        Path | None,
+        typer.Option(
+            "--quality-from",
+            dir_okay=False,
+            help="A field-trial results file whose scores are recorded beside these timings.",
+        ),
+    ] = None,
+    evidence_limit: Annotated[int, typer.Option("--evidence-limit", min=1, max=50)] = 8,
+    json_output: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Measure what a question costs here, and how the configured model answers it."""
+
+    try:
+        calibration = run_calibration(
+            home=home,
+            benchmark=benchmark,
+            questions=questions,
+            quality_from=quality_from,
+            evidence_limit=evidence_limit,
+        )
+    except CalibrationInputError as error:
+        typer.echo(f"calibration could not start: {error}", err=True)
+        raise typer.Exit(code=2) from error
+
+    if json_output:
+        _emit_json(calibration)
+        return
+
+    workload = calibration.workload
+    typer.echo(f"Calibration {calibration.calibration_id}")
+    typer.echo(f"  Questions asked: {workload.question_count}, from {calibration.question_source}")
+    typer.echo(
+        f"  Answered: {calibration.model.questions_answered}"
+        f", not answered: {calibration.model.questions_not_answered}"
+    )
+    typer.echo(f"  Model: {calibration.model.identity}")
+    typer.echo(f"  Median retrieval: {workload.retrieval_ms.median} ms")
+    if isinstance(calibration.model.wall_clock_ms, Distribution):
+        typer.echo(
+            f"  Median question: {calibration.model.wall_clock_ms.median} ms"
+            f" over {calibration.model.questions_where_a_model_ran} questions a model ran on"
+        )
+    else:
+        typer.echo(f"  Question time: not measured -- {calibration.model.wall_clock_ms.reason}")
+    if isinstance(workload.completion_tokens, Unmeasured):
+        typer.echo(f"  Reply length: not measured -- {workload.completion_tokens.reason}")
+    else:
+        typer.echo(f"  Median reply: {workload.completion_tokens.median} tokens")
+    if isinstance(calibration.quality, Unmeasured):
+        typer.echo(f"  Answer quality: not measured -- {calibration.quality.reason}")
+    else:
+        typer.echo(
+            "  Answer quality: recall "
+            f"{calibration.quality.mean_recall_at_evidence_limit}"
+            f", fabricated citations {calibration.quality.fabricated_identifier_count}"
+        )
+    typer.echo(f"  Written to: {calibration_path(home, calibration.calibration_id)}")
 
 
 @model_app.command("test")
