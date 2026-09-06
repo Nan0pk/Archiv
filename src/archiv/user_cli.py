@@ -205,7 +205,7 @@ def _provenance_phrase(provenance: str, *, a_model_ran: bool) -> str:
     """
 
     if not a_model_ran:
-        return "no model — no model was called for this answer"
+        return "no model — none was called for this answer"
     if provenance == "remote-evaluation":
         return "a model running on computers you do not control (evaluation mode)"
     return "a model running on this machine"

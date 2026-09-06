@@ -338,22 +338,51 @@ class ProductApp:
         text = chunk.decode("utf-8", errors="replace")
         self.root.after(0, lambda: self._append(text))
 
-    def _clear_output(self) -> None:
-        if not hasattr(self, "output"):
+    def _live_output(self) -> ScrolledText | None:
+        """The output box, if one exists right now -- otherwise nothing.
+
+        `self.output` outlives the widget it points at. Switching view calls `_clear`,
+        which destroys every child of the body frame, while the attribute keeps pointing
+        at the destroyed widget. So `hasattr` is not a sufficient guard: touching a
+        destroyed widget raises `TclError` from inside a Tk callback, which loses the
+        whole action -- ask a question, switch to Settings, click "Add folder", and the
+        folder is never added and the window says nothing about why.
+        """
+
+        widget: ScrolledText | None = getattr(self, "output", None)
+        if widget is None:
+            return None
+        try:
+            return widget if widget.winfo_exists() else None
+        except TclError:
+            return None
+
+    def _write_output(self, text: str | None, *, at: str) -> None:
+        """Write into the output box, or clear it when `text` is None. Never raises."""
+
+        widget = self._live_output()
+        if widget is None:
             return
-        self.output.configure(state=tk.NORMAL)
-        self.output.delete("1.0", tk.END)
-        self.output.configure(state=tk.DISABLED)
+        try:
+            widget.configure(state=tk.NORMAL)
+            if text is None:
+                widget.delete("1.0", tk.END)
+            else:
+                widget.insert(at, text)
+            widget.configure(state=tk.DISABLED)
+        except TclError:
+            # Destroyed between the check and the write. Losing the text is correct;
+            # taking down the callback that was going to do the real work is not.
+            return
+
+    def _clear_output(self) -> None:
+        self._write_output(None, at="1.0")
 
     def _prepend(self, text: str) -> None:
-        self.output.configure(state=tk.NORMAL)
-        self.output.insert("1.0", text)
-        self.output.configure(state=tk.DISABLED)
+        self._write_output(text, at="1.0")
 
     def _append(self, text: str) -> None:
-        self.output.configure(state=tk.NORMAL)
-        self.output.insert(tk.END, text)
-        self.output.configure(state=tk.DISABLED)
+        self._write_output(text, at=tk.END)
 
     def _cancel(self) -> None:
         if self.runner.busy and messagebox.askyesno(

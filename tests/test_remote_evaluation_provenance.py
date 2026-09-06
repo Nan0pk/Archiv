@@ -172,14 +172,25 @@ def test_no_remote_ask_can_produce_an_unstamped_result(
     ending without a stamp fails this test instead of silently creating an unstamped
     surface.
 
-    What this does **not** cover, stated plainly because an earlier version of this
-    docstring claimed it did: an exception escaping `run_grounded_ask` is also a way for
-    `ask` to finish, and produces no run result at all, so there is nothing for a stamp
-    to be on. Retrieval and the citation checks in `grounding.py` sit outside the guard
-    and can do that. It is not a hole in the privacy property -- every one of those paths
-    is before the prompt is built, so nothing has been sent and no unreported disclosure
-    is possible -- but it is not an ending this walk sees, and saying otherwise would be
-    the overclaiming this file exists to prevent.
+    What this does **not** cover: an exception escaping `run_grounded_ask` is also a way
+    for `ask` to finish, and produces no run result at all, so there is nothing for a
+    stamp to be on. Two kinds exist, and they are not equivalent.
+
+    Before the prompt is built -- the empty-query raise, retrieval, and the citation
+    checks -- nothing has been sent, so missing evidence is all that is lost.
+
+    **After the model has answered, there is a real gap.** The write of
+    `model_response.txt` and both `result.json` writes sit outside every guard, so a
+    filesystem failure there escapes with the archive's text already sent, no result on
+    disk, and no warning shown, because the banner is driven by the returned result. That
+    was reproduced with a simulated full disk. An earlier version of this docstring
+    claimed every escaping path preceded the prompt and so no unreported disclosure was
+    possible. That was false, and it was written to correct an earlier false claim, which
+    is worth knowing about this file: each of these sentences has been wrong once.
+
+    The gap is queued as its own step, `docs/plan/steps/S05A.md`, because closing it
+    changes what `ask` does on failure and deserves its own tests rather than a rider on
+    the change that found it.
     """
 
     import archiv.grounding as grounding_module
@@ -310,7 +321,7 @@ def test_the_warning_never_claims_something_that_did_not_happen(
     # And the line four lines below the banner, which had the identical defect and was
     # missed by the first version of this test because it only looked for the two
     # phrases above. No model ran here, so nothing may say one answered.
-    assert "Answered by: no model" in shown.output
+    assert "Answered by: no model — none was called" in shown.output
     assert "Answered by: a model" not in shown.output
 
 
@@ -328,7 +339,7 @@ def test_the_answered_by_line_names_a_model_only_when_one_ran(
     unanswered = runner.invoke(
         app, ["ask", "a phrase that appears in no document", "--home", str(home)]
     )
-    assert "Answered by: no model" in unanswered.output
+    assert "Answered by: no model — none was called" in unanswered.output
 
     # The same must hold for a local archive: no model ran, so none is named.
     local = tmp_path / "local"
@@ -346,7 +357,7 @@ def test_the_answered_by_line_names_a_model_only_when_one_ran(
     local_none = runner.invoke(
         app, ["ask", "a phrase that appears in no document", "--home", str(local)]
     )
-    assert "Answered by: no model" in local_none.output
+    assert "Answered by: no model — none was called" in local_none.output
     local_answer = runner.invoke(app, ["ask", "unique fixture marker", "--home", str(local)])
     assert "Answered by: a model running on this machine" in local_answer.output
 
