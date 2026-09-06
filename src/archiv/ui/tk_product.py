@@ -320,7 +320,10 @@ class ProductApp:
         # without this a remote answer arrives looking exactly like a local one with
         # the origin buried inside the dump. Say it in words, where they are looking.
         if inspect_run_output(outcome.output).model_provenance == "remote-evaluation":
-            self._append(_NOT_LOCAL_NOTICE)
+            # Above the output, not appended after it -- the same reason the terminal
+            # banner goes above the answer. A warning under a screen of JSON is not a
+            # warning.
+            self._prepend(_NOT_LOCAL_NOTICE)
             state = f"{state} — NOT A LOCAL ANSWER: this archive is in evaluation mode"
         self.status.set(state)
 
@@ -329,6 +332,11 @@ class ProductApp:
             return
         text = chunk.decode("utf-8", errors="replace")
         self.root.after(0, lambda: self._append(text))
+
+    def _prepend(self, text: str) -> None:
+        self.output.configure(state=tk.NORMAL)
+        self.output.insert("1.0", text)
+        self.output.configure(state=tk.DISABLED)
 
     def _append(self, text: str) -> None:
         self.output.configure(state=tk.NORMAL)

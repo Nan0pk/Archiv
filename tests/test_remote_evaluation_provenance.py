@@ -298,6 +298,49 @@ def test_the_warning_never_claims_something_that_did_not_happen(
     assert "the answer was written by" not in shown.output
     assert "the text of any source used to answer is sent there" in shown.output
 
+    # And the line four lines below the banner, which had the identical defect and was
+    # missed by the first version of this test because it only looked for the two
+    # phrases above. No model ran here, so nothing may say one answered.
+    assert "Answered by: no model" in shown.output
+    assert "Answered by: a model" not in shown.output
+
+
+def test_the_answered_by_line_names_a_model_only_when_one_ran(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Whichever way the archive is configured, the line describes this answer."""
+
+    home = prepare_remote_archive(tmp_path, monkeypatch)
+    monkeypatch.setattr("archiv.grounding.build_model_adapter", stub_builder(good_reply()))
+
+    answered = runner.invoke(app, ["ask", "unique fixture marker", "--home", str(home)])
+    assert "Answered by: a model running on computers you do not control" in answered.output
+
+    unanswered = runner.invoke(
+        app, ["ask", "a phrase that appears in no document", "--home", str(home)]
+    )
+    assert "Answered by: no model" in unanswered.output
+
+    # The same must hold for a local archive: no model ran, so none is named.
+    local = tmp_path / "local"
+    corpus = tmp_path / "corpus-local"
+    create_sample_vault(corpus)
+    runner.invoke(app, ["add", str(corpus), "--home", str(local)])
+    save_model_config(
+        ModelConfig(
+            adapter="openai-compatible-loopback",
+            endpoint="http://127.0.0.1:11434",
+            model="a-local-model",
+        ),
+        local,
+    )
+    local_none = runner.invoke(
+        app, ["ask", "a phrase that appears in no document", "--home", str(local)]
+    )
+    assert "Answered by: no model" in local_none.output
+    local_answer = runner.invoke(app, ["ask", "unique fixture marker", "--home", str(local)])
+    assert "Answered by: a model running on this machine" in local_answer.output
+
 
 def test_a_failed_remote_run_still_warns_that_this_archive_reaches_outside(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch

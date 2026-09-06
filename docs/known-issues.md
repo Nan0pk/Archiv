@@ -62,3 +62,28 @@ General alpha limitations remain documented in [Offline alpha](offline-alpha.md)
   rather than a departure from it. The recovery is to delete `config/model.json` and
   re-run `archiv model configure`, which loses no canonical data: the file is policy, not
   evidence, and originals are untouched.
+
+## Two `archiv add` runs on one archive can both report a new original
+
+- Whether a candidate is a duplicate is decided in `src/archiv/ingestion/service.py` by
+  asking the database whether that content has already been ingested successfully. That
+  question is asked in the ordered commit phase, so within one `archiv add` the answer
+  does not depend on which parallel worker happened to finish first — which is the race
+  this replaced, and which could report every copy of a file as a duplicate of an
+  original it never recorded.
+- The read is not in the same transaction as the write that follows it. Two separate
+  `archiv add` processes running against the same archive at the same time can therefore
+  each see no successful ingestion and each record itself as a new original.
+- The earlier code closed that window incidentally, because it also consulted whether the
+  bytes were already on disk, and the per-digest file lock serialised that. Removing that
+  term was necessary to fix the single-process race, so this is a deliberate trade: a
+  reproducible fault inside one run — it failed roughly one run in four, and broke the
+  required check on [#131](https://github.com/Nan0pk/Archiv/pull/131) — exchanged for a
+  narrower one that needs two concurrent runs on the same archive.
+- Consequences are a wrong "new originals" count and some duplicated expansion work. Not
+  corruption: originals stay content-addressed, containment rows are written with
+  `INSERT OR REPLACE`, and processing evidence is keyed on the digest.
+- No remedy is planned yet, because it is not known whether concurrent adds against one
+  archive is a scenario Archiv intends to support, and no test covers it. Deciding that
+  is the prerequisite for fixing it: the fix would be to make the check and the insert
+  one transaction, which needs the pending-row states thought through.
