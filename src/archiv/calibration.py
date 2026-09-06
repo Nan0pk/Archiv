@@ -39,6 +39,15 @@ from pydantic import Field
 from archiv.contracts import RunStatus, StrictModel
 from archiv.cost_control import SpendLedgerUnreadableError, load_ledger
 from archiv.grounding import run_grounded_ask
+from archiv.hardware_profiles import (
+    HardwareProfile,
+    PredictedLatency,
+    ProfileError,
+    ThroughputBand,
+    available_profiles,
+    find_profile,
+    predict_ask_latency,
+)
 from archiv.model_adapter import describe_model, load_model_config
 from archiv.search import retrieve_evidence
 from archiv.storage.layout import ArchivLayout
@@ -673,3 +682,171 @@ def run_calibration(
 
 def calibration_path(home: Path | None, calibration_id: str) -> Path:
     return ArchivLayout.resolve(home).runs / "calibration" / calibration_id / "calibration.json"
+
+
+# --- S09: predicting how slow this would be on hardware nobody here has --------
+
+
+class LocalThroughput(StrictModel):
+    """Prompt reading and generation speed, measured on the machine that ran this."""
+
+    label: Literal["measured"] = "measured"
+    machine: str = Field(min_length=1)
+    model_identity: str = Field(min_length=1)
+    prefill_tokens_per_second: float = Field(gt=0)
+    decode_tokens_per_second: float = Field(gt=0)
+    short_reply_ms: float
+    long_reply_ms: float
+    short_reply_tokens: int
+    long_reply_tokens: int
+    prompt_tokens: int
+    method: str = Field(min_length=1)
+
+
+class LocalMeasurementRefused(RuntimeError):
+    """Local throughput could not be measured, and the reason is worth saying out loud."""
+
+
+def measure_local_throughput(
+    *,
+    home: Path | None = None,
+    prompt: str,
+    short_reply_tokens: int = 1,
+    long_reply_tokens: int = 64,
+) -> LocalThroughput:
+    """Separate prompt reading from generation using two replies of different lengths.
+
+    Neither adapter streams, so there is no first-token time to read off a single reply.
+    Two replies of different lengths give it up arithmetically instead: the extra time the
+    longer one takes, divided by the extra tokens it produced, is the generation rate.
+    Subtract the generation the short reply did and what is left is the prompt being read.
+
+    Any fixed startup cost lands in the prompt-reading term, which makes prompt reading
+    look slower than it is. That is the safe direction: it over-states the wait rather
+    than promising a speed the machine will not deliver.
+    """
+
+    from archiv.model_adapter import OpenAICompatibleLoopbackAdapter
+
+    if long_reply_tokens <= short_reply_tokens:
+        raise LocalMeasurementRefused("the long reply must ask for more tokens than the short one")
+
+    layout = ArchivLayout.resolve(home)
+    config = load_model_config(layout.root)
+    if config.adapter != "openai-compatible-loopback":
+        raise LocalMeasurementRefused(
+            "Measuring this machine's speed needs a model running on this machine. This "
+            f"archive is configured for '{config.adapter}'. Point it at a local server "
+            "with 'archiv model configure --endpoint http://127.0.0.1:11434 --model "
+            "<name>' and try again.\n"
+            "Archiv will not measure a paid remote model and report the figure as this "
+            "machine's speed, because it is not this machine's speed."
+        )
+
+    adapter = OpenAICompatibleLoopbackAdapter(config)
+    samples: list[tuple[int, float, int]] = []
+    for requested in (short_reply_tokens, long_reply_tokens):
+        started = datetime.now(UTC)
+        try:
+            _, usage = adapter.probe(prompt, requested)
+        except RuntimeError as error:
+            raise LocalMeasurementRefused(
+                f"the local model did not answer, so there is nothing to measure: {error}"
+            ) from error
+        elapsed_ms = (datetime.now(UTC) - started).total_seconds() * 1000
+        if usage is None or usage.completion_tokens is None or usage.prompt_tokens is None:
+            raise LocalMeasurementRefused(
+                "the local server did not report how many tokens it read or produced, so "
+                "a speed would be a division by a number nobody measured. Archiv will not "
+                "estimate one from the length of the text."
+            )
+        samples.append((usage.completion_tokens, elapsed_ms, usage.prompt_tokens))
+
+    (short_out, short_ms, prompt_tokens), (long_out, long_ms, _) = samples
+    if long_out <= short_out:
+        raise LocalMeasurementRefused(
+            f"both replies were the same length ({short_out} tokens), so the two cannot be "
+            "compared. The server may be ignoring the reply-length limit."
+        )
+    if long_ms <= short_ms:
+        raise LocalMeasurementRefused(
+            "the longer reply did not take longer, so the timings cannot be separated. "
+            "Something other than this model is dominating the measurement."
+        )
+
+    decode_rate = (long_out - short_out) / ((long_ms - short_ms) / 1000)
+    prompt_phase_ms = short_ms - (short_out / decode_rate) * 1000
+    if prompt_phase_ms <= 0:
+        raise LocalMeasurementRefused(
+            "the short reply took less time than generating its own tokens should have, so "
+            "the prompt-reading time cannot be separated out from it."
+        )
+    prefill_rate = prompt_tokens / (prompt_phase_ms / 1000)
+
+    return LocalThroughput(
+        machine=f"{platform.system()} {platform.machine()}, Python {platform.python_version()}",
+        model_identity=describe_model(config)[0],
+        prefill_tokens_per_second=round(prefill_rate, 4),
+        decode_tokens_per_second=round(decode_rate, 4),
+        short_reply_ms=round(short_ms, 3),
+        long_reply_ms=round(long_ms, 3),
+        short_reply_tokens=short_out,
+        long_reply_tokens=long_out,
+        prompt_tokens=prompt_tokens,
+        method=(
+            "two replies of different lengths to the same prompt; generation rate from the "
+            "difference, prompt reading from what is left of the short one"
+        ),
+    )
+
+
+def local_profile_from(measured: LocalThroughput) -> HardwareProfile:
+    """Turn a local measurement into a profile row this archive can predict from."""
+
+    return HardwareProfile(
+        id="this-machine",
+        model=measured.model_identity,
+        quantisation="as served by the local endpoint",
+        hardware=measured.machine,
+        backend="the OpenAI-compatible server configured for this archive",
+        prefill_tokens_per_second=ThroughputBand(
+            low=measured.prefill_tokens_per_second,
+            high=measured.prefill_tokens_per_second,
+            basis="one measurement on this machine, no spread",
+        ),
+        decode_tokens_per_second=ThroughputBand(
+            low=measured.decode_tokens_per_second,
+            high=measured.decode_tokens_per_second,
+            basis="one measurement on this machine, no spread",
+        ),
+        harness=measured.method,
+        confidence="measured",
+        measured_on_machine=measured.machine,
+    )
+
+
+def predict_from_calibration(
+    calibration: Calibration,
+    profile_id: str,
+    *,
+    home: Path | None = None,
+    published: Path | None = None,
+) -> PredictedLatency:
+    """Predict this workload's wall clock on one profile, or refuse if none matches."""
+
+    workload = calibration.workload
+    if isinstance(workload.prompt_tokens, Unmeasured) or isinstance(
+        workload.completion_tokens, Unmeasured
+    ):
+        raise ProfileError(
+            "this calibration never counted the prompt or the reply, so there is nothing "
+            "to predict from. A prediction built on an uncounted workload would be a "
+            "number about nothing."
+        )
+    profile = find_profile(profile_id, available_profiles(home, published))
+    return predict_ask_latency(
+        profile,
+        prompt_tokens=round(workload.prompt_tokens.median),
+        completion_tokens=round(workload.completion_tokens.median),
+        retrieval_ms=workload.retrieval_ms.median,
+    )
