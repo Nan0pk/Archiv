@@ -25,6 +25,7 @@ rather than re-derived, so there is one definition of a good answer in this proj
 from __future__ import annotations
 
 import json
+import os
 import platform
 import subprocess
 from collections.abc import Sequence
@@ -121,7 +122,15 @@ class MeasuredModel(StrictModel):
     policy, or with no evidence to answer from -- took almost no time, and averaging that
     in would report the model as faster than it is."""
     wall_clock_ms: Distribution | Unmeasured
-    completion_tokens_per_second_including_prompt_processing: Distribution | Unmeasured
+    completion_tokens_per_second_over_the_whole_question: Distribution | Unmeasured
+    """Reply tokens divided by the whole `ask`, which is not a model rate.
+
+    The divisor is everything one question does: retrieval, prompt building, the model
+    call, citation revalidation and writing the run's evidence. On a small archive the
+    model call dominates it; on a large one retrieval can, and this project's own gate
+    allows several seconds of it. So this is the rate at which answers arrive, not the
+    rate at which the model generates. Separating the two needs a time to first token,
+    which nothing here can measure -- see the fields below."""
     time_to_first_token_ms: Unmeasured
     prefill_tokens_per_second: Unmeasured
     decode_tokens_per_second: Unmeasured
@@ -137,6 +146,13 @@ class QualityGates(StrictModel):
 
     label: Label = "measured"
     scored_by: str = Field(min_length=1)
+    """The name of the results file these came from, never its path.
+
+    An absolute path is the thing the field trial's redaction rewrites, so recording one
+    made the artefact fail the very check this project applies to it. The hash below is
+    what makes the figures auditable anyway: it says which file, without saying where
+    somebody's copy of it sits."""
+    scored_by_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     benchmark_id: str
     question_count: int
     mean_recall_at_evidence_limit: float
@@ -243,8 +259,6 @@ def _head_sha() -> str | Unmeasured:
 
 
 def _site() -> MeasurementSite:
-    import os
-
     return MeasurementSite(
         platform=platform.system(),
         machine=platform.machine(),
@@ -332,8 +346,11 @@ def load_quality_gates(results: Path) -> QualityGates:
     retrieval = section("retrieval")
     citations = section("citation_integrity")
     answers = section("answer_quality")
+    from hashlib import sha256
+
     return QualityGates(
-        scored_by=str(results),
+        scored_by=results.name,
+        scored_by_sha256=sha256(results.read_bytes()).hexdigest(),
         benchmark_id=str(payload.get("benchmark_id", "unknown")),
         question_count=int(cast(int, payload.get("question_count", 0))),
         mean_recall_at_evidence_limit=float(
@@ -557,7 +574,7 @@ def run_calibration(
                     "to report. What the archive is configured to use is recorded above"
                 ),
             ),
-            completion_tokens_per_second_including_prompt_processing=(
+            completion_tokens_per_second_over_the_whole_question=(
                 _distribution(throughputs)
                 if throughputs
                 else Unmeasured(
@@ -622,15 +639,27 @@ def run_calibration(
             "would take on other hardware is a later step, and its numbers will say so.",
             no_stream.capitalize() + ", so prompt processing and generation cannot be "
             "separated on this adapter.",
+            "The one rate that could be measured without a time to first token divides "
+            "reply tokens by the whole question -- retrieval, the model call, citation "
+            "revalidation and writing this run's evidence. It is the rate answers "
+            "arrive at, not the rate the model generates at, and on a large archive "
+            "retrieval can be most of it.",
         ],
     )
 
     output_dir = layout.runs / "calibration" / calibration.calibration_id
     output_dir.mkdir(parents=True, exist_ok=True)
-    (output_dir / "calibration.json").write_text(
+    # Written the way every other run-evidence file is: to a temporary name, then moved
+    # into place. `runs/` is terminal, so a file half-written by an interrupted run stays
+    # there -- and Archiv's own integrity check reads every JSON file under it, so one
+    # truncated file makes the whole archive refuse to be backed up.
+    destination = output_dir / "calibration.json"
+    temporary = destination.with_suffix(".json.tmp")
+    temporary.write_text(
         json.dumps(calibration.model_dump(mode="json"), indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
+    os.replace(temporary, destination)
     return calibration
 
 

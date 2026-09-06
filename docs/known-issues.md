@@ -169,3 +169,16 @@ passing.
 Separately: **no calibration run has ever measured a paid model.** Everything exercised
 so far used a stand-in that answers instantly. The timings are real timings of that
 stand-in, which is to say they measure this machine and this archive, not a provider.
+
+## `cost.json` has two shapes, and only the second says which it is
+
+Step S07 wrote a run's cost record as the pre-flight numbers alone, at the top level of
+`runs/ask/<id>/cost.json`, marked `schema_version: "1"`. Step S07A changed it: the file
+now carries the decision — allowed or refused, and why — with those same numbers nested
+under `preflight`, and is marked `schema_version: "2"`.
+
+So a file marked version 1 is the older, flatter shape. Nothing writes version 1 any
+more, and anything reading these files should treat the version as meaningful rather than
+assuming the nesting. The window in which version 1 could have been written was one
+commit on `main`, so it is unlikely any archive holds one — but "unlikely" is not
+"cannot", which is why this is written down rather than assumed away.

@@ -16,6 +16,7 @@ from __future__ import annotations
 import importlib
 import json
 import sys
+from hashlib import sha256
 from pathlib import Path
 from typing import Any, cast
 
@@ -184,7 +185,7 @@ def test_calibration_json_carries_provenance_and_honest_negatives(
     assert isinstance(model.prefill_tokens_per_second, Unmeasured)
     assert isinstance(model.decode_tokens_per_second, Unmeasured)
     # The rate that can be measured without a first-token time is named for what it is.
-    assert isinstance(model.completion_tokens_per_second_including_prompt_processing, Distribution)
+    assert isinstance(model.completion_tokens_per_second_over_the_whole_question, Distribution)
 
     # Quality was not asked for on this run, so it says so rather than being missing.
     assert isinstance(calibration.quality, Unmeasured)
@@ -216,10 +217,19 @@ def test_calibration_output_is_redacted_through_the_private_key_allowlist(
 
     home = prepared_archive(tmp_path)
     install_stub(monkeypatch, ReportedUsage(prompt_tokens=900, completion_tokens=120))
-    calibration = run_calibration(home=home, questions=question_file(tmp_path))
+    # Scored results are passed in on purpose. An earlier version of this test left them
+    # out, and the test that did pass them never ran redaction -- so between them the two
+    # tests covered everything except the field that was leaking a local path.
+    calibration = run_calibration(
+        home=home, questions=question_file(tmp_path), quality_from=PUBLIC_RESULTS
+    )
 
     payload = calibration.model_dump(mode="json")
     assert redact_private(payload, [str(home)]) == payload
+    assert not isinstance(calibration.quality, Unmeasured)
+    assert calibration.quality.scored_by == "public-results.json"
+    assert "/" not in calibration.quality.scored_by
+    assert len(calibration.quality.scored_by_sha256) == 64
 
     # And said directly, because the check above passes for a file that simply has no
     # such key: no question text reaches the artefact at all.
@@ -260,7 +270,9 @@ def test_quality_gates_are_measured_never_predicted(
         gates.fabricated_identifier_count
         == (published["citation_integrity"]["fabricated_identifier_count"])
     )
-    assert gates.scored_by.endswith("public-results.json")
+    assert gates.scored_by == "public-results.json"
+    # Which file, without saying where anyone's copy of it lives.
+    assert gates.scored_by_sha256 == sha256(PUBLIC_RESULTS.read_bytes()).hexdigest()
 
     # Every number in the artefact sits in a block that says how it was arrived at, and
     # in this step every one of those says "measured". Prediction arrives in S09.
@@ -328,3 +340,27 @@ def test_a_question_no_model_answered_is_not_timed_as_if_one_had(tmp_path: Path)
 
     # Retrieval is still measured: it happened, and it is the model-independent half.
     assert calibration.workload.retrieval_ms.count == 2
+
+
+def test_an_interrupted_run_cannot_leave_a_half_written_record(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`runs/` is terminal, so a truncated file there stays there.
+
+    Archiv's own integrity check reads every JSON file under `runs/`, and one that will
+    not parse makes the whole archive refuse to be backed up. So the record goes to a
+    temporary name and is moved into place, the same way every other run-evidence file
+    in this project is written.
+    """
+
+    home = prepared_archive(tmp_path)
+    install_stub(monkeypatch, ReportedUsage(prompt_tokens=900, completion_tokens=120))
+    calibration = run_calibration(home=home, questions=question_file(tmp_path))
+
+    directory = home / "runs" / "calibration" / calibration.calibration_id
+    # The move leaves nothing behind, so nothing under runs/ is a partial file.
+    assert [path.name for path in sorted(directory.iterdir())] == ["calibration.json"]
+    json.loads((directory / "calibration.json").read_text())
+
+    source = Path(run_calibration.__code__.co_filename).read_text(encoding="utf-8")
+    assert "os.replace(temporary, destination)" in source

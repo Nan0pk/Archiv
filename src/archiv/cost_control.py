@@ -149,7 +149,11 @@ class SpendDecision(StrictModel):
     a projection to refuse it on.
     """
 
-    schema_version: str = "1"
+    schema_version: str = "2"
+    """Version two of this file. Version one was the pre-flight numbers alone, at the top
+    level; they are now nested under `preflight` beside the decision that used them. A
+    reader who cannot tell the two shapes apart by version has to guess, so the version
+    moved."""
     decision: Literal["allowed", "refused"]
     refused_because: SpendRefusalReason | None = None
     explanation: str = ""

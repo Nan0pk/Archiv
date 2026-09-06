@@ -24,7 +24,7 @@ pyright --pythonpath .venv/bin/python     # 0 errors, 174 files, ~10s
 
 If you see a four-digit error count, this is why. Do not start "fixing" them.
 
-## Two tests fail for environmental reasons and are not defects
+## Two tests fail for environmental reasons, and both are avoidable
 
 On a container without a system Python 3.12 and without `archiv` on `PATH`:
 
@@ -33,12 +33,19 @@ On a container without a system Python 3.12 and without `archiv` on `PATH`:
 | `tests/test_upgrade_and_installer.py::test_fedora_installer_local_source_and_upgrade` | The installer script refuses a system `python3` older than 3.12 |
 | `tests/test_field_trial.py::test_public_benchmark_executes_end_to_end` | Shells out to the `archiv` binary by name |
 
-Putting `.venv/bin` on `PATH` fixes the second — `tests/test_field_trial.py` then passes
-18/18. Do not "fix" either by changing product code.
+Putting `.venv/bin` on `PATH` fixes **both** — the venv supplies a 3.12 `python3` as well
+as the `archiv` binary. Do not "fix" either by changing product code.
 
 ```bash
 PATH="$PWD/.venv/bin:$PATH" pytest -q
 ```
+
+Run that way, exactly one failure remains:
+`tests/test_privacy_and_artifacts.py::test_no_private_paths_or_secrets_in_tracked_files`,
+because `TRAPS.md` itself mentions `/root`, which is this container's home directory. So
+in a correctly-invoked run, **one** failure is environmental and anything else is real.
+Reports of "three environmental failures" come from running `pytest` without that `PATH`,
+and a count that loose is how a real failure gets waved through.
 
 ## Optional binaries are absent, so those paths skip
 

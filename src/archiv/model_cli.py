@@ -207,7 +207,7 @@ def model_calibrate_command(
             help="A field-trial results file whose scores are recorded beside these timings.",
         ),
     ] = None,
-    evidence_limit: Annotated[int, typer.Option("--evidence-limit", min=1, max=64)] = 8,
+    evidence_limit: Annotated[int, typer.Option("--evidence-limit", min=1, max=50)] = 8,
     json_output: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
     """Measure what a question costs here, and how the configured model answers it."""
@@ -240,7 +240,7 @@ def model_calibrate_command(
     if isinstance(calibration.model.wall_clock_ms, Distribution):
         typer.echo(
             f"  Median question: {calibration.model.wall_clock_ms.median} ms"
-            f" over {calibration.model.questions_where_a_model_ran} questions a model answered"
+            f" over {calibration.model.questions_where_a_model_ran} questions a model ran on"
         )
     else:
         typer.echo(f"  Question time: not measured -- {calibration.model.wall_clock_ms.reason}")
