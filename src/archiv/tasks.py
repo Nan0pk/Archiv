@@ -9,6 +9,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from archiv.contracts import RetrievalDiagnostics, RunStatus, SearchResult
+from archiv.cost_control import decide_spend
 from archiv.evaluation_config import EvaluationNotEnabledError, check_evaluation_opt_in
 from archiv.grounding import build_grounding_prompt
 from archiv.hashing import sha256_file
@@ -17,6 +18,7 @@ from archiv.model_adapter import (
     describe_model,
     describe_unused_model,
     load_model_config,
+    usage_payload,
 )
 from archiv.report_contracts import ReportManifest, ReportStatus
 from archiv.reports import generate_report, generate_report_from_results, validate_report
@@ -172,11 +174,39 @@ def run_task(task_path: Path, *, home: Path | None = None) -> TaskRunResult:
 
             if citations_map:
                 prompt = build_grounding_prompt(task.query, citations_map)
+                if model.provenance == "remote-evaluation":
+                    # The report path does not share the ask path's model call, so the
+                    # cost record has to be written here too or a refused report leaves
+                    # no trace of what refused it. Decided, written, then acted on.
+                    spend = decide_spend(prompt, layout.root)
+                    _write_json(evidence_dir / "cost.json", spend.model_dump(mode="json"))
+                    if spend.refused_because is not None:
+                        result = TaskRunResult(
+                            run_id=run_id,
+                            status=RunStatus.BLOCKED_BY_POLICY,
+                            task_path=str(task_path),
+                            evidence_dir=str(evidence_dir),
+                            source_hashes_before=before,
+                            source_hashes_after=_source_hashes(layout),
+                            retrieval_diagnostics=retrieval_diagnostics,
+                            model=model,
+                            errors=[spend.explanation],
+                        )
+                        _write_json(evidence_dir / "result.json", result.model_dump(mode="json"))
+                        return result
                 adapter = build_model_adapter(model, layout.root)
                 # The same bounded, counted retry the ask path uses. This code path is a
                 # separate implementation of the model call, so it has to be wired up
                 # here too or `report` silently keeps the old single-shot behaviour.
-                structured = request_grounded_response(adapter, prompt, set(citations_map.keys()))
+                try:
+                    structured = request_grounded_response(
+                        adapter, prompt, set(citations_map.keys())
+                    )
+                finally:
+                    # Same reason as the ask path: a failed call was paid for too.
+                    usage = usage_payload(adapter)
+                    if usage is not None:
+                        _write_json(evidence_dir / "usage.json", usage)
                 _write_json(
                     evidence_dir / "structured_output.json",
                     structured.record.model_dump(mode="json"),

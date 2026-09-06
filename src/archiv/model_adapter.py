@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, Protocol, cast
 from urllib.parse import urlparse
@@ -129,10 +129,33 @@ class ModelConfig(StrictModel):
         return self
 
 
+class ReportedUsage(StrictModel):
+    """Token counts the model's own reply reported, and nothing else.
+
+    Both fields absent means the backend reported nothing. That is not zero, and the
+    difference matters: the spend ledger counts a call with no reported usage separately
+    rather than estimating one, and so does anything measuring the workload.
+    """
+
+    schema_version: str = "1"
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+
+
 class ModelAdapter(Protocol):
     """Minimal completion interface used by future optional reasoning steps."""
 
     def complete(self, prompt: str) -> str: ...
+
+    def usage_reports(self) -> tuple[ReportedUsage, ...]:
+        """What the backend said each attempt used, for the life of this adapter.
+
+        An adapter is built once per run, so this is the run's usage -- including the
+        retries, which were paid for too. Empty means nothing was reported, which is
+        the honest answer for a backend that reports nothing.
+        """
+
+        return ()
 
     def can_enforce_schema(self) -> bool:
         """Whether this backend can actually hold a reply to a JSON schema.
@@ -155,6 +178,9 @@ class DisabledModelAdapter:
         del prompt
         raise RuntimeError("model use is disabled; Archiv will not select a hidden fallback")
 
+    def usage_reports(self) -> tuple[ReportedUsage, ...]:
+        return ()
+
     def can_enforce_schema(self) -> bool:
         return False
 
@@ -164,6 +190,10 @@ class OpenAICompatibleLoopbackAdapter:
     """Small loopback-only OpenAI-compatible client using the Python standard library."""
 
     config: ModelConfig
+    reported: list[ReportedUsage] = field(default_factory=list[ReportedUsage])
+
+    def usage_reports(self) -> tuple[ReportedUsage, ...]:
+        return tuple(self.reported)
 
     def can_enforce_schema(self) -> bool:
         # False, and deliberately so. This adapter sends no schema constraint at all, and
@@ -197,6 +227,10 @@ class OpenAICompatibleLoopbackAdapter:
                 body = json.loads(response.read().decode("utf-8"))
         except (OSError, ValueError) as error:
             raise RuntimeError(f"local model request failed without fallback: {error}") from error
+        prompt_used, completion_used = _reported_usage(body)
+        self.reported.append(
+            ReportedUsage(prompt_tokens=prompt_used, completion_tokens=completion_used)
+        )
         try:
             content = body["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as error:
@@ -276,6 +310,10 @@ class RemoteEvaluationAdapter:
 
     config: ModelConfig
     home: Path | None = None
+    reported: list[ReportedUsage] = field(default_factory=list[ReportedUsage])
+
+    def usage_reports(self) -> tuple[ReportedUsage, ...]:
+        return tuple(self.reported)
 
     def can_enforce_schema(self) -> bool:
         # False for now. This provider does offer a schema-constrained reply mode, but
@@ -339,7 +377,11 @@ class RemoteEvaluationAdapter:
         # Recorded before the reply is inspected. A reply that came back unusable was
         # still billed for, and a ledger that only counts the calls that worked
         # understates what the archive has spent.
-        record_spend(*_reported_usage(body), self.home)
+        prompt_used, completion_used = _reported_usage(body)
+        self.reported.append(
+            ReportedUsage(prompt_tokens=prompt_used, completion_tokens=completion_used)
+        )
+        record_spend(prompt_used, completion_used, self.home)
 
         try:
             content = body["choices"][0]["message"]["content"]
@@ -350,6 +392,26 @@ class RemoteEvaluationAdapter:
         if not isinstance(content, str) or not content.strip():
             raise RuntimeError("remote evaluation model returned empty content")
         return content
+
+
+def usage_payload(adapter: object) -> dict[str, object] | None:
+    """What this adapter reported using, shaped for a run's evidence, or nothing.
+
+    Written by both run paths. `ask` and `report` do not share the model call, so
+    anything that must appear in both has to be threaded twice, and the last time that
+    was forgotten the report path silently kept the old behaviour.
+    """
+
+    reports = getattr(adapter, "usage_reports", None)
+    if reports is None:
+        return None
+    attempts = cast("tuple[ReportedUsage, ...]", reports())
+    if not attempts:
+        return None
+    return {
+        "schema_version": "1",
+        "attempts": [attempt.model_dump(mode="json") for attempt in attempts],
+    }
 
 
 def model_config_path(home: Path | None = None) -> Path:

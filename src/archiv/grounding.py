@@ -11,10 +11,15 @@ from uuid import uuid4
 
 from archiv.ask_contracts import AskRunResult
 from archiv.contracts import Citation, RunStatus, SearchResult
-from archiv.cost_control import check_spend_allowance
+from archiv.cost_control import decide_spend
 from archiv.evaluation_config import EvaluationNotEnabledError, check_evaluation_opt_in
 from archiv.grounding_contracts import GroundedModelResponse
-from archiv.model_adapter import ModelConfig, build_model_adapter, load_model_config
+from archiv.model_adapter import (
+    ModelConfig,
+    build_model_adapter,
+    load_model_config,
+    usage_payload,
+)
 from archiv.reports.formatting import format_locator
 from archiv.search import read_source_excerpt, retrieve_evidence, validate_citation
 from archiv.storage.layout import ArchivLayout
@@ -341,21 +346,40 @@ def run_grounded_ask(
         # otherwise escape with no run result at all, which is worse than an unstamped
         # one: there would be nothing on disk saying what was attempted.
         if model_config.provenance == "remote-evaluation":
-            # Records what an allowed call expected to cost. A refused one writes
-            # nothing, because the check raises before this write happens -- the reason
-            # for the refusal reaches the user through the error, not through evidence.
-            # Recording it for a refused run as well is queued as its own step.
-            _write_json(
-                evidence_dir / "cost.json",
-                check_spend_allowance(prompt, layout.root).model_dump(mode="json"),
-            )
+            # Decide, write it down, then act on it -- in that order. Writing the result
+            # of the check meant a refused run left no cost record at all, and a refusal
+            # is the run somebody comes back to asking what the ceiling was.
+            spend = decide_spend(prompt, layout.root)
+            _write_json(evidence_dir / "cost.json", spend.model_dump(mode="json"))
+            if spend.refused_because is not None:
+                result = AskRunResult(
+                    run_id=run_id,
+                    status=RunStatus.BLOCKED_BY_POLICY,
+                    query=query,
+                    evidence_dir=str(evidence_dir),
+                    model=model_config,
+                    retrieved_citations=retrieved_citations,
+                    retrieval_diagnostics=retrieval.diagnostics,
+                    errors=[spend.explanation],
+                )
+                return _finalise(
+                    evidence_dir, result, text_may_have_been_sent=text_may_have_been_sent
+                )
 
         adapter = build_model_adapter(model_config, layout.root)
         # Set before the call, not after. Once this line is passed there is no way to be
         # certain the request did not reach the provider, and over-reporting "the text
         # may have left this machine" is the only safe direction to be wrong in.
         text_may_have_been_sent = True
-        structured = request_grounded_response(adapter, prompt, set(citations_map.keys()))
+        try:
+            structured = request_grounded_response(adapter, prompt, set(citations_map.keys()))
+        finally:
+            # In a finally, because a call that failed was still paid for and still used
+            # the tokens it used. Recording usage only for runs that worked would leave
+            # the expensive failures invisible.
+            usage = usage_payload(adapter)
+            if usage is not None:
+                _write_json(evidence_dir / "usage.json", usage)
         _write_json(
             evidence_dir / "structured_output.json",
             structured.record.model_dump(mode="json"),

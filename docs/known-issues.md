@@ -144,3 +144,28 @@ recorded spend understates it.
 Check both on the first real call: that the cap is honoured, and that the usage block
 arrives in the shape the recorder expects. Until then, the reply cap is an intention
 rather than a measured behaviour.
+
+## What a calibration run cannot measure here, and why
+
+`archiv model calibrate` records what one grounded question costs. Three of the numbers
+step S08 asks for are written as refusals to measure rather than as figures, and this is
+not a gap to be closed by trying harder:
+
+- **Time to first token.** Both adapters ask for a whole reply rather than a stream, so
+  there is no first token to time.
+- **Prompt-processing rate, and generation rate, separately.** Telling them apart needs
+  the time to first token above. What can be measured without it — reply tokens divided
+  by the whole wall clock, prompt processing included — is recorded instead, under a name
+  that says so.
+- **Answer quality.** It is copied from a field-trial run's scored results, or it is
+  absent with a reason. It is never computed here. There is one definition in this
+  project of whether an answer was good; a second one would eventually disagree with the
+  first, and then two numbers would both claim to be the quality.
+
+Streaming would make the first two measurable. It would also mean a second request shape
+on the one path where document text leaves the machine, which is not a change to make in
+passing.
+
+Separately: **no calibration run has ever measured a paid model.** Everything exercised
+so far used a stand-in that answers instantly. The timings are real timings of that
+stand-in, which is to say they measure this machine and this archive, not a provider.

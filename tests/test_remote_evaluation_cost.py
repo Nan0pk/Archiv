@@ -414,3 +414,116 @@ def test_a_billed_call_is_recorded_even_when_its_reply_is_unusable(
     assert ledger.recorded_calls == 1, "the provider billed for this, so it is recorded"
     # 1000 in at $10/million plus 500 out at $30/million.
     assert ledger.spent_usd == pytest.approx(0.025)
+
+
+# --- S07A: a refused run records why it was refused ----------------------------
+
+
+def spent_out_archive(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """An archive with documents, marked for evaluation, whose ceiling is already gone."""
+
+    from archiv.model_adapter import save_model_config
+    from archiv.sample_vault import create_sample_vault
+
+    home = tmp_path / "home"
+    corpus = tmp_path / "corpus"
+    create_sample_vault(corpus)
+    runner.invoke(app, ["add", str(corpus), "--home", str(home)])
+    save_model_config(remote_config(), home)
+    mark_for_evaluation(home)
+    save_spend_policy(policy(ceiling_usd=1.0), home)
+    record_spend(100_000, 0, home)  # $1.00 of a $1.00 ceiling.
+    monkeypatch.setenv(API_KEY_ENV, "a-secret")
+    return home
+
+
+def test_a_refused_run_records_the_numbers_that_refused_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The refusal is the run most worth having evidence for, and it had none.
+
+    The cost record used to be the argument to the check, so when the check refused the
+    call nothing was written. What the ceiling was, and what had already been spent,
+    reached the person through an error message and were then gone.
+    """
+
+    from archiv.grounding import run_grounded_ask
+
+    home = spent_out_archive(tmp_path, monkeypatch)
+    opener = install_opener(monkeypatch)
+
+    result = run_grounded_ask("unique fixture marker", home=home)
+    assert opener.calls == [], "nothing may be sent once the ceiling is reached"
+
+    recorded = json.loads((Path(result.evidence_dir) / "cost.json").read_text())
+    assert recorded["decision"] == "refused"
+    assert recorded["refused_because"] == "ceiling-already-reached"
+    assert recorded["preflight"]["ceiling_usd"] == pytest.approx(1.0)
+    assert recorded["preflight"]["spent_before_usd"] == pytest.approx(1.0)
+    # Whether there was a projection at all is part of the record, not an omission.
+    assert recorded["preflight"]["tokenizer_status"] == "not-configured"
+    assert recorded["preflight"]["prompt_tokens"] is None
+    assert "ceiling" in recorded["explanation"]
+
+
+def test_a_spend_refusal_is_recorded_as_blocked_by_policy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A ceiling doing its job is a boundary, not a bug in the product.
+
+    The evaluation-marker refusal is already recorded this way. A spend refusal arriving
+    as a generic failure would read to anyone auditing the runs as Archiv breaking.
+    """
+
+    from archiv.contracts import RunStatus
+    from archiv.grounding import run_grounded_ask
+
+    home = spent_out_archive(tmp_path, monkeypatch)
+    install_opener(monkeypatch)
+
+    result = run_grounded_ask("unique fixture marker", home=home)
+    assert result.status == RunStatus.BLOCKED_BY_POLICY
+    assert any("ceiling" in error for error in result.errors)
+
+    on_disk = json.loads((Path(result.evidence_dir) / "result.json").read_text())
+    assert on_disk["status"] == "blocked_by_policy"
+
+
+def test_the_report_path_records_a_refusal_too(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`report` re-implements the model call, so it wrote no cost record at all.
+
+    Not a weaker version of the ask path's gap -- a total absence. The ceiling was
+    enforced inside the adapter, so a refused report failed with an error and left
+    nothing behind saying what it would have cost.
+    """
+
+    from archiv.contracts import RunStatus
+    from archiv.tasks import run_task
+
+    home = spent_out_archive(tmp_path, monkeypatch)
+    opener = install_opener(monkeypatch)
+
+    task_path = tmp_path / "report-task.yaml"
+    task_path.write_text(
+        json.dumps(
+            {
+                "task": "cross-file-report",
+                "query": "unique fixture marker",
+                "render": False,
+                "model_policy": "configured-local",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_task(task_path, home=home)
+    assert opener.calls == []
+    assert result.status == RunStatus.BLOCKED_BY_POLICY
+    assert any("ceiling" in error for error in result.errors)
+
+    recorded = json.loads((Path(result.evidence_dir) / "cost.json").read_text())
+    assert recorded["decision"] == "refused"
+    assert recorded["refused_because"] == "ceiling-already-reached"
+    assert recorded["preflight"]["spent_before_usd"] == pytest.approx(1.0)
