@@ -77,9 +77,11 @@ General alpha limitations remain documented in [Offline alpha](offline-alpha.md)
 - The earlier code closed that window incidentally, because it also consulted whether the
   bytes were already on disk, and the per-digest file lock serialised that. Removing that
   term was necessary to fix the single-process race, so this is a deliberate trade: a
-  reproducible fault inside one run — it failed roughly one run in four, and broke the
-  required check on [#131](https://github.com/Nan0pk/Archiv/pull/131) — exchanged for a
-  narrower one that needs two concurrent runs on the same archive.
+  reproducible fault inside one run — 8 failures in 30 runs on one machine and about 1
+  in 10 on another, and it broke the required check on
+  [#131](https://github.com/Nan0pk/Archiv/pull/131) — exchanged for a narrower one that
+  needs two concurrent runs on the same archive. The rate is a property of the machine,
+  not of the bug; both measurements are given so neither reads as the true frequency.
 - Consequences are a wrong "new originals" count and some duplicated expansion work. Not
   corruption: originals stay content-addressed, containment rows are written with
   `INSERT OR REPLACE`, and processing evidence is keyed on the digest.
@@ -87,3 +89,42 @@ General alpha limitations remain documented in [Offline alpha](offline-alpha.md)
   archive is a scenario Archiv intends to support, and no test covers it. Deciding that
   is the prerequisite for fixing it: the fix would be to make the check and the insert
   one transaction, which needs the pending-row states thought through.
+
+## Two claims on `main` that the code does not support
+
+Recorded here because they cannot be corrected where they were made. The squash commit
+[`b5fa9bd`](https://github.com/Nan0pk/Archiv/commit/b5fa9bd) and the body of
+[#131](https://github.com/Nan0pk/Archiv/pull/131) both state things that are not true of
+the code they describe. Rewriting history on `main` is worse than leaving an uncorrected
+record, so the correction lives forward, here.
+
+This repository exists because a record said work was finished that was not. Leaving that
+same kind of statement standing in the record is the failure itself, not a wording
+problem, which is why it is written down rather than let go.
+
+**Claim one: that the parallel-add fix rebuilds derived artifacts.** The message says
+"the old check treated the content as a duplicate and skipped rebuilding derived
+artifacts. It is now treated as not yet ingested and the work is done."
+
+It is not. Measured twice, by instrumenting the run: for a digest whose only earlier
+ingestion failed, `derive_artifacts` is called **zero** times and `reuse_derived_artifacts`
+once, and the evidence is recorded as `skipped` / `derived-existing`. That decision is
+made in `prepare_candidate` in `src/archiv/ingestion/service.py`, which the change never
+touched.
+
+What the change does do for that case is real and worth having: the ingestion is recorded
+as a new original rather than a duplicate, and archive and PDF attachment expansion now
+run. Under the earlier code that ordering recorded zero originals *and* never expanded
+the archive at all.
+
+**Claim two: that the desktop gap was closed in the console.** The message says "The
+desktop console now reads the origin out of the run's own JSON and says so in its status
+line… The step allowed recording that as a known gap instead; surfacing it is better and
+was not much more work."
+
+The step pointed at `question_argv` in `src/archiv/ui/product.py`, whose only caller is
+`src/archiv/ui/tk_product.py` — the window `archiv ui` opens with no flags. The stamp went
+into `src/archiv/ui/tk_console.py`, which is the diagnostic view behind `--diagnostic`.
+Half the named gap was closed; the half ordinary users see was not, and nothing was
+recorded. The default window was corrected afterwards, so the code is now right in both
+places — but the sentence on `main` was not true when it was written.

@@ -196,10 +196,16 @@ def _provenance_phrase(provenance: str, *, a_model_ran: bool) -> str:
     evidence and never calls a model -- the same false-statement defect the banner above
     had, one line lower, and missed by the test written to catch it. A caller that cannot
     say whether a model ran has no business printing a sentence about one.
+
+    It also says only that no model was called, never why. An earlier version said
+    "Archiv found no evidence to answer from", which was true on the only path that
+    reaches it today and would have become the same defect again the moment a second
+    path did. This function is told whether a model ran; it is not told the reason, so
+    it does not state one.
     """
 
     if not a_model_ran:
-        return "no model — Archiv found no evidence to answer from"
+        return "no model — no model was called for this answer"
     if provenance == "remote-evaluation":
         return "a model running on computers you do not control (evaluation mode)"
     return "a model running on this machine"

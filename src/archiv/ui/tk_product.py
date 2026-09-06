@@ -306,6 +306,11 @@ class ProductApp:
                 "Archiv is busy", "Cancel or wait for the current operation.", parent=self.root
             )
             return
+        # Cleared before each run. Without this the output box accumulates, and the
+        # "not a local answer" notice prepended below would stack -- three identical
+        # notices at the top with the newest answer off the bottom of the screen, which
+        # makes a warning ambiguous about which answer it belongs to.
+        self._clear_output()
         self.runner.start(console_executable_argv(argv))
         self.status.set(label + "…")
         self.root.after(_POLL_MS, self._poll)
@@ -332,6 +337,13 @@ class ProductApp:
             return
         text = chunk.decode("utf-8", errors="replace")
         self.root.after(0, lambda: self._append(text))
+
+    def _clear_output(self) -> None:
+        if not hasattr(self, "output"):
+            return
+        self.output.configure(state=tk.NORMAL)
+        self.output.delete("1.0", tk.END)
+        self.output.configure(state=tk.DISABLED)
 
     def _prepend(self, text: str) -> None:
         self.output.configure(state=tk.NORMAL)

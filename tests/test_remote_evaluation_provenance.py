@@ -165,12 +165,21 @@ def test_a_local_answer_is_not_stamped_and_says_it_is_local(
 def test_no_remote_ask_can_produce_an_unstamped_result(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Every way `ask` can finish carries the stamp, including the ways that never
-    call a model at all.
+    """Every ending that produces a run result carries the stamp, including the ones
+    that never call a model at all.
 
-    The list of endings is read out of the source rather than written down here, so
-    adding an eighth ending without a stamp fails this test instead of silently
-    creating an unstamped surface.
+    The list is read out of the source rather than written down here, so adding another
+    ending without a stamp fails this test instead of silently creating an unstamped
+    surface.
+
+    What this does **not** cover, stated plainly because an earlier version of this
+    docstring claimed it did: an exception escaping `run_grounded_ask` is also a way for
+    `ask` to finish, and produces no run result at all, so there is nothing for a stamp
+    to be on. Retrieval and the citation checks in `grounding.py` sit outside the guard
+    and can do that. It is not a hole in the privacy property -- every one of those paths
+    is before the prompt is built, so nothing has been sent and no unreported disclosure
+    is possible -- but it is not an ending this walk sees, and saying otherwise would be
+    the overclaiming this file exists to prevent.
     """
 
     import archiv.grounding as grounding_module
@@ -181,7 +190,7 @@ def test_no_remote_ask_can_produce_an_unstamped_result(
         for node in ast.walk(tree)
         if isinstance(node, ast.Call) and getattr(node.func, "id", "") == "AskRunResult"
     ]
-    assert len(endings) >= 6, "expected every terminal branch to build an AskRunResult"
+    assert len(endings) >= 6, "expected every result-producing branch to build an AskRunResult"
     for call in endings:
         supplied = {keyword.arg: keyword.value for keyword in call.keywords}
         assert "model" in supplied, (
