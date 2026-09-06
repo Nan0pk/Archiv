@@ -5,11 +5,22 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, cast
 
 import typer
 from pydantic import BaseModel
 
+from archiv.cost_control import (
+    PinnedTokenizer,
+    SpendLedgerUnreadableError,
+    SpendPolicy,
+    TokenPrices,
+    load_ledger,
+    load_pinned_tokenizer,
+    load_spend_policy,
+    reset_ledger,
+    save_spend_policy,
+)
 from archiv.evaluation_config import (
     ACKNOWLEDGEMENT,
     clear_evaluation_mark,
@@ -32,6 +43,11 @@ evaluation_app = typer.Typer(
     help="Mark this archive as an evaluation archive, where documents may leave this machine.",
 )
 model_app.add_typer(evaluation_app, name="evaluation")
+spend_app = typer.Typer(
+    no_args_is_help=True,
+    help="What this archive may spend on a model outside this machine, and what it has.",
+)
+model_app.add_typer(spend_app, name="spend")
 
 
 def _emit_json(value: object) -> None:
@@ -385,3 +401,173 @@ def model_configure_remote_evaluation_command(
         "Nothing is sent anywhere until this archive is also marked for evaluation with "
         "'archiv model evaluation enable'."
     )
+
+
+@spend_app.command("set")
+def model_spend_set_command(
+    ceiling_usd: Annotated[
+        float,
+        typer.Option("--ceiling-usd", min=0.000001, help="Total this archive may spend."),
+    ],
+    input_per_million: Annotated[
+        float,
+        typer.Option("--input-per-million", min=0, help="Provider's input price per million."),
+    ],
+    output_per_million: Annotated[
+        float,
+        typer.Option("--output-per-million", min=0, help="Provider's output price per million."),
+    ],
+    prices_recorded_on: Annotated[
+        str,
+        typer.Option("--prices-recorded-on", help="Date you read those prices, YYYY-MM-DD."),
+    ],
+    prices_source: Annotated[
+        str,
+        typer.Option("--prices-source", help="Where you read them, so the figure is checkable."),
+    ],
+    max_output_tokens: Annotated[int, typer.Option("--max-output-tokens", min=1, max=32000)] = 2048,
+    tokenizer_encoding: Annotated[str | None, typer.Option("--tokenizer-encoding")] = None,
+    tokenizer_path: Annotated[Path | None, typer.Option("--tokenizer-path", dir_okay=False)] = None,
+    tokenizer_sha256: Annotated[str | None, typer.Option("--tokenizer-sha256")] = None,
+    tokenizer_split_pattern: Annotated[
+        str | None,
+        typer.Option(
+            "--tokenizer-split-pattern",
+            help="The encoding's own split rule. Pinned with it, never assumed.",
+        ),
+    ] = None,
+    home: Annotated[Path | None, typer.Option("--home", file_okay=False, resolve_path=True)] = None,
+    json_output: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Record what this archive may spend, and what the provider charges.
+
+    Prices have no defaults on purpose: a rate nobody entered is a number nobody
+    checked, and published prices change.
+
+    The tokenizer is optional and, if given, must be a file already on disk with its hash
+    recorded. Archiv never downloads one. Without it a prompt cannot be counted, so no
+    cost is projected before a call — the ceiling still holds on what has been spent and
+    on the output cap.
+    """
+
+    pinned: PinnedTokenizer | None = None
+    given = [tokenizer_encoding, tokenizer_path, tokenizer_sha256, tokenizer_split_pattern]
+    if any(value is not None for value in given):
+        if not all(value is not None for value in given):
+            typer.echo(
+                "a pinned tokenizer needs all four of --tokenizer-encoding, "
+                "--tokenizer-path, --tokenizer-sha256 and --tokenizer-split-pattern",
+                err=True,
+            )
+            raise typer.Exit(code=1)
+        pinned = PinnedTokenizer(
+            encoding_name=cast(str, tokenizer_encoding),
+            path=str(cast(Path, tokenizer_path)),
+            sha256=cast(str, tokenizer_sha256),
+            split_pattern=cast(str, tokenizer_split_pattern),
+        )
+
+    try:
+        policy = SpendPolicy(
+            ceiling_usd=ceiling_usd,
+            max_output_tokens=max_output_tokens,
+            prices=TokenPrices(
+                input_per_million_usd=input_per_million,
+                output_per_million_usd=output_per_million,
+                recorded_on=prices_recorded_on,
+                source=prices_source,
+            ),
+            tokenizer=pinned,
+        )
+    except Exception as error:
+        typer.echo(f"spend policy rejected: {error}", err=True)
+        raise typer.Exit(code=1) from error
+
+    path = save_spend_policy(policy, home)
+    if json_output:
+        _emit_json({"config_path": str(path), "policy": policy.model_dump(mode="json")})
+        return
+    typer.echo(f"Ceiling: ${policy.ceiling_usd:.2f}")
+    typer.echo(
+        f"Prices: ${policy.prices.input_per_million_usd}/million in, "
+        f"${policy.prices.output_per_million_usd}/million out "
+        f"(recorded {policy.prices.recorded_on} from {policy.prices.source})"
+    )
+    typer.echo(f"Reply capped at: {policy.max_output_tokens} tokens")
+    _, status, detail = load_pinned_tokenizer(policy)
+    typer.echo(f"Prompt counting: {status} — {detail}")
+    typer.echo(f"Saved to: {path}")
+
+
+@spend_app.command("status")
+def model_spend_status_command(
+    home: Annotated[Path | None, typer.Option("--home", file_okay=False, resolve_path=True)] = None,
+    json_output: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Show the ceiling, what has been spent against it, and whether prompts can be counted."""
+
+    policy = load_spend_policy(home)
+    try:
+        ledger = load_ledger(home)
+    except SpendLedgerUnreadableError as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(code=1) from error
+    if policy is None:
+        payload: dict[str, object] = {
+            "policy": None,
+            "ledger": ledger.model_dump(mode="json"),
+        }
+        if json_output:
+            _emit_json(payload)
+            return
+        typer.echo("No spend policy. A model outside this machine will be refused.")
+        typer.echo("Set one with 'archiv model spend set --help'.")
+        return
+
+    _, status, detail = load_pinned_tokenizer(policy)
+    if json_output:
+        _emit_json(
+            {
+                "policy": policy.model_dump(mode="json"),
+                "ledger": ledger.model_dump(mode="json"),
+                "prompt_counting": {"status": status, "detail": detail},
+            }
+        )
+        return
+    typer.echo(f"Spent: ${ledger.spent_usd:.4f} of ${policy.ceiling_usd:.2f}")
+    typer.echo(f"Calls recorded: {ledger.recorded_calls}")
+    if ledger.unmeasured_calls:
+        typer.echo(
+            f"Of those, {ledger.unmeasured_calls} reported no usage, so their cost is "
+            "not in the total above."
+        )
+    typer.echo(f"Prompt counting: {status} — {detail}")
+    typer.echo(
+        f"Prices recorded {policy.prices.recorded_on} from {policy.prices.source}; "
+        "check them against the provider if that date is old."
+    )
+
+
+@spend_app.command("reset")
+def model_spend_reset_command(
+    acknowledge: Annotated[
+        bool,
+        typer.Option(
+            "--acknowledge-this-forgets-what-was-spent",
+            help="Required. The recorded total is evidence; clearing it discards that.",
+        ),
+    ] = False,
+    home: Annotated[Path | None, typer.Option("--home", file_okay=False, resolve_path=True)] = None,
+) -> None:
+    """Clear the recorded spend. Use only when it no longer matches what you are billed."""
+
+    if not acknowledge:
+        typer.echo(
+            "This discards the record of what this archive has spent, which is the only "
+            "thing making the ceiling mean anything across runs. Re-run with "
+            "--acknowledge-this-forgets-what-was-spent to confirm.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+    reset_ledger(home)
+    typer.echo("Recorded spend cleared. The ceiling now applies to a fresh total.")

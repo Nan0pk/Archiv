@@ -19,6 +19,7 @@ from urllib.request import (
 from pydantic import Field, model_validator
 
 from archiv.contracts import StrictModel
+from archiv.cost_control import check_spend_allowance, record_spend
 from archiv.evaluation_config import check_evaluation_opt_in
 from archiv.storage.layout import ArchivLayout
 
@@ -235,6 +236,23 @@ class _RefuseCrossOriginRedirect(HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, newurl)  # pyright: ignore[reportArgumentType]
 
 
+def _reported_usage(body: object) -> tuple[int | None, int | None]:
+    """Token counts the provider reported, or nothing. Never inferred."""
+
+    if not isinstance(body, dict):
+        return None, None
+    usage = cast("dict[str, object]", body).get("usage")
+    if not isinstance(usage, dict):
+        return None, None
+    fields = cast("dict[str, object]", usage)
+    prompt_used = fields.get("prompt_tokens")
+    completion_used = fields.get("completion_tokens")
+    return (
+        prompt_used if isinstance(prompt_used, int) else None,
+        completion_used if isinstance(completion_used, int) else None,
+    )
+
+
 def _origin_of(url: str) -> tuple[str, str, int | None]:
     parsed = urlparse(url)
     return (parsed.scheme, parsed.hostname or "", parsed.port)
@@ -267,8 +285,10 @@ class RemoteEvaluationAdapter:
         return False
 
     def complete(self, prompt: str) -> str:
-        # First, before the API key is read and long before a socket is opened.
+        # Both pre-flight gates together, before the API key is read and long before a
+        # socket is opened: may this archive send anything at all, and can it afford to.
         check_evaluation_opt_in(self.home)
+        preflight = check_spend_allowance(prompt, self.home)
 
         api_key_env = cast(str, self.config.api_key_env)
         # Stripped, not just checked for emptiness: a key with a stray newline -- the
@@ -288,6 +308,9 @@ class RemoteEvaluationAdapter:
                 "model": self.config.model,
                 "messages": [{"role": "user", "content": prompt}],
                 "stream": False,
+                # Sent every time, so the reply's cost is bounded even when the prompt
+                # could not be counted and no projection was possible.
+                "max_tokens": preflight.max_output_tokens,
             }
         ).encode("utf-8")
         request = Request(  # noqa: S310 - scheme is pinned to https by the validator
@@ -312,6 +335,11 @@ class RemoteEvaluationAdapter:
                 f"remote evaluation request to {_origin_of(base)[1]} failed without "
                 f"fallback: {type(error).__name__}: {error}"
             ) from error
+
+        # Recorded before the reply is inspected. A reply that came back unusable was
+        # still billed for, and a ledger that only counts the calls that worked
+        # understates what the archive has spent.
+        record_spend(*_reported_usage(body), self.home)
 
         try:
             content = body["choices"][0]["message"]["content"]

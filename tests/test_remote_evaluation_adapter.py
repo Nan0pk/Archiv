@@ -23,6 +23,7 @@ from urllib.error import URLError
 
 import pytest
 
+from archiv.cost_control import SpendPolicy, TokenPrices, save_spend_policy
 from archiv.evaluation_config import (
     ENV_OVERRIDE,
     EvaluationNotEnabledError,
@@ -44,6 +45,29 @@ API_KEY_ENV = "ARCHIV_TEST_REMOTE_KEY"
 def clean_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv(ENV_OVERRIDE, raising=False)
     monkeypatch.delenv(API_KEY_ENV, raising=False)
+
+
+def set_spend_policy(home: Path, ceiling_usd: float = 5.0) -> None:
+    """Give an archive a spend policy so a paid request is not refused for want of one.
+
+    Prices here are made up because the test never bills anything -- what is being
+    exercised is the gate, not a real rate. Archiv itself has no default prices, on
+    purpose.
+    """
+
+    save_spend_policy(
+        SpendPolicy(
+            ceiling_usd=ceiling_usd,
+            max_output_tokens=1024,
+            prices=TokenPrices(
+                input_per_million_usd=1.0,
+                output_per_million_usd=2.0,
+                recorded_on="2026-01-01",
+                source="a test, not a provider",
+            ),
+        ),
+        home,
+    )
 
 
 def remote_config(**overrides: object) -> ModelConfig:
@@ -124,6 +148,7 @@ def test_remote_adapter_requires_the_evaluation_marker(
     assert opener.calls == []
 
     mark_for_evaluation(home)
+    set_spend_policy(home)
     assert adapter.complete("what is in the archive?") == "an answer"
     assert len(opener.calls) == 1
 
@@ -186,6 +211,7 @@ def test_remote_adapter_requires_an_api_key_environment_variable(
 ) -> None:
     home = tmp_path / "home"
     mark_for_evaluation(home)
+    set_spend_policy(home)
     opener = install_opener(monkeypatch, working_reply())
     adapter = RemoteEvaluationAdapter(remote_config(), home)
 
@@ -211,6 +237,7 @@ def test_the_api_key_is_sent_but_never_appears_in_an_error(
 ) -> None:
     home = tmp_path / "home"
     mark_for_evaluation(home)
+    set_spend_policy(home)
     monkeypatch.setenv(API_KEY_ENV, "sk-do-not-leak-me")
 
     sending = install_opener(monkeypatch, working_reply())
@@ -233,6 +260,7 @@ def test_remote_adapter_fails_closed_with_no_network(
 
     home = tmp_path / "home"
     mark_for_evaluation(home)
+    set_spend_policy(home)
     monkeypatch.setenv(API_KEY_ENV, "a-secret")
     unreachable_opener(monkeypatch)
 
@@ -251,6 +279,7 @@ def test_no_hidden_fallback_on_a_malformed_reply(
 ) -> None:
     home = tmp_path / "home"
     mark_for_evaluation(home)
+    set_spend_policy(home)
     monkeypatch.setenv(API_KEY_ENV, "a-secret")
     adapter = RemoteEvaluationAdapter(remote_config(), home)
 

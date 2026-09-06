@@ -21,6 +21,7 @@ from typer.testing import CliRunner
 
 from archiv.cli import app
 from archiv.contracts import RunStatus
+from archiv.cost_control import SpendPolicy, TokenPrices, save_spend_policy
 from archiv.evaluation_config import mark_for_evaluation
 from archiv.grounding import AskEvidenceUnwritableError, run_grounded_ask
 from archiv.model_adapter import ModelConfig, save_model_config
@@ -43,6 +44,29 @@ class StubModel:
 
     def can_enforce_schema(self) -> bool:
         return False
+
+
+def set_spend_policy(home: Path, ceiling_usd: float = 5.0) -> None:
+    """Give an archive a spend policy so a paid request is not refused for want of one.
+
+    Prices here are made up because the test never bills anything -- what is being
+    exercised is the gate, not a real rate. Archiv itself has no default prices, on
+    purpose.
+    """
+
+    save_spend_policy(
+        SpendPolicy(
+            ceiling_usd=ceiling_usd,
+            max_output_tokens=1024,
+            prices=TokenPrices(
+                input_per_million_usd=1.0,
+                output_per_million_usd=2.0,
+                recorded_on="2026-01-01",
+                source="a test, not a provider",
+            ),
+        ),
+        home,
+    )
 
 
 def good_reply() -> str:
@@ -68,6 +92,7 @@ def remote_archive(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         home,
     )
     mark_for_evaluation(home)
+    set_spend_policy(home)
     monkeypatch.setenv(API_KEY_ENV, "a-secret")
     return home
 

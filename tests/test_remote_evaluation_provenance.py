@@ -23,6 +23,7 @@ from typer.testing import CliRunner
 
 from archiv.cli import app
 from archiv.contracts import RunStatus
+from archiv.cost_control import SpendPolicy, TokenPrices, save_spend_policy
 from archiv.evaluation_config import mark_for_evaluation
 from archiv.grounding import run_grounded_ask
 from archiv.model_adapter import ModelConfig, save_model_config
@@ -64,6 +65,29 @@ class StubModel:
         return False
 
 
+def set_spend_policy(home: Path, ceiling_usd: float = 5.0) -> None:
+    """Give an archive a spend policy so a paid request is not refused for want of one.
+
+    Prices here are made up because the test never bills anything -- what is being
+    exercised is the gate, not a real rate. Archiv itself has no default prices, on
+    purpose.
+    """
+
+    save_spend_policy(
+        SpendPolicy(
+            ceiling_usd=ceiling_usd,
+            max_output_tokens=1024,
+            prices=TokenPrices(
+                input_per_million_usd=1.0,
+                output_per_million_usd=2.0,
+                recorded_on="2026-01-01",
+                source="a test, not a provider",
+            ),
+        ),
+        home,
+    )
+
+
 def stub_builder(reply: str) -> Callable[..., StubModel]:
     """A stand-in for `build_model_adapter` that returns a scripted model."""
 
@@ -83,6 +107,7 @@ def prepare_remote_archive(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> P
     runner.invoke(app, ["add", str(corpus), "--home", str(home)])
     save_model_config(remote_config(), home)
     mark_for_evaluation(home)
+    set_spend_policy(home)
     monkeypatch.setenv(API_KEY_ENV, "a-secret")
     return home
 
@@ -226,6 +251,7 @@ def test_no_remote_ask_can_produce_an_unstamped_result(
     create_sample_vault(tmp_path / "corpus2")
     runner.invoke(app, ["add", str(tmp_path / "corpus2"), "--home", str(unmarked)])
     save_model_config(remote_config(), unmarked)
+    set_spend_policy(unmarked)
     refused = run_grounded_ask("unique fixture marker", home=unmarked)
     assert refused.status == RunStatus.BLOCKED_BY_POLICY
     assert refused.model.provenance == "remote-evaluation"
@@ -390,6 +416,7 @@ def test_a_refusal_does_not_get_the_banner(tmp_path: Path, monkeypatch: pytest.M
     create_sample_vault(corpus)
     runner.invoke(app, ["add", str(corpus), "--home", str(home)])
     save_model_config(remote_config(), home)
+    set_spend_policy(home)
     monkeypatch.setenv(API_KEY_ENV, "a-secret")
 
     refused = runner.invoke(app, ["ask", "unique fixture marker", "--home", str(home)])
