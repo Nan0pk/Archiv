@@ -38,15 +38,25 @@ class ImageEmbedder(Protocol):
 
     def embed_image(self, image_path: Path) -> list[float]: ...
 
-    def embed_text(self, text: str) -> list[float]: ...
-
 
 class PerceptualFeatureEmbedder:
-    """Deterministic, zero-dependency perceptual vision and text embedder.
+    """Deterministic, zero-dependency perceptual embedder for images.
 
-    Extracts multi-scale spatial color moments, luminance statistics,
-    and directional gradients across a normalized spatial grid.
-    Produces a 128-dimensional normalized embedding vector.
+    Extracts multi-scale spatial colour moments, luminance statistics and directional
+    gradients across a normalised spatial grid, into a 128-dimensional unit vector.
+
+    There is no text side, and there was never a working one. What used to live here was
+    a nineteen-entry colour lookup table with a hash-scatter fallback for every other
+    word, so any string at all produced a vector and any query produced confident-looking
+    ranked results. See `docs/plan/steps/S10.md` for what it did, measured.
+
+    What this embedder can and cannot do is measured rather than assumed. It separates
+    near-duplicates from unrelated images cleanly when the images differ in colour: true
+    matches scored 0.9994 and above while unrelated pairs stayed at or below 0.9000. It
+    does not separate them at all on light pages of dark text, where every pair -- the
+    same page twice, or two unrelated invoices -- lands between 0.9993 and 1.0000. Global
+    colour statistics dominate the vector, and two document scans have nearly identical
+    ones whatever they say.
     """
 
     def __init__(self) -> None:
@@ -143,81 +153,6 @@ class PerceptualFeatureEmbedder:
         features = features[:128]
 
         return normalize_vector(features)
-
-    def embed_text(self, text: str) -> list[float]:
-        """Generate a 128-dim normalized embedding vector from semantic query text."""
-        tokens = text.lower().replace("-", " ").replace("_", " ").split()
-        if not tokens:
-            return [0.0] * 128
-
-        vec = [0.0] * 128
-
-        # Color and luminance priors
-        color_map: dict[str, tuple[float, float, float]] = {
-            "red": (1.0, 0.0, 0.0),
-            "crimson": (0.9, 0.1, 0.1),
-            "maroon": (0.5, 0.0, 0.0),
-            "green": (0.0, 1.0, 0.0),
-            "darkgreen": (0.0, 0.5, 0.0),
-            "lime": (0.2, 0.9, 0.1),
-            "blue": (0.0, 0.0, 1.0),
-            "navy": (0.0, 0.0, 0.5),
-            "cyan": (0.0, 1.0, 1.0),
-            "magenta": (1.0, 0.0, 1.0),
-            "yellow": (1.0, 1.0, 0.0),
-            "orange": (1.0, 0.5, 0.0),
-            "white": (1.0, 1.0, 1.0),
-            "bright": (0.9, 0.9, 0.9),
-            "light": (0.8, 0.8, 0.8),
-            "black": (0.05, 0.05, 0.05),
-            "dark": (0.1, 0.1, 0.1),
-            "gray": (0.5, 0.5, 0.5),
-            "grey": (0.5, 0.5, 0.5),
-        }
-
-        matched_color = False
-        for token in tokens:
-            if token in color_map:
-                r, g, b = color_map[token]
-                lum = 0.299 * r + 0.587 * g + 0.114 * b
-                vec[0] = r
-                vec[1] = g
-                vec[2] = b
-                for b_idx in range(6, 70, 4):
-                    vec[b_idx] = r
-                    vec[b_idx + 1] = g
-                    vec[b_idx + 2] = b
-                    vec[b_idx + 3] = lum
-                vec[102] = lum
-                matched_color = True
-                break
-
-        # Spatial cues (top, bottom, left, right, center)
-        if any(t in tokens for t in ("top", "upper", "header")):
-            for b_idx in range(6, 38, 4):
-                vec[b_idx + 3] += 0.5
-        if any(t in tokens for t in ("bottom", "lower", "footer")):
-            for b_idx in range(38, 70, 4):
-                vec[b_idx + 3] += 0.5
-        if any(t in tokens for t in ("center", "middle")):
-            vec[102] += 0.5
-
-        # Pattern / edge cues (lines, stripes, text, horizontal, vertical)
-        if any(t in tokens for t in ("horizontal", "stripes", "rows", "lines")):
-            for idx in range(70, 86):
-                vec[idx] = 0.5
-        if any(t in tokens for t in ("vertical", "columns", "bars")):
-            for idx in range(86, 102):
-                vec[idx] = 0.5
-
-        if not matched_color:
-            for token in tokens:
-                seed = sum(ord(c) * (31**i) for i, c in enumerate(token[:10]))
-                for k in range(16):
-                    pos = (seed + k * 13) % 128
-                    vec[pos] += 0.5
-
-        return normalize_vector(vec)
 
 
 def get_default_image_embedder() -> ImageEmbedder:

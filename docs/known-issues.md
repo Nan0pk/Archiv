@@ -235,3 +235,49 @@ URL is correct, the date is correct, and only reading the source shows the mista
 future row added to that table needs the same treatment — a person or a reviewer opening
 the page and checking which column was taken — and the row's `backend` field exists to
 make the answer explicit rather than assumed.
+
+## Image similarity does not work on scanned documents
+
+`archiv images find-similar` finds near-duplicate images by comparing colour and edge
+statistics. Measured on generated fixtures — one image filed four ways, against unrelated
+images:
+
+| Content | Lowest true match | Highest unrelated | Gap |
+|---|---|---|---|
+| Images that differ in colour | 0.9994 | 0.9000 | 0.0994 |
+| Light pages of dark text | 1.0000 | 1.0000 | 0.0000 |
+
+On colour-diverse images it works and the shipped floor of 0.99 sits inside the gap. On
+document scans there is no gap at all: the same page twice and two entirely unrelated
+invoices both score above 0.999, because the 128-dimensional vector is dominated by global
+colour statistics and two light pages of dark text have nearly identical ones whatever
+they say.
+
+So the case usually given for wanting this feature — the same scan filed in four folders —
+is the case it cannot serve. The terminal output says so under every result table. The
+`--json` output carries scores without that warning, so a caller reading it
+programmatically has no way to be told.
+
+This is a property of the embedder, not of the floor, and no floor can fix it. Fixing it
+needs features that respond to layout and text rather than colour.
+
+## `archiv images duplicates` reports unrelated documents as duplicates
+
+The same limitation with a worse consequence, because this surface names things as
+duplicates rather than ranking them by similarity.
+
+`find_near_duplicates` uses `threshold: float = 0.95` — a number nobody measured. Given
+three clearly different generated document pages (an invoice, a contract of sale and a
+medical report, with different text and different line layouts), it reports **one group
+containing all three**, with similarities of 0.9999 to the lead.
+
+A person acting on that output would delete two unrelated documents.
+
+Raising the threshold does not fix it: unrelated pages reach 1.0000, so there is no value
+that separates them. What would work is refusing to report a group when the similarities
+across the whole candidate set are bunched so tightly that the ranking carries no
+information — measured here, document pages span about 0.0007 while colour-diverse images
+span about 0.23, which is a clean separation to test against.
+
+Not fixed in step S10, whose declared scope is the search surface, and filed as its own
+step rather than widening that change. It is a live defect and should be taken next.

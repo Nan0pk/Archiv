@@ -1,4 +1,13 @@
-"""Semantic image search and near-duplicate detection over the image embedding index."""
+"""Finding images that look like a given image, over the image embedding index.
+
+There is no text query here. The one that used to exist gave every string a vector, so
+`"a photo of a person smiling"` returned a ranked table of documents and `"xyzzy plugh
+frobnicate"` returned one just as confidently. `docs/plan/steps/S10.md` records what it
+did, measured, on a corpus containing no people.
+
+What remains takes an image and finds images like it. Its limits are measured and stated
+on `MATCH_FLOOR` below.
+"""
 
 from __future__ import annotations
 
@@ -17,15 +26,46 @@ def _cosine_similarity(v1: list[float], v2: list[float]) -> float:
     return max(-1.0, min(1.0, dot))
 
 
-def search_images(
-    query: str | Path,
+MATCH_FLOOR = 0.99
+"""Below this similarity, nothing is returned. Measured, not chosen.
+
+Measurement, recorded in `docs/plan/steps/S10.md` and asserted in
+`tests/test_image_similarity.py`: three groups of generated images, each group being one
+image filed four ways -- the original, re-encoded as JPEG at quality 72, resized to half,
+and brightened by 12%. On colour-diverse images, no true match fell below 0.9994 and no
+unrelated pair rose above 0.9000. This floor sits inside that gap.
+
+What the floor does **not** do, and cannot: on light pages of dark text every pair lands
+between 0.9993 and 1.0000, matching or not, so no floor separates them. The floor stops a
+weak match being presented as a match. It does nothing about a corpus where the scores
+carry no information, and `archiv images find-similar` on scanned documents is exactly
+that corpus.
+
+The sample is three groups of four generated images: enough to place a floor inside a gap
+of about 0.10, not enough to justify a third decimal place.
+"""
+
+
+class NotAnImageError(ValueError):
+    """The path given as a query is missing, or is not an image this embedder can read."""
+
+
+def find_similar_images(
+    image: Path,
     *,
     top_k: int = 10,
-    min_score: float = 0.0,
+    min_score: float = MATCH_FLOOR,
     home: Path | None = None,
     embedder: ImageEmbedder | None = None,
 ) -> list[ImageSearchResult]:
-    """Retrieve images matching a text query or reference image, ranked by similarity."""
+    """Find indexed images that look like the given one.
+
+    Takes a path, and only a path. The version this replaced accepted either a string or
+    a path and guessed which it had been handed by testing whether the string named an
+    existing file -- so a typo in a filename silently became a text query and returned
+    ranked nonsense instead of an error.
+    """
+
     layout = ArchivLayout.resolve(home)
     index_file = image_index_path(layout)
     if not index_file.is_file():
@@ -33,17 +73,20 @@ def search_images(
 
     active_embedder = embedder or get_default_image_embedder()
 
-    # Determine whether query is an existing image file or semantic text
-    query_path: Path | None = None
-    if isinstance(query, Path) and query.is_file():
-        query_path = query
-    elif isinstance(query, str) and Path(query).is_file():
-        query_path = Path(query)
-
-    if query_path is not None:
+    query_path = Path(image).expanduser()
+    if not query_path.is_file():
+        raise NotAnImageError(
+            f"no such image: {query_path}. This command searches for images that look "
+            "like an image you already have, so it needs the path to one. It has no text "
+            "query: the one it used to have gave every string a vector and returned "
+            "confident-looking results for words like 'xyzzy'."
+        )
+    try:
         query_vec = active_embedder.embed_image(query_path)
-    else:
-        query_vec = active_embedder.embed_text(str(query))
+    except OSError as error:
+        raise NotAnImageError(
+            f"cannot read {query_path} as an image: {type(error).__name__}: {error}"
+        ) from error
 
     candidates: list[tuple[float, str, str, str, int, int]] = []
 

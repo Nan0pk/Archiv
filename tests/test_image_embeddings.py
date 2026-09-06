@@ -17,7 +17,7 @@ from archiv.images.embedder import (
     normalize_vector,
 )
 from archiv.images.index import image_index_path, rebuild_image_index
-from archiv.images.search import find_near_duplicates, search_images
+from archiv.images.search import find_near_duplicates, find_similar_images
 from archiv.ingestion import ingest_file
 from archiv.storage.layout import ArchivLayout
 
@@ -100,18 +100,11 @@ def test_rebuild_image_index_and_retrieval(tmp_path: Path) -> None:
     assert idx_path.is_file()
     assert build_res.index_size_bytes > 0
 
-    # 1. Text semantic search for 'red'
-    results_red = search_images("red", home=home, top_k=3)
-    assert len(results_red) == 3
-    assert results_red[0].source_name == "crimson_block.png"
-    assert results_red[0].score > results_red[1].score
-
-    # 2. Text semantic search for 'blue'
-    results_blue = search_images("blue", home=home, top_k=3)
-    assert results_blue[0].source_name == "navy_circle.png"
-
-    # 3. Image-to-image search with blue image path
-    results_img = search_images(blue_path, home=home, top_k=3)
+    # An image finds itself first, and at essentially 1.0. The two text-query checks
+    # that used to be here searched for "red" and "blue" -- which were two of the
+    # nineteen words in the lookup table the query side consisted of, so they measured
+    # that table against itself. Step S10 deleted the table and them.
+    results_img = find_similar_images(blue_path, home=home, top_k=3)
     assert results_img[0].source_name == "navy_circle.png"
     assert abs(results_img[0].score - 1.0) < 1e-4
 
@@ -164,19 +157,19 @@ def test_index_rebuildability_and_wipe_safety(tmp_path: Path) -> None:
     idx_path = image_index_path(layout)
     assert idx_path.is_file()
 
-    res = search_images("blue", home=home)
+    res = find_similar_images(img_path, home=home)
     assert len(res) == 1
 
     # Wiping the rebuildable index must not crash queries or corrupt originals
     idx_path.unlink()
     assert not idx_path.is_file()
-    assert search_images("blue", home=home) == []
+    assert find_similar_images(img_path, home=home) == []
     assert find_near_duplicates(home=home) == []
 
     # Rebuild recreates the index
     rebuild_image_index(home=home)
     assert idx_path.is_file()
-    assert len(search_images("blue", home=home)) == 1
+    assert len(find_similar_images(img_path, home=home)) == 1
 
 
 def test_image_embedding_benchmark(tmp_path: Path) -> None:
@@ -212,23 +205,28 @@ def test_image_embedding_benchmark(tmp_path: Path) -> None:
     throughput = 10.0 / max(0.0001, build_duration)
     assert throughput > 5.0, f"Indexing throughput {throughput:.1f} img/s is too slow"
 
-    # Measure search query latency over 20 queries
+    # Query latency, measured by asking each indexed image to find itself.
+    #
+    # What used to be here also computed a recall@1 figure and asserted it was at least
+    # 0.70. It queried the ten images by their own colour names -- and those names were
+    # ten of the nineteen entries in the lookup table that the text query consisted of.
+    # It measured the table against itself, so it could only ever pass, and it passed
+    # while the same query surface was ranking an invoice first for "a photo of a person
+    # smiling". A test that cannot fail is worse than no test: it reads as evidence.
+    #
+    # Recall is not re-measured here in a different way, because there is nothing left to
+    # measure it on: retrieval by image is the whole surface, and an image matching
+    # itself at 1.0 is asserted in test_image_similarity.py rather than dressed up as a
+    # recall figure. What is measured here is speed, which is a real property.
     latencies: list[float] = []
-    correct_top1 = 0
-
     for _color, name in palette:
+        query = tmp_path / f"{name}.png"
         q_start = time.monotonic()
-        results = search_images(name, home=home, top_k=3)
+        find_similar_images(query, home=home, top_k=3)
         latencies.append((time.monotonic() - q_start) * 1000.0)
-        if results and name in results[0].source_name:
-            correct_top1 += 1
 
     avg_latency_ms = sum(latencies) / len(latencies)
-    recall_at_1 = correct_top1 / len(palette)
-
-    # Verify latency bounds (< 50ms per query) and reasonable recall
     assert avg_latency_ms < 50.0, f"Average query latency {avg_latency_ms:.2f}ms exceeds 50ms limit"
-    assert recall_at_1 >= 0.7, f"Recall@1 {recall_at_1:.2f} is below target 0.70"
 
 
 def test_cli_images_subcommands(tmp_path: Path) -> None:
@@ -253,10 +251,17 @@ def test_cli_images_subcommands(tmp_path: Path) -> None:
     assert '"status": "ready"' in res_status1.output
     assert '"images_indexed": 1' in res_status1.output
 
-    # Search CLI
-    res_search = runner.invoke(app, ["images", "search", "red", "--home", str(home), "--json"])
+    # Find-similar CLI, given the image itself.
+    res_search = runner.invoke(
+        app, ["images", "find-similar", "--image", str(img_path), "--home", str(home), "--json"]
+    )
     assert res_search.exit_code == 0
     assert "photo.png" in res_search.output
+
+    # The old command name and the text query are both gone, and asking for them fails
+    # rather than quietly doing something else.
+    res_old = runner.invoke(app, ["images", "search", "red", "--home", str(home), "--json"])
+    assert res_old.exit_code != 0, "the text-query command must not still exist"
 
     # Duplicates CLI
     res_dup = runner.invoke(app, ["images", "duplicates", "--home", str(home), "--json"])

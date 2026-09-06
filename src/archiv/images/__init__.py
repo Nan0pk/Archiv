@@ -19,7 +19,7 @@ from archiv.images.index import (
     rebuild_image_index,
     unpack_embedding,
 )
-from archiv.images.search import find_near_duplicates, search_images
+from archiv.images.search import find_near_duplicates, find_similar_images
 
 __all__ = [
     "ImageEmbedder",
@@ -35,6 +35,6 @@ __all__ = [
     "normalize_vector",
     "pack_embedding",
     "rebuild_image_index",
-    "search_images",
+    "find_similar_images",
     "unpack_embedding",
 ]

@@ -321,6 +321,24 @@
       }
     },
     {
+      "id": "S10A",
+      "phase": "B",
+      "title": "Stop reporting unrelated documents as duplicates",
+      "doc": "docs/plan/steps/S10A.md",
+      "detail": "full",
+      "depends_on": [
+        "S10"
+      ],
+      "acceptance": {
+        "kind": "pytest",
+        "targets": [
+          "tests/test_image_similarity.py::test_unrelated_document_pages_are_not_reported_as_duplicates",
+          "tests/test_image_similarity.py::test_genuine_duplicates_are_still_grouped",
+          "tests/test_image_similarity.py::test_the_discrimination_guard_is_measured_not_chosen"
+        ]
+      }
+    },
+    {
       "id": "S11",
       "phase": "B",
       "title": "Faces to clustering only; remove filename name guessing; add negative fixtures",
