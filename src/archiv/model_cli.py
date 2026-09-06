@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from archiv.cost_control import (
     PinnedTokenizer,
+    SpendLedgerUnreadableError,
     SpendPolicy,
     TokenPrices,
     load_ledger,
@@ -428,6 +429,13 @@ def model_spend_set_command(
     tokenizer_encoding: Annotated[str | None, typer.Option("--tokenizer-encoding")] = None,
     tokenizer_path: Annotated[Path | None, typer.Option("--tokenizer-path", dir_okay=False)] = None,
     tokenizer_sha256: Annotated[str | None, typer.Option("--tokenizer-sha256")] = None,
+    tokenizer_split_pattern: Annotated[
+        str | None,
+        typer.Option(
+            "--tokenizer-split-pattern",
+            help="The encoding's own split rule. Pinned with it, never assumed.",
+        ),
+    ] = None,
     home: Annotated[Path | None, typer.Option("--home", file_okay=False, resolve_path=True)] = None,
     json_output: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
@@ -443,12 +451,12 @@ def model_spend_set_command(
     """
 
     pinned: PinnedTokenizer | None = None
-    given = [tokenizer_encoding, tokenizer_path, tokenizer_sha256]
+    given = [tokenizer_encoding, tokenizer_path, tokenizer_sha256, tokenizer_split_pattern]
     if any(value is not None for value in given):
         if not all(value is not None for value in given):
             typer.echo(
-                "a pinned tokenizer needs all three of --tokenizer-encoding, "
-                "--tokenizer-path and --tokenizer-sha256",
+                "a pinned tokenizer needs all four of --tokenizer-encoding, "
+                "--tokenizer-path, --tokenizer-sha256 and --tokenizer-split-pattern",
                 err=True,
             )
             raise typer.Exit(code=1)
@@ -456,6 +464,7 @@ def model_spend_set_command(
             encoding_name=cast(str, tokenizer_encoding),
             path=str(cast(Path, tokenizer_path)),
             sha256=cast(str, tokenizer_sha256),
+            split_pattern=cast(str, tokenizer_split_pattern),
         )
 
     try:
@@ -498,7 +507,11 @@ def model_spend_status_command(
     """Show the ceiling, what has been spent against it, and whether prompts can be counted."""
 
     policy = load_spend_policy(home)
-    ledger = load_ledger(home)
+    try:
+        ledger = load_ledger(home)
+    except SpendLedgerUnreadableError as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(code=1) from error
     if policy is None:
         payload: dict[str, object] = {
             "policy": None,

@@ -341,8 +341,10 @@ def run_grounded_ask(
         # otherwise escape with no run result at all, which is worse than an unstamped
         # one: there would be nothing on disk saying what was attempted.
         if model_config.provenance == "remote-evaluation":
-            # Written before the call, so a refused run still leaves the numbers that
-            # caused the refusal, and an allowed one records what it expected to cost.
+            # Records what an allowed call expected to cost. A refused one writes
+            # nothing, because the check raises before this write happens -- the reason
+            # for the refusal reaches the user through the error, not through evidence.
+            # Recording it for a refused run as well is queued as its own step.
             _write_json(
                 evidence_dir / "cost.json",
                 check_spend_allowance(prompt, layout.root).model_dump(mode="json"),

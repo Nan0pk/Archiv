@@ -114,3 +114,12 @@ so no cost is projected before a call. The ceiling still holds — it is enforce
 recorded spend and a hard cap on reply length — but a single oversized call cannot be
 refused for its size before it is made. `archiv model spend status` says which of those
 two situations an archive is in.
+
+### What the spend ceiling does and does not stop
+
+With no pinned encoding there is no prompt count, so there is no projection, so a call is
+refused only once `spent_usd` has already reached `ceiling_usd`. The call that crosses the
+line completes and is charged for. It is bounded — the prompt plus at most
+`max_output_tokens` — but somebody reading "ceiling: $1.00" may expect a hard stop at a
+dollar rather than a stop just past it. Pin an encoding and the projection refuses an
+oversized call before it is made.

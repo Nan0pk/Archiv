@@ -35,12 +35,6 @@ from archiv.storage.layout import ArchivLayout
 
 TokenizerStatus = Literal["pinned", "not-configured", "unavailable"]
 
-_SPLIT_PATTERN = (
-    r"[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*"
-    r"|\s*[\r\n]+|\s+(?!\S)|\s+"
-)
-"""The split rule the pinned encodings this project supports were built with."""
-
 
 class Tokenizer(Protocol):
     """The only thing this module needs from an encoding."""
@@ -54,6 +48,17 @@ class SpendPolicyMissingError(RuntimeError):
 
 class SpendCeilingReachedError(RuntimeError):
     """Raised before any network activity when a call would exceed the ceiling."""
+
+
+class SpendLedgerUnreadableError(RuntimeError):
+    """Raised when what has been spent cannot be read, so the ceiling cannot be applied.
+
+    Absent is not the same as unreadable. An absent ledger means nothing has been spent.
+    An unreadable one means the total is unknown, and treating unknown as zero re-arms a
+    ceiling that may already have been reached. It is also a reachable state rather than
+    a theoretical one: `config/` travels in backups, and a ledger written by a later
+    Archiv carrying a field this one does not know is unreadable here.
+    """
 
 
 class TokenPrices(StrictModel):
@@ -77,6 +82,16 @@ class PinnedTokenizer(StrictModel):
     encoding_name: str = Field(min_length=1)
     path: str = Field(min_length=1)
     sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    split_pattern: str = Field(min_length=1)
+    """The encoding's own split rule, pinned alongside it.
+
+    Not a constant in this module. An earlier version hardcoded a pattern and described
+    it as the rule the supported encodings were built with; it was neither of theirs.
+    A count produced by the wrong split rule is not the provider's count, and it would
+    have been shown as a projected cost and used to refuse calls. Whoever pins the
+    encoding pins its definition, and this module asserts nothing about encodings it has
+    never loaded.
+    """
 
 
 class SpendPolicy(StrictModel):
@@ -150,10 +165,10 @@ def save_spend_policy(policy: SpendPolicy, home: Path | None = None) -> Path:
 
 
 def load_ledger(home: Path | None = None) -> SpendLedger:
-    """Read what has been spent. An unreadable ledger reads as zero spent, deliberately.
+    """Read what has been spent. Absent means nothing; unreadable raises.
 
-    That is the unsafe direction, so it is not left there: an unreadable ledger cannot be
-    written either, and `record_spend` raises rather than silently losing the total.
+    Reading an unreadable ledger as zero would fail open on the one number the ceiling
+    depends on, and would then let the next call overwrite the real total with that zero.
     """
 
     path = spend_ledger_path(home)
@@ -161,8 +176,14 @@ def load_ledger(home: Path | None = None) -> SpendLedger:
         return SpendLedger()
     try:
         return SpendLedger.model_validate_json(path.read_text(encoding="utf-8"))
-    except Exception:
-        return SpendLedger()
+    except Exception as error:
+        raise SpendLedgerUnreadableError(
+            f"the record of what this archive has spent cannot be read ({path}): "
+            f"{type(error).__name__}: {error}\n"
+            "Archiv will not make a paid request while the total is unknown, and will "
+            "not overwrite the file. Repair it, or clear it deliberately with "
+            "'archiv model spend reset --acknowledge-this-forgets-what-was-spent'."
+        ) from error
 
 
 def load_pinned_tokenizer(policy: SpendPolicy) -> tuple[Tokenizer | None, TokenizerStatus, str]:
@@ -207,7 +228,7 @@ def load_pinned_tokenizer(policy: SpendPolicy) -> tuple[Tokenizer | None, Tokeni
             Tokenizer,
             tiktoken.Encoding(
                 name=pinned.encoding_name,
-                pat_str=_SPLIT_PATTERN,
+                pat_str=pinned.split_pattern,
                 mergeable_ranks=ranks,
                 special_tokens={},
             ),
@@ -321,6 +342,8 @@ def record_spend(
     if policy is None:
         raise SpendPolicyMissingError("cannot record spend without a spend policy")
 
+    # Raises if the ledger is unreadable, which is what stops a corrupt file being
+    # replaced by a fresh one that has forgotten the total.
     ledger = load_ledger(home)
     if input_tokens is None or output_tokens is None:
         updated = ledger.model_copy(

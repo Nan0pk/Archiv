@@ -336,6 +336,11 @@ class RemoteEvaluationAdapter:
                 f"fallback: {type(error).__name__}: {error}"
             ) from error
 
+        # Recorded before the reply is inspected. A reply that came back unusable was
+        # still billed for, and a ledger that only counts the calls that worked
+        # understates what the archive has spent.
+        record_spend(*_reported_usage(body), self.home)
+
         try:
             content = body["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as error:
@@ -344,10 +349,6 @@ class RemoteEvaluationAdapter:
             ) from error
         if not isinstance(content, str) or not content.strip():
             raise RuntimeError("remote evaluation model returned empty content")
-
-        # From the provider's own reported usage. Absent usage is recorded as an
-        # unmeasured call rather than estimated, so the running total stays measured.
-        record_spend(*_reported_usage(body), self.home)
         return content
 
 

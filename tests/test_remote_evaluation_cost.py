@@ -27,6 +27,7 @@ from archiv.cost_control import (
     PinnedTokenizer,
     SpendCeilingReachedError,
     SpendLedger,
+    SpendLedgerUnreadableError,
     SpendPolicy,
     SpendPolicyMissingError,
     TokenPrices,
@@ -110,7 +111,10 @@ def test_prompt_tokens_are_counted_before_any_request(
     # A pinned encoding that is not actually there is unavailable, not an excuse to guess.
     missing = policy()
     missing.tokenizer = PinnedTokenizer(
-        encoding_name="o200k_base", path=str(tmp_path / "absent.tiktoken"), sha256="0" * 64
+        encoding_name="o200k_base",
+        path=str(tmp_path / "absent.tiktoken"),
+        sha256="0" * 64,
+        split_pattern="a pinned rule, pinned with the file",
     )
     save_spend_policy(missing, home)
     unavailable = check_spend_allowance("a question", home)
@@ -123,7 +127,10 @@ def test_prompt_tokens_are_counted_before_any_request(
     planted.write_bytes(b"not the encoding that was pinned")
     wrong_hash = policy()
     wrong_hash.tokenizer = PinnedTokenizer(
-        encoding_name="o200k_base", path=str(planted), sha256="1" * 64
+        encoding_name="o200k_base",
+        path=str(planted),
+        sha256="1" * 64,
+        split_pattern="a pinned rule, pinned with the file",
     )
     save_spend_policy(wrong_hash, home)
     tampered = check_spend_allowance("a question", home)
@@ -282,3 +289,128 @@ def test_resetting_the_recorded_spend_requires_saying_so(tmp_path: Path) -> None
     )
     assert done.exit_code == 0
     assert load_ledger(home).spent_usd == 0.0
+
+
+def test_an_unreadable_ledger_refuses_rather_than_reading_as_zero(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The ceiling must not be re-armed by a file that will not parse.
+
+    Reading an unreadable ledger as zero spent fails open on the one number the ceiling
+    depends on, and the next recorded call would then overwrite the real total with that
+    zero. `config/` travels in backups, and a ledger written by a later Archiv carrying
+    a field this one does not know is unreadable here -- so this is a reachable state,
+    not a theoretical one.
+    """
+
+    home = tmp_path / "home"
+    mark_for_evaluation(home)
+    monkeypatch.setenv(API_KEY_ENV, "a-secret")
+    opener = install_opener(monkeypatch)
+    save_spend_policy(policy(ceiling_usd=1.0), home)
+    record_spend(500_000, 0, home)
+    assert load_ledger(home).spent_usd == pytest.approx(5.0)
+
+    spend_ledger_path(home).write_text("{ this is not json", encoding="utf-8")
+
+    with pytest.raises(SpendLedgerUnreadableError, match="cannot be read"):
+        load_ledger(home)
+
+    # No paid call while the total is unknown, and the transport is never reached.
+    adapter = RemoteEvaluationAdapter(remote_config(), home)
+    with pytest.raises(SpendLedgerUnreadableError):
+        adapter.complete("a question")
+    assert opener.calls == []
+
+    # And the corrupt file is left alone rather than replaced by a fresh zero.
+    with pytest.raises(SpendLedgerUnreadableError):
+        record_spend(1000, 1000, home)
+    assert spend_ledger_path(home).read_text() == "{ this is not json"
+
+    # A ledger carrying a field this version does not know is the realistic case.
+    spend_ledger_path(home).write_text(
+        json.dumps({"schema_version": "1", "spent_usd": 5.0, "a_later_field": True}),
+        encoding="utf-8",
+    )
+    with pytest.raises(SpendLedgerUnreadableError):
+        load_ledger(home)
+
+
+def test_an_oversized_call_is_refused_on_its_projected_cost(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The branch that refuses a single call for its size, which needs a real count."""
+
+    home = tmp_path / "home"
+    save_spend_policy(policy(ceiling_usd=0.02, max_output_tokens=1000), home)
+
+    class FakeEncoding:
+        def encode(self, text: str) -> list[int]:
+            del text
+            return [0] * 100_000
+
+    def fake_loader(policy_arg: SpendPolicy) -> tuple[FakeEncoding, str, str]:
+        del policy_arg
+        return FakeEncoding(), "pinned", "a stand-in encoding"
+
+    monkeypatch.setattr("archiv.cost_control.load_pinned_tokenizer", fake_loader)
+
+    with pytest.raises(SpendCeilingReachedError, match="would cost up to"):
+        check_spend_allowance("a long question", home)
+
+    # A prompt that fits is allowed, and its projection is reported rather than guessed.
+    save_spend_policy(policy(ceiling_usd=50.0, max_output_tokens=1000), home)
+    allowed = check_spend_allowance("a long question", home)
+    assert allowed.prompt_tokens == 100_000
+    assert allowed.tokenizer_status == "pinned"
+    # 100,000 tokens at $10 per million.
+    assert allowed.projected_input_usd == pytest.approx(1.0)
+    # Plus at most 1,000 output tokens at $30 per million.
+    assert allowed.projected_worst_case_usd == pytest.approx(1.03)
+
+
+def test_a_billed_call_is_recorded_even_when_its_reply_is_unusable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A reply that came back unusable was still charged for."""
+
+    home = tmp_path / "home"
+    mark_for_evaluation(home)
+    monkeypatch.setenv(API_KEY_ENV, "a-secret")
+    save_spend_policy(policy(ceiling_usd=100.0), home)
+
+    class Response:
+        def __init__(self, body: dict[str, object]) -> None:
+            self._body = json.dumps(body).encode("utf-8")
+
+        def read(self) -> bytes:
+            return self._body
+
+        def __enter__(self) -> Response:
+            return self
+
+        def __exit__(self, *exc: object) -> None:
+            del exc
+
+    class Opener:
+        def open(self, request: object, timeout: float | None = None) -> Response:
+            del request, timeout
+            # A 200 with usage reported, but nothing usable in it.
+            return Response(
+                {"choices": [], "usage": {"prompt_tokens": 1000, "completion_tokens": 500}}
+            )
+
+    def opener_for(origin: tuple[str, str, int | None]) -> Opener:
+        del origin
+        return Opener()
+
+    monkeypatch.setattr("archiv.model_adapter._opener_for", opener_for)
+
+    adapter = RemoteEvaluationAdapter(remote_config(), home)
+    with pytest.raises(RuntimeError, match="lacks choices"):
+        adapter.complete("a question")
+
+    ledger = load_ledger(home)
+    assert ledger.recorded_calls == 1, "the provider billed for this, so it is recorded"
+    # 1000 in at $10/million plus 500 out at $30/million.
+    assert ledger.spent_usd == pytest.approx(0.025)
