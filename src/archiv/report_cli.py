@@ -9,7 +9,7 @@ from typing import Annotated
 
 import typer
 
-from archiv.model_adapter import describe_model, load_model_config
+from archiv.model_adapter import describe_unused_model, load_model_config
 from archiv.report_contracts import ReportStatus
 from archiv.reports import generate_report, validate_report
 from archiv.reports.validation import write_validation
@@ -64,10 +64,7 @@ def register_report_commands(
         # This command never calls a model: it retrieves evidence and formats it. Said
         # explicitly, because it used to inherit a default that claimed the model was
         # "disabled" whatever the archive was configured with.
-        model_identity, model_provenance = describe_model(load_model_config(home))
-        if model_identity != "disabled":
-            model_identity = f"not used (configured: {model_identity})"
-            model_provenance = "none"
+        model_identity, model_provenance = describe_unused_model(load_model_config(home))
 
         try:
             result = generate_report(

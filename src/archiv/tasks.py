@@ -12,7 +12,12 @@ from archiv.contracts import RetrievalDiagnostics, RunStatus, SearchResult
 from archiv.evaluation_config import EvaluationNotEnabledError, check_evaluation_opt_in
 from archiv.grounding import build_grounding_prompt
 from archiv.hashing import sha256_file
-from archiv.model_adapter import build_model_adapter, describe_model, load_model_config
+from archiv.model_adapter import (
+    build_model_adapter,
+    describe_model,
+    describe_unused_model,
+    load_model_config,
+)
 from archiv.report_contracts import ReportManifest, ReportStatus
 from archiv.reports import generate_report, generate_report_from_results, validate_report
 from archiv.reports.validation import write_validation
@@ -140,9 +145,16 @@ def run_task(task_path: Path, *, home: Path | None = None) -> TaskRunResult:
         output = output_dir / task.output_name
 
         grounded_response = None
-        model_identity, model_provenance = describe_model(model)
+        # Derived from whether a model is actually called below, not from what the
+        # archive has configured. Computing it from configuration alone made a
+        # deterministic report state that the sources had been sent to a remote service
+        # when nothing was called and nothing was sent.
+        calls_a_model = task.model_policy == "configured-local" and model.adapter != "disabled"
+        model_identity, model_provenance = (
+            describe_model(model) if calls_a_model else describe_unused_model(model)
+        )
 
-        if task.model_policy == "configured-local" and model.adapter != "disabled":
+        if calls_a_model:
             retrieval = retrieve_evidence(
                 task.query,
                 home=layout.root,

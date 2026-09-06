@@ -129,9 +129,10 @@ def test_a_write_failure_after_the_model_call_still_warns_the_user(
         run_grounded_ask("unique fixture marker", home=home)
 
     assert model.calls == 1
-    assert caught.value.model_was_called is True
+    assert caught.value.text_may_have_been_sent is True
     assert caught.value.model.provenance == "remote-evaluation"
     assert "record could not be written" in str(caught.value)
+    assert "completed" not in str(caught.value), "the run did not complete on this path"
 
 
 def test_paths_before_the_prompt_send_nothing_and_say_so(

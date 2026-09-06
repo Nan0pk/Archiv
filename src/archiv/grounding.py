@@ -111,10 +111,10 @@ class AskEvidenceUnwritableError(RuntimeError):
     disk to say so.
     """
 
-    def __init__(self, message: str, *, model: ModelConfig, model_was_called: bool) -> None:
+    def __init__(self, message: str, *, model: ModelConfig, text_may_have_been_sent: bool) -> None:
         super().__init__(message)
         self.model = model
-        self.model_was_called = model_was_called
+        self.text_may_have_been_sent = text_may_have_been_sent
 
 
 def classify_grounded_response(
@@ -167,7 +167,7 @@ def parse_and_validate_grounded_response(
 
 
 def _finalise(
-    evidence_dir: Path, result: AskRunResult, *, model_was_called: bool = False
+    evidence_dir: Path, result: AskRunResult, *, text_may_have_been_sent: bool = False
 ) -> AskRunResult:
     """Persist a terminal result, or fail loudly rather than silently.
 
@@ -181,10 +181,10 @@ def _finalise(
         _write_json(evidence_dir / "result.json", result.model_dump(mode="json"))
     except OSError as error:
         raise AskEvidenceUnwritableError(
-            f"the run completed but its record could not be written to {evidence_dir}: "
+            f"the run ended but its record could not be written to {evidence_dir}: "
             f"{type(error).__name__}: {error}",
             model=result.model,
-            model_was_called=model_was_called,
+            text_may_have_been_sent=text_may_have_been_sent,
         ) from error
     return result
 
@@ -216,7 +216,7 @@ def run_grounded_ask(
 
     # Tracks whether the archive's text has actually left this machine yet, so a failure
     # after that point can say so. Every ending reads it; exactly one place sets it.
-    model_was_called = False
+    text_may_have_been_sent = False
 
     if model_config.adapter == "disabled":
         result = AskRunResult(
@@ -227,7 +227,7 @@ def run_grounded_ask(
             model=model_config,
             errors=["model use is disabled; Archiv will not select a hidden fallback"],
         )
-        return _finalise(evidence_dir, result, model_was_called=model_was_called)
+        return _finalise(evidence_dir, result, text_may_have_been_sent=text_may_have_been_sent)
 
     if model_config.adapter == "remote-evaluation":
         # Checked here as well as inside the adapter, and before anything is retrieved
@@ -246,7 +246,7 @@ def run_grounded_ask(
                 model=model_config,
                 errors=[str(error)],
             )
-            return _finalise(evidence_dir, result, model_was_called=model_was_called)
+            return _finalise(evidence_dir, result, text_may_have_been_sent=text_may_have_been_sent)
 
     try:
         retrieval = retrieve_evidence(query, home=layout.root, evidence_limit=max_sources)
@@ -267,7 +267,7 @@ def run_grounded_ask(
             model=model_config,
             errors=[f"evidence retrieval failed: {type(error).__name__}: {error}"],
         )
-        return _finalise(evidence_dir, result, model_was_called=model_was_called)
+        return _finalise(evidence_dir, result, text_may_have_been_sent=text_may_have_been_sent)
 
     citations_map: dict[str, SearchResult] = {}
     retrieved_citations: list[Citation] = []
@@ -302,7 +302,7 @@ def run_grounded_ask(
             retrieval_diagnostics=retrieval.diagnostics,
             errors=errors,
         )
-        return _finalise(evidence_dir, result, model_was_called=model_was_called)
+        return _finalise(evidence_dir, result, text_may_have_been_sent=text_may_have_been_sent)
 
     if not citations_map:
         grounded_resp = GroundedModelResponse(
@@ -318,7 +318,7 @@ def run_grounded_ask(
             retrieval_diagnostics=retrieval.diagnostics,
             grounded_response=grounded_resp.model_dump(mode="json"),
         )
-        return _finalise(evidence_dir, result, model_was_called=model_was_called)
+        return _finalise(evidence_dir, result, text_may_have_been_sent=text_may_have_been_sent)
 
     prompt = build_grounding_prompt(query, citations_map)
     _write_json(
@@ -343,7 +343,7 @@ def run_grounded_ask(
         # Set before the call, not after. Once this line is passed there is no way to be
         # certain the request did not reach the provider, and over-reporting "the text
         # may have left this machine" is the only safe direction to be wrong in.
-        model_was_called = True
+        text_may_have_been_sent = True
         structured = request_grounded_response(adapter, prompt, set(citations_map.keys()))
         _write_json(
             evidence_dir / "structured_output.json",
@@ -365,7 +365,7 @@ def run_grounded_ask(
             retrieval_diagnostics=retrieval.diagnostics,
             errors=[f"model request failed: {type(error).__name__}: {error}"],
         )
-        return _finalise(evidence_dir, result, model_was_called=model_was_called)
+        return _finalise(evidence_dir, result, text_may_have_been_sent=text_may_have_been_sent)
 
     parsed_response = structured.response
     parse_errors = list(structured.errors)
@@ -391,7 +391,7 @@ def run_grounded_ask(
             raw_model_response=raw_response,
             errors=parse_errors or ["failed to parse model response"],
         )
-        return _finalise(evidence_dir, result, model_was_called=model_was_called)
+        return _finalise(evidence_dir, result, text_may_have_been_sent=text_may_have_been_sent)
 
     result = AskRunResult(
         run_id=run_id,
@@ -404,4 +404,4 @@ def run_grounded_ask(
         raw_model_response=raw_response,
         grounded_response=parsed_response.model_dump(mode="json"),
     )
-    return _finalise(evidence_dir, result, model_was_called=model_was_called)
+    return _finalise(evidence_dir, result, text_may_have_been_sent=text_may_have_been_sent)

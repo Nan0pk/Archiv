@@ -592,3 +592,40 @@ def test_the_report_validator_fails_a_document_missing_its_stamp(tmp_path: Path)
     source = Path(validate_report.__code__.co_filename).read_text(encoding="utf-8")
     assert "does not state the model identity recorded in the manifest" in source
     assert "does not state where the model ran" in source
+
+
+def test_a_deterministic_report_does_not_claim_the_sources_were_sent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The third caller, and the one the first version of these tests never exercised.
+
+    The identity was derived from what the archive had configured rather than from
+    whether a model was actually called, so a deterministic report on a remote-configured
+    archive stated that the sources had been sent to a service they were never sent to --
+    and exited successfully saying "Verified: yes". The earlier tests all set the policy
+    that calls a model, so none of them went down this path.
+    """
+
+    from docx import Document
+
+    from archiv.tasks import run_task
+
+    home = prepare_remote_archive(tmp_path, monkeypatch)
+    task_path = tmp_path / "deterministic.yaml"
+    task_path.write_text(
+        json.dumps(
+            {"task": "cross-file-report", "query": "unique fixture marker", "render": False}
+        ),
+        encoding="utf-8",
+    )
+    # No model adapter is patched in: nothing may call one on this path.
+    result = run_task(task_path, home=home)
+
+    manifest = json.loads(Path(f"{result.output_path}.manifest.json").read_text())
+    assert manifest["model_provenance"] == "none"
+    assert manifest["model_identity"] == "not used (configured: remote-evaluation (a-model-name))"
+
+    text = "\n".join(p.text for p in Document(str(result.output_path)).paragraphs)
+    assert "was sent there" not in text
+    assert "computers not controlled by the archive owner" not in text
+    assert "no model was used" in text

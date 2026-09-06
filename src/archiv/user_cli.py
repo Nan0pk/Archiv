@@ -571,13 +571,14 @@ def register_user_commands(app: typer.Typer) -> tuple[Callable[..., None], ...]:
             # driven from the error instead. This is the case where saying nothing would
             # be worst: the archive's text has already been sent and nothing on disk
             # says so.
-            if error.model_was_called:
+            if error.text_may_have_been_sent:
                 _echo_provenance_banner(error.model, home, to_stderr=True)
             typer.echo(f"ask failed: {error}", err=True)
-            if error.model_was_called:
+            if error.text_may_have_been_sent:
                 typer.echo(
-                    "The question was sent before this failed. There is no run record, "
-                    "so nothing on disk states that.",
+                    "The request had already been started when this failed, so the "
+                    "sources may have been sent. There is no run record, so nothing on "
+                    "disk states either way.",
                     err=True,
                 )
             raise typer.Exit(code=1) from error

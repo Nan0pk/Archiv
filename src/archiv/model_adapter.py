@@ -364,6 +364,26 @@ def describe_model(config: ModelConfig) -> tuple[str, str]:
     return f"{config.adapter} ({config.model})", config.provenance
 
 
+def describe_unused_model(config: ModelConfig) -> tuple[str, str]:
+    """What to record when this run produced prose without calling a model.
+
+    Three separate paths generate reports without calling a model, and each one that
+    derived this for itself got it wrong: two defaulted to "disabled" -- false whenever
+    the archive has a model configured -- and the third reported the configured model as
+    though it had run, so a deterministic report claimed the sources had been sent
+    somewhere they had not. Shared here so there is one answer.
+
+    A genuinely disabled archive is left alone: "disabled" is already true of it. An
+    archive with a model configured says so, because a bare "not used" would hide that
+    it has one.
+    """
+
+    identity, _provenance = describe_model(config)
+    if identity == "disabled":
+        return identity, "none"
+    return f"not used (configured: {identity})", "none"
+
+
 def build_model_adapter(config: ModelConfig, home: Path | None = None) -> ModelAdapter:
     # Exhaustive for the same reason the validator is: a new adapter literal must
     # fail loudly here rather than inherit the loopback client by fallthrough.
