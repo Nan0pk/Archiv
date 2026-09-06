@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import json
 import os
 import sqlite3
@@ -187,15 +188,32 @@ def _add_sources(
     )
 
 
-def _provenance_phrase(provenance: str) -> str:
-    """Plain words for where the answer came from, for a reader who knows no jargon."""
+def _provenance_phrase(provenance: str, *, a_model_ran: bool) -> str:
+    """Plain words for where this answer came from, for a reader who knows no jargon.
 
+    `a_model_ran` is not optional and has no default on purpose. An earlier version of
+    this line claimed "a model running on ... answered this" on the ending that finds no
+    evidence and never calls a model -- the same false-statement defect the banner above
+    had, one line lower, and missed by the test written to catch it. A caller that cannot
+    say whether a model ran has no business printing a sentence about one.
+
+    It also says only that no model was called, never why. An earlier version said
+    "Archiv found no evidence to answer from", which was true on the only path that
+    reaches it today and would have become the same defect again the moment a second
+    path did. This function is told whether a model ran; it is not told the reason, so
+    it does not state one.
+    """
+
+    if not a_model_ran:
+        return "no model — none was called for this answer"
     if provenance == "remote-evaluation":
         return "a model running on computers you do not control (evaluation mode)"
     return "a model running on this machine"
 
 
-def _echo_provenance_banner(model: ModelConfig, home: Path | None = None) -> None:
+def _echo_provenance_banner(
+    model: ModelConfig, home: Path | None = None, *, to_stderr: bool = False
+) -> None:
     """Say, before the answer, when answers in this archive do not come from this machine.
 
     Only shown for a non-local model. Printing a banner on every local answer would
@@ -211,26 +229,27 @@ def _echo_provenance_banner(model: ModelConfig, home: Path | None = None) -> Non
 
     if model.provenance != "remote-evaluation":
         return
+    say = functools.partial(typer.echo, err=True) if to_stderr else typer.echo
     disable = "archiv model evaluation disable"
     if home is not None:
         disable = f"{disable} --home {home}"
-    typer.echo("=" * 72)
-    typer.echo("NOT A LOCAL ANSWER")
-    typer.echo(
+    say("=" * 72)
+    say("NOT A LOCAL ANSWER")
+    say(
         "This archive is in evaluation mode: answers come from "
         f"{model.model or 'a remote model'} running at "
         f"{model.endpoint or 'a remote service'}, on computers you do not control, and "
         "the text of any source used to answer is sent there."
     )
-    typer.echo(f"Turn it off with:  {disable}")
+    say(f"Turn it off with:  {disable}")
     if os.environ.get(EVALUATION_ENV_OVERRIDE):
-        typer.echo(
+        say(
             f"Note: {EVALUATION_ENV_OVERRIDE} is set in this environment, which turns "
             "evaluation mode on for this process regardless of the archive's own mark. "
             "Unset it as well."
         )
-    typer.echo("=" * 72)
-    typer.echo("")
+    say("=" * 72)
+    say("")
 
 
 def _locator_text(locator: dict[str, object]) -> str:
@@ -564,7 +583,10 @@ def register_user_commands(app: typer.Typer) -> tuple[Callable[..., None], ...]:
             # belongs there too -- otherwise the run that really did reach outside says
             # nothing while quieter runs shout.
             if run_result.status is not RunStatus.BLOCKED_BY_POLICY:
-                _echo_provenance_banner(run_result.model, home)
+                # To stderr, matching the error it accompanies. On stdout, redirecting
+                # one stream would show a warning with no error or an error with no
+                # warning.
+                _echo_provenance_banner(run_result.model, home, to_stderr=True)
             err_msg = "; ".join(run_result.errors) or str(run_result.status)
             typer.echo(f"ask failed: {err_msg}", err=True)
             raise typer.Exit(code=1)
@@ -622,7 +644,13 @@ def register_user_commands(app: typer.Typer) -> tuple[Callable[..., None], ...]:
         typer.echo("")
         model_name = run_result.model.model or run_result.model.adapter
         typer.echo(f"Model: {run_result.model.adapter} ({model_name})")
-        typer.echo(f"Answered by: {_provenance_phrase(run_result.model.provenance)}")
+        typer.echo(
+            "Answered by: "
+            + _provenance_phrase(
+                run_result.model.provenance,
+                a_model_ran=run_result.raw_model_response is not None,
+            )
+        )
         typer.echo(f"Run ID: {run_result.run_id}")
 
     @app.command("report")

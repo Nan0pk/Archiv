@@ -190,6 +190,25 @@ checks remain the test suite, the acceptance criteria, and continuous integratio
 reviewer is there to catch what one pass by one author misses — which, in practice, it
 does.
 
+**Work in batches, and know when to stop.** The reviewer exists to catch defects, not
+to polish. Getting something substantial finished beats getting one thing perfect:
+
+- Take related steps together and review them as one batch. One step per review round
+  spends most of the effort on the round trip rather than on the work.
+- A round ends when what it found is fixed and verified. Fix, check by running, land.
+  Going back for confirmation that the fix was fixed is a fifth round on a third-order
+  detail, and the queue does not move while it happens.
+- Something the reviewer finds that is not a defect in shipped behaviour — a gap worth
+  closing later, a limitation worth knowing, a claim worth narrowing — becomes a queue
+  step or an entry in `docs/known-issues.md`. It does not become another round, and it
+  does not widen the change that found it.
+- The exception, and the only one: a defect that is live for users, or a false statement
+  in something a user reads, is fixed before the change lands however many rounds that
+  takes. Correctness of what we tell people is not the thing to trade away for speed.
+
+Perfect is the enemy of excellent here. A change that is excellent and merged has moved
+the project; a change that is perfect and still open has not.
+
 **Order of work.** Review first, then push once, then merge on green. Reviewing after
 pushing spends a continuous-integration run on code that is about to change, and a
 verdict given on code that then changes is worth nothing. If continuous integration

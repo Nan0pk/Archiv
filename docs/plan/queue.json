@@ -59,7 +59,9 @@
       "title": "Pin the loopback privacy boundary with tests before changing anything",
       "doc": "docs/plan/steps/S01.md",
       "detail": "full",
-      "depends_on": ["S00"],
+      "depends_on": [
+        "S00"
+      ],
       "acceptance": {
         "kind": "pytest",
         "targets": [
@@ -78,7 +80,9 @@
       "title": "Add provenance to ModelConfig and branch dispatch on the adapter literal",
       "doc": "docs/plan/steps/S02.md",
       "detail": "full",
-      "depends_on": ["S01"],
+      "depends_on": [
+        "S01"
+      ],
       "acceptance": {
         "kind": "pytest",
         "targets": [
@@ -94,7 +98,9 @@
       "title": "Evaluation-only archive marker with a raising opt-in check",
       "doc": "docs/plan/steps/S03.md",
       "detail": "full",
-      "depends_on": ["S02"],
+      "depends_on": [
+        "S02"
+      ],
       "acceptance": {
         "kind": "pytest",
         "targets": [
@@ -111,7 +117,9 @@
       "title": "The remote evaluation adapter, refused unless the archive is marked",
       "doc": "docs/plan/steps/S04.md",
       "detail": "full",
-      "depends_on": ["S03"],
+      "depends_on": [
+        "S03"
+      ],
       "acceptance": {
         "kind": "pytest",
         "targets": [
@@ -129,7 +137,9 @@
       "title": "Structured-output robustness, so a backend swap fails loudly instead of quietly",
       "doc": "docs/plan/steps/S04A.md",
       "detail": "full",
-      "depends_on": ["S04"],
+      "depends_on": [
+        "S04"
+      ],
       "acceptance": {
         "kind": "pytest",
         "targets": [
@@ -147,7 +157,9 @@
       "title": "Stamp the ask path with model origin",
       "doc": "docs/plan/steps/S05.md",
       "detail": "full",
-      "depends_on": ["S04"],
+      "depends_on": [
+        "S04"
+      ],
       "acceptance": {
         "kind": "pytest",
         "targets": [
@@ -158,12 +170,33 @@
       }
     },
     {
+      "id": "S05A",
+      "phase": "A",
+      "title": "Every ask that calls a model records that it did",
+      "doc": "docs/plan/steps/S05A.md",
+      "detail": "full",
+      "depends_on": [
+        "S05"
+      ],
+      "acceptance": {
+        "kind": "pytest",
+        "targets": [
+          "tests/test_ask_terminal_evidence.py::test_a_write_failure_after_the_model_call_still_records_the_run",
+          "tests/test_ask_terminal_evidence.py::test_a_write_failure_after_the_model_call_still_warns_the_user",
+          "tests/test_ask_terminal_evidence.py::test_paths_before_the_prompt_send_nothing_and_say_so",
+          "tests/test_ask_terminal_evidence.py::test_no_ask_leaves_an_empty_run_directory"
+        ]
+      }
+    },
+    {
       "id": "S06",
       "phase": "A",
       "title": "Stamp the report path, and fix the DOCX that always claims 'disabled'",
       "doc": "docs/plan/steps/S06.md",
       "detail": "full",
-      "depends_on": ["S05"],
+      "depends_on": [
+        "S05"
+      ],
       "acceptance": {
         "kind": "pytest",
         "targets": [
@@ -180,7 +213,9 @@
       "title": "Pre-flight token count, projected cost, and a hard spend ceiling",
       "doc": "docs/plan/steps/S07.md",
       "detail": "full",
-      "depends_on": ["S04"],
+      "depends_on": [
+        "S04"
+      ],
       "acceptance": {
         "kind": "pytest",
         "targets": [
@@ -194,10 +229,12 @@
     {
       "id": "S08",
       "phase": "A",
-      "title": "archiv model calibrate — measure the workload and the remote model",
+      "title": "archiv model calibrate \u2014 measure the workload and the remote model",
       "doc": "docs/plan/steps/S08.md",
       "detail": "full",
-      "depends_on": ["S07"],
+      "depends_on": [
+        "S07"
+      ],
       "acceptance": {
         "kind": "pytest",
         "targets": [
@@ -214,7 +251,9 @@
       "title": "Predict local runtime from cited hardware profiles, labelled estimated or measured",
       "doc": "docs/plan/steps/S09.md",
       "detail": "full",
-      "depends_on": ["S08"],
+      "depends_on": [
+        "S08"
+      ],
       "acceptance": {
         "kind": "pytest",
         "targets": [
@@ -231,7 +270,9 @@
       "title": "Rename image search to find-similar and delete the text embedder",
       "doc": "docs/plan/steps/S10.md",
       "detail": "stub",
-      "depends_on": ["S00"],
+      "depends_on": [
+        "S00"
+      ],
       "acceptance": {
         "kind": "pytest",
         "targets": [
@@ -247,7 +288,9 @@
       "title": "Faces to clustering only; remove filename name guessing; add negative fixtures",
       "doc": "docs/plan/steps/S11.md",
       "detail": "stub",
-      "depends_on": ["S10"],
+      "depends_on": [
+        "S10"
+      ],
       "acceptance": {
         "kind": "pytest",
         "targets": [
@@ -262,7 +305,9 @@
       "title": "Graph person becomes candidate_mention; remove hardcoded confidences",
       "doc": "docs/plan/steps/S12.md",
       "detail": "stub",
-      "depends_on": ["S11"],
+      "depends_on": [
+        "S11"
+      ],
       "acceptance": {
         "kind": "pytest",
         "targets": [
@@ -277,7 +322,9 @@
       "title": "Index staleness: refresh on add, report N of M, incremental image index",
       "doc": "docs/plan/steps/S13.md",
       "detail": "stub",
-      "depends_on": ["S00"],
+      "depends_on": [
+        "S00"
+      ],
       "acceptance": {
         "kind": "pytest",
         "targets": [
@@ -293,7 +340,9 @@
       "title": "Doctor probes, README command coverage test, and status-line honesty",
       "doc": "docs/plan/steps/S14.md",
       "detail": "stub",
-      "depends_on": ["S13"],
+      "depends_on": [
+        "S13"
+      ],
       "acceptance": {
         "kind": "pytest",
         "targets": [
@@ -310,7 +359,9 @@
       "title": "DOCX: tables, headers, footers, footnotes, comments, hyperlinks, headings",
       "doc": "docs/plan/steps/S15.md",
       "detail": "stub",
-      "depends_on": ["S00"],
+      "depends_on": [
+        "S00"
+      ],
       "acceptance": {
         "kind": "pytest",
         "targets": [
@@ -326,7 +377,9 @@
       "title": "XLSX: computed values and formulas, hyperlinks, merged ranges, hidden markers, charts",
       "doc": "docs/plan/steps/S16.md",
       "detail": "stub",
-      "depends_on": ["S15"],
+      "depends_on": [
+        "S15"
+      ],
       "acceptance": {
         "kind": "pytest",
         "targets": [
@@ -343,7 +396,9 @@
       "title": "PPTX: speaker notes, tables, charts, grouped shapes, placeholder roles, hidden slides",
       "doc": "docs/plan/steps/S17.md",
       "detail": "stub",
-      "depends_on": ["S16"],
+      "depends_on": [
+        "S16"
+      ],
       "acceptance": {
         "kind": "pytest",
         "targets": [
@@ -360,7 +415,9 @@
       "title": "OpenDocument to OOXML parity fixtures and format-matrix update",
       "doc": "docs/plan/steps/S18.md",
       "detail": "stub",
-      "depends_on": ["S17"],
+      "depends_on": [
+        "S17"
+      ],
       "acceptance": {
         "kind": "pytest",
         "targets": [
@@ -377,7 +434,9 @@
       "title": "Audio formats catalogued with signature checks and a declared media budget",
       "doc": "docs/plan/steps/S19.md",
       "detail": "stub",
-      "depends_on": ["S00"],
+      "depends_on": [
+        "S00"
+      ],
       "acceptance": {
         "kind": "pytest",
         "targets": [
@@ -394,7 +453,9 @@
       "title": "Local transcription with timestamp locators, skipping cleanly when absent",
       "doc": "docs/plan/steps/S20.md",
       "detail": "stub",
-      "depends_on": ["S19"],
+      "depends_on": [
+        "S19"
+      ],
       "acceptance": {
         "kind": "pytest",
         "targets": [
@@ -411,7 +472,9 @@
       "title": "Measured word error rate per language on generated fixtures",
       "doc": "docs/plan/steps/S21.md",
       "detail": "stub",
-      "depends_on": ["S20"],
+      "depends_on": [
+        "S20"
+      ],
       "acceptance": {
         "kind": "pytest",
         "targets": [
@@ -426,7 +489,9 @@
       "title": "Video container metadata and audio-track extraction",
       "doc": "docs/plan/steps/S22.md",
       "detail": "stub",
-      "depends_on": ["S20"],
+      "depends_on": [
+        "S20"
+      ],
       "acceptance": {
         "kind": "pytest",
         "targets": [
@@ -442,7 +507,9 @@
       "title": "Keyframes as contained objects, with declared ceilings and clean degradation",
       "doc": "docs/plan/steps/S23.md",
       "detail": "stub",
-      "depends_on": ["S22"],
+      "depends_on": [
+        "S22"
+      ],
       "acceptance": {
         "kind": "pytest",
         "targets": [
@@ -459,7 +526,9 @@
       "title": "Replace the skin-tone heuristic with a real detector on pinned weights",
       "doc": "docs/plan/steps/S24.md",
       "detail": "stub",
-      "depends_on": ["S11"],
+      "depends_on": [
+        "S11"
+      ],
       "acceptance": {
         "kind": "pytest",
         "targets": [
@@ -476,7 +545,9 @@
       "title": "Lawful synthetic face fixtures and measured detection metrics",
       "doc": "docs/plan/steps/S25.md",
       "detail": "stub",
-      "depends_on": ["S24"],
+      "depends_on": [
+        "S24"
+      ],
       "acceptance": {
         "kind": "pytest",
         "targets": [
@@ -491,7 +562,9 @@
       "title": "Name candidates only from evidence the user can open",
       "doc": "docs/plan/steps/S26.md",
       "detail": "stub",
-      "depends_on": ["S25"],
+      "depends_on": [
+        "S25"
+      ],
       "acceptance": {
         "kind": "pytest",
         "targets": [
@@ -507,7 +580,10 @@
       "title": "Unicode-script-aware name extraction and measured graph precision",
       "doc": "docs/plan/steps/S27.md",
       "detail": "stub",
-      "depends_on": ["S12", "S26"],
+      "depends_on": [
+        "S12",
+        "S26"
+      ],
       "acceptance": {
         "kind": "pytest",
         "targets": [

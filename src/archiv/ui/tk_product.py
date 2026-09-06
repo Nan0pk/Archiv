@@ -306,6 +306,11 @@ class ProductApp:
                 "Archiv is busy", "Cancel or wait for the current operation.", parent=self.root
             )
             return
+        # Cleared before each run. Without this the output box accumulates, and the
+        # "not a local answer" notice prepended below would stack -- three identical
+        # notices at the top with the newest answer off the bottom of the screen, which
+        # makes a warning ambiguous about which answer it belongs to.
+        self._clear_output()
         self.runner.start(console_executable_argv(argv))
         self.status.set(label + "…")
         self.root.after(_POLL_MS, self._poll)
@@ -320,7 +325,10 @@ class ProductApp:
         # without this a remote answer arrives looking exactly like a local one with
         # the origin buried inside the dump. Say it in words, where they are looking.
         if inspect_run_output(outcome.output).model_provenance == "remote-evaluation":
-            self._append(_NOT_LOCAL_NOTICE)
+            # Above the output, not appended after it -- the same reason the terminal
+            # banner goes above the answer. A warning under a screen of JSON is not a
+            # warning.
+            self._prepend(_NOT_LOCAL_NOTICE)
             state = f"{state} — NOT A LOCAL ANSWER: this archive is in evaluation mode"
         self.status.set(state)
 
@@ -330,10 +338,51 @@ class ProductApp:
         text = chunk.decode("utf-8", errors="replace")
         self.root.after(0, lambda: self._append(text))
 
+    def _live_output(self) -> ScrolledText | None:
+        """The output box, if one exists right now -- otherwise nothing.
+
+        `self.output` outlives the widget it points at. Switching view calls `_clear`,
+        which destroys every child of the body frame, while the attribute keeps pointing
+        at the destroyed widget. So `hasattr` is not a sufficient guard: touching a
+        destroyed widget raises `TclError` from inside a Tk callback, which loses the
+        whole action -- ask a question, switch to Settings, click "Add folder", and the
+        folder is never added and the window says nothing about why.
+        """
+
+        widget: ScrolledText | None = getattr(self, "output", None)
+        if widget is None:
+            return None
+        try:
+            return widget if widget.winfo_exists() else None
+        except TclError:
+            return None
+
+    def _write_output(self, text: str | None, *, at: str) -> None:
+        """Write into the output box, or clear it when `text` is None. Never raises."""
+
+        widget = self._live_output()
+        if widget is None:
+            return
+        try:
+            widget.configure(state=tk.NORMAL)
+            if text is None:
+                widget.delete("1.0", tk.END)
+            else:
+                widget.insert(at, text)
+            widget.configure(state=tk.DISABLED)
+        except TclError:
+            # Destroyed between the check and the write. Losing the text is correct;
+            # taking down the callback that was going to do the real work is not.
+            return
+
+    def _clear_output(self) -> None:
+        self._write_output(None, at="1.0")
+
+    def _prepend(self, text: str) -> None:
+        self._write_output(text, at="1.0")
+
     def _append(self, text: str) -> None:
-        self.output.configure(state=tk.NORMAL)
-        self.output.insert(tk.END, text)
-        self.output.configure(state=tk.DISABLED)
+        self._write_output(text, at=tk.END)
 
     def _cancel(self) -> None:
         if self.runner.busy and messagebox.askyesno(

@@ -24,6 +24,7 @@ archiv ask and archiv report can be exercised end to end against a clearly-label
 | **S04** | The remote evaluation adapter, refused unless the archive is marked | `S03` | [full](steps/S04.md) |
 | **S04A** | Structured-output robustness, so a backend swap fails loudly instead of quietly | `S04` | [full](steps/S04A.md) |
 | **S05** | Stamp the ask path with model origin | `S04` | [full](steps/S05.md) |
+| **S05A** | Every ask that calls a model records that it did | `S05` | [full](steps/S05A.md) |
 | **S06** | Stamp the report path, and fix the DOCX that always claims 'disabled' | `S05` | [full](steps/S06.md) |
 | **S07** | Pre-flight token count, projected cost, and a hard spend ceiling | `S04` | [full](steps/S07.md) |
 | **S08** | archiv model calibrate — measure the workload and the remote model | `S07` | [full](steps/S08.md) |
