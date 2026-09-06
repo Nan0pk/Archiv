@@ -38,6 +38,15 @@ class ReportManifest(StrictModel):
     docx_path: str
     docx_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     required_sections: list[str] = Field(min_length=1)
+    model_identity: str = Field(min_length=1)
+    """What produced the prose in this report, in the words the DOCX also shows.
+
+    No default. A default here is how the DOCX came to state "Model identity: disabled"
+    on every report generated outside the task runner, regardless of what actually ran --
+    a false provenance claim inside a document whose whole purpose is provenance.
+    """
+    model_provenance: str = Field(min_length=1)
+    """Where that model ran: `local-loopback`, `remote-evaluation`, or `none`."""
     sources: list[ReportSource] = Field(min_length=1)
 
 

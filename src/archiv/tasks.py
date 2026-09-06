@@ -12,7 +12,7 @@ from archiv.contracts import RetrievalDiagnostics, RunStatus, SearchResult
 from archiv.evaluation_config import EvaluationNotEnabledError, check_evaluation_opt_in
 from archiv.grounding import build_grounding_prompt
 from archiv.hashing import sha256_file
-from archiv.model_adapter import build_model_adapter, load_model_config
+from archiv.model_adapter import build_model_adapter, describe_model, load_model_config
 from archiv.report_contracts import ReportManifest, ReportStatus
 from archiv.reports import generate_report, generate_report_from_results, validate_report
 from archiv.reports.validation import write_validation
@@ -140,9 +140,7 @@ def run_task(task_path: Path, *, home: Path | None = None) -> TaskRunResult:
         output = output_dir / task.output_name
 
         grounded_response = None
-        model_identity = (
-            model.adapter if model.adapter == "disabled" else f"{model.adapter} ({model.model})"
-        )
+        model_identity, model_provenance = describe_model(model)
 
         if task.model_policy == "configured-local" and model.adapter != "disabled":
             retrieval = retrieve_evidence(
@@ -189,6 +187,7 @@ def run_task(task_path: Path, *, home: Path | None = None) -> TaskRunResult:
                 evidence_dir=output_dir / "rendered",
                 grounded_response=grounded_response,
                 model_identity=model_identity,
+                model_provenance=model_provenance,
             )
         else:
             report = generate_report_from_results(
@@ -202,6 +201,7 @@ def run_task(task_path: Path, *, home: Path | None = None) -> TaskRunResult:
                 evidence_dir=output_dir / "rendered",
                 grounded_response=grounded_response,
                 model_identity=model_identity,
+                model_provenance=model_provenance,
             )
         after = _source_hashes(layout)
         manifest = ReportManifest.model_validate_json(

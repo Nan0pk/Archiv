@@ -450,3 +450,145 @@ def test_the_default_desktop_window_has_a_notice_and_reads_the_origin() -> None:
 
     assert "inspect_run_output" in source
     assert "model_provenance" in source
+
+
+# --- S06: the report path, and the document that always claimed 'disabled' -----
+
+
+def report_task(tmp_path: Path, query: str = "unique fixture marker") -> Path:
+    task_path = tmp_path / "report-task.yaml"
+    task_path.write_text(
+        json.dumps(
+            {
+                "task": "cross-file-report",
+                "query": query,
+                "render": False,
+                "model_policy": "configured-local",
+            }
+        ),
+        encoding="utf-8",
+    )
+    return task_path
+
+
+def test_report_manifest_records_model_origin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The sidecar that ties a document to its sources now also says what wrote it."""
+
+    from archiv.tasks import run_task
+
+    home = prepare_remote_archive(tmp_path, monkeypatch)
+    monkeypatch.setattr("archiv.tasks.build_model_adapter", stub_builder(good_reply()))
+
+    result = run_task(report_task(tmp_path), home=home)
+    manifest = json.loads(Path(f"{result.output_path}.manifest.json").read_text())
+
+    assert manifest["model_provenance"] == "remote-evaluation"
+    assert "remote-evaluation" in manifest["model_identity"]
+    assert "a-model-name" in manifest["model_identity"]
+
+
+def test_generated_docx_provenance_section_states_the_true_origin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Readable inside the document itself, not only in a sidecar beside it."""
+
+    from docx import Document
+
+    from archiv.tasks import run_task
+
+    home = prepare_remote_archive(tmp_path, monkeypatch)
+    monkeypatch.setattr("archiv.tasks.build_model_adapter", stub_builder(good_reply()))
+
+    result = run_task(report_task(tmp_path), home=home)
+    text = "\n".join(p.text for p in Document(str(result.output_path)).paragraphs)
+
+    assert "Model identity: remote-evaluation (a-model-name)" in text
+    assert "Model ran on: computers not controlled by the archive owner" in text
+    assert "the text of the sources listed above was sent there" in text
+    assert "Model identity: disabled" not in text
+
+
+def test_generate_report_cli_no_longer_claims_disabled_when_a_model_ran(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The pre-existing bug this step fixes.
+
+    `archiv generate-report` never passed a model identity, so it inherited a default of
+    "disabled" and every document it produced said so — regardless of what the archive
+    was configured with. This command calls no model, which is a true thing to say; what
+    it must not do is imply the archive has none.
+    """
+
+    home = prepare_remote_archive(tmp_path, monkeypatch)
+    output = tmp_path / "cli-report.docx"
+
+    generated = runner.invoke(
+        app,
+        [
+            "generate-report",
+            "unique fixture marker",
+            str(output),
+            "--home",
+            str(home),
+            "--no-render",
+        ],
+    )
+    assert generated.exit_code == 0, generated.output
+
+    manifest = json.loads(Path(f"{output}.manifest.json").read_text())
+    # Truthful on both counts: no model was used here, and the archive has one configured.
+    assert manifest["model_provenance"] == "none"
+    assert manifest["model_identity"] == "not used (configured: remote-evaluation (a-model-name))"
+    assert manifest["model_identity"] != "disabled"
+
+
+def test_mcp_generate_docx_records_its_true_model_identity(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The same bug through the other caller that never passed an identity."""
+
+    from archiv.mcp_policy import mcp_outputs_root
+    from archiv.mcp_tools import archiv_generate_docx
+
+    home = prepare_remote_archive(tmp_path, monkeypatch)
+    # This tool takes its archive from the environment, by design: it owns its own home
+    # rather than accepting one from a caller.
+    monkeypatch.setenv("ARCHIV_HOME", str(home))
+
+    envelope = archiv_generate_docx("unique fixture marker", "mcp-report.docx", render=False)
+    assert envelope
+
+    from archiv.storage.layout import ArchivLayout
+
+    output = mcp_outputs_root(ArchivLayout.resolve()) / "mcp-report.docx"
+    manifest = json.loads(Path(f"{output}.manifest.json").read_text())
+
+    assert manifest["model_provenance"] == "none"
+    assert "not used (configured:" in manifest["model_identity"]
+    assert manifest["model_identity"] != "disabled"
+
+
+def test_the_report_validator_fails_a_document_missing_its_stamp(tmp_path: Path) -> None:
+    """A provenance line that can go missing without failing the report is not provenance.
+
+    The step allowed adding a line inside the existing section, which needs no change to
+    the section contract — and therefore gets no enforcement. This asserts the validator
+    actually checks it.
+    """
+
+    from archiv.report_contracts import ReportManifest
+    from archiv.reports.validation import validate_report
+
+    del tmp_path
+    fields = set(ReportManifest.model_fields)
+    assert "model_identity" in fields
+    assert "model_provenance" in fields
+    # Neither has a default: a default is how the false "disabled" claim survived.
+    assert ReportManifest.model_fields["model_identity"].is_required()
+    assert ReportManifest.model_fields["model_provenance"].is_required()
+
+    source = Path(validate_report.__code__.co_filename).read_text(encoding="utf-8")
+    assert "does not state the model identity recorded in the manifest" in source
+    assert "does not state where the model ran" in source

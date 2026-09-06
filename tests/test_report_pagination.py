@@ -13,6 +13,8 @@ def test_source_appendix_uses_page_break_before_without_blank_break_paragraph() 
         query="status evidence",
         report_id="report-id",
         sources=[],
+        model_identity="disabled",
+        model_provenance="none",
     )
 
     appendix = next(

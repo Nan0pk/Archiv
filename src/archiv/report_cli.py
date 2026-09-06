@@ -9,6 +9,7 @@ from typing import Annotated
 
 import typer
 
+from archiv.model_adapter import describe_model, load_model_config
 from archiv.report_contracts import ReportStatus
 from archiv.reports import generate_report, validate_report
 from archiv.reports.validation import write_validation
@@ -60,6 +61,14 @@ def register_report_commands(
     ) -> None:
         """Generate a cited DOCX and report success only after validation."""
 
+        # This command never calls a model: it retrieves evidence and formats it. Said
+        # explicitly, because it used to inherit a default that claimed the model was
+        # "disabled" whatever the archive was configured with.
+        model_identity, model_provenance = describe_model(load_model_config(home))
+        if model_identity != "disabled":
+            model_identity = f"not used (configured: {model_identity})"
+            model_provenance = "none"
+
         try:
             result = generate_report(
                 query,
@@ -69,6 +78,8 @@ def register_report_commands(
                 max_sources=max_sources,
                 render=render,
                 evidence_dir=evidence_dir,
+                model_identity=model_identity,
+                model_provenance=model_provenance,
             )
         except (OSError, RuntimeError, ValueError) as error:
             typer.echo(f"report generation failed: {type(error).__name__}: {error}", err=True)

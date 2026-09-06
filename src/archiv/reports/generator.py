@@ -68,6 +68,19 @@ def _add_source_overview(document: Document, sources: list[ReportSource]) -> Non
         row[2].text = source.locator_text
 
 
+def _provenance_sentence(model_provenance: str) -> str:
+    """Plain words for where the prose came from, readable outside Archiv."""
+
+    if model_provenance == "remote-evaluation":
+        return (
+            "computers not controlled by the archive owner (evaluation mode) — the text "
+            "of the sources listed above was sent there"
+        )
+    if model_provenance == "local-loopback":
+        return "the machine holding this archive"
+    return "no model was used; this report is retrieved evidence only"
+
+
 def _build_document(
     *,
     title: str,
@@ -75,7 +88,8 @@ def _build_document(
     report_id: str,
     sources: list[ReportSource],
     grounded_response: GroundedModelResponse | None = None,
-    model_identity: str = "disabled",
+    model_identity: str,
+    model_provenance: str,
 ) -> Document:
     document = new_report_document(title=title, report_id=report_id)
 
@@ -167,6 +181,8 @@ def _build_document(
     provenance.add_run(query)
     provenance.add_run("\nModel identity: ").bold = True
     provenance.add_run(model_identity)
+    provenance.add_run("\nModel ran on: ").bold = True
+    provenance.add_run(_provenance_sentence(model_provenance))
     provenance.add_run("\nGeneration policy: ").bold = True
     provenance.add_run(
         "validated citations only; no source mutation; DOCX success requires "
@@ -192,7 +208,8 @@ def generate_report(
     render: bool = False,
     evidence_dir: Path | None = None,
     grounded_response: GroundedModelResponse | None = None,
-    model_identity: str = "disabled",
+    model_identity: str,
+    model_provenance: str,
 ) -> ReportGenerationResult:
     """Search Archiv and generate a report from independently validated results."""
 
@@ -208,6 +225,7 @@ def generate_report(
         evidence_dir=evidence_dir,
         grounded_response=grounded_response,
         model_identity=model_identity,
+        model_provenance=model_provenance,
     )
 
 
@@ -222,7 +240,8 @@ def generate_report_from_results(
     render: bool = False,
     evidence_dir: Path | None = None,
     grounded_response: GroundedModelResponse | None = None,
-    model_identity: str = "disabled",
+    model_identity: str,
+    model_provenance: str,
 ) -> ReportGenerationResult:
     """Generate a report from validated results and return only evidence-backed status."""
 
@@ -267,6 +286,7 @@ def generate_report_from_results(
         sources=sources,
         grounded_response=grounded_response,
         model_identity=model_identity,
+        model_provenance=model_provenance,
     )
     document.save(str(temporary))
     os.replace(temporary, output)
@@ -279,6 +299,8 @@ def generate_report_from_results(
         docx_path=str(output),
         docx_sha256=sha256_file(output),
         required_sections=list(REQUIRED_REPORT_SECTIONS),
+        model_identity=model_identity,
+        model_provenance=model_provenance,
         sources=sources,
     )
     _write_manifest(manifest_path, manifest)

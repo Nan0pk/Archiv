@@ -351,6 +351,19 @@ def save_model_config(config: ModelConfig, home: Path | None = None) -> Path:
     return path
 
 
+def describe_model(config: ModelConfig) -> tuple[str, str]:
+    """What ran and where, as the words a report and its manifest both show.
+
+    Shared deliberately. Three callers generate reports, and when each derived this for
+    itself two of them simply did not, so every report produced outside the task runner
+    stated "Model identity: disabled" whatever had actually run.
+    """
+
+    if config.adapter == "disabled":
+        return "disabled", "none"
+    return f"{config.adapter} ({config.model})", config.provenance
+
+
 def build_model_adapter(config: ModelConfig, home: Path | None = None) -> ModelAdapter:
     # Exhaustive for the same reason the validator is: a new adapter literal must
     # fail loudly here rather than inherit the loopback client by fallthrough.

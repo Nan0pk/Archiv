@@ -34,6 +34,8 @@ def test_generates_structurally_valid_cited_docx_without_source_changes(
         home=home,
         max_sources=len(REPORT_FIXTURES),
         render=False,
+        model_identity="disabled",
+        model_provenance="none",
     )
 
     assert result.status is ReportStatus.SUCCEEDED

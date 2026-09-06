@@ -184,6 +184,17 @@ def validate_report(
         if section not in text:
             errors.append(f"required section missing: {section}")
 
+    # Asserted here, not merely written. A line inside an existing section needs no
+    # change to the section contract -- which also means it gets no enforcement, and a
+    # provenance line that can go missing without failing the report is not provenance.
+    if f"Model identity: {manifest.model_identity}" not in text:
+        errors.append(
+            "DOCX does not state the model identity recorded in the manifest "
+            f"({manifest.model_identity!r})"
+        )
+    if "Model ran on:" not in text:
+        errors.append("DOCX does not state where the model ran")
+
     layout = ArchivLayout.resolve(home)
     for source in manifest.sources:
         validation = validate_citation(source.citation, home=home)
