@@ -15,7 +15,9 @@ from __future__ import annotations
 
 import importlib
 import json
+import re
 import sys
+from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from pathlib import Path
 from typing import Any, cast
@@ -26,11 +28,16 @@ from typer.testing import CliRunner
 from archiv.calibration import (
     CalibrationInputError,
     Distribution,
+    LocalMeasurementRefused,
     Unmeasured,
     load_questions,
+    local_profile_from,
+    measure_local_throughput,
+    predict_from_calibration,
     run_calibration,
 )
 from archiv.cli import app
+from archiv.hardware_profiles import Unavailable as HardwareUnavailable
 from archiv.model_adapter import ModelConfig, ReportedUsage, save_model_config
 from archiv.sample_vault import create_sample_vault
 
@@ -364,3 +371,331 @@ def test_an_interrupted_run_cannot_leave_a_half_written_record(
 
     source = Path(run_calibration.__code__.co_filename).read_text(encoding="utf-8")
     assert "os.replace(temporary, destination)" in source
+
+
+# --- S09: predicting local runtime, labelled estimated until measured ----------
+
+
+def stub_local_server(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    prompt_tokens: int = 1400,
+    prefill_per_second: float = 200.0,
+    decode_per_second: float = 8.0,
+) -> None:
+    """A local server that takes as long as the speeds given, and reports its usage.
+
+    Stands in for llama.cpp or Ollama. Nothing here opens a connection: what is being
+    exercised is the arithmetic that separates prompt reading from generation, and a real
+    server would only make the timing noisier.
+    """
+
+    import archiv.calibration as calibration_module
+
+    class Probe:
+        def probe(self, prompt: str, max_output_tokens: int) -> tuple[str, ReportedUsage]:
+            del prompt
+            produced = max_output_tokens
+            seconds = prompt_tokens / prefill_per_second + produced / decode_per_second
+            # Advance a clock rather than actually waiting: the test asserts the
+            # arithmetic, and sleeping would only make it slow and flaky.
+            fake_clock.advance(seconds)
+            return "an answer", ReportedUsage(
+                prompt_tokens=prompt_tokens, completion_tokens=produced
+            )
+
+    class Clock:
+        def __init__(self) -> None:
+            self.now = datetime(2026, 1, 1, tzinfo=UTC)
+
+        def advance(self, seconds: float) -> None:
+            self.now += timedelta(seconds=seconds)
+
+    fake_clock = Clock()
+
+    class FrozenDatetime(datetime):
+        @classmethod
+        def now(cls, tz: object = None) -> datetime:  # pyright: ignore[reportIncompatibleMethodOverride]
+            del tz
+            return fake_clock.now
+
+    monkeypatch.setattr(calibration_module, "datetime", FrozenDatetime)
+    monkeypatch.setattr(
+        calibration_module, "OpenAICompatibleLoopbackAdapter", lambda config: Probe(), raising=False
+    )
+    monkeypatch.setattr(
+        "archiv.model_adapter.OpenAICompatibleLoopbackAdapter", lambda config: Probe()
+    )
+
+
+def test_every_hardware_profile_row_cites_a_source_and_a_date() -> None:
+    """A row without the page it came from is worthless, so the contract refuses one.
+
+    This is the whole basis of the step: these are other people's measurements, and a
+    figure nobody can go and check is indistinguishable from one somebody made up.
+    """
+
+    from archiv.hardware_profiles import HardwareProfile, ThroughputBand, load_published_profiles
+
+    profiles = load_published_profiles(ROOT / "docs/plan/hardware-profiles.json")
+    assert len(profiles) >= 8, "a table this thin cannot cover plausible hardware"
+
+    for profile in profiles:
+        assert profile.confidence == "estimated", (
+            "no row in the committed table may claim to be measured: this project has "
+            "never run on any of this hardware"
+        )
+        assert profile.source_url.startswith("https://")
+        assert re.fullmatch(r"\d{4}-\d{2}-\d{2}", profile.retrieved_on), profile.id
+        assert profile.harness.strip(), profile.id
+        # And the spread is described, so one observation cannot pose as a range.
+        assert profile.prefill_tokens_per_second.basis.strip()
+        assert profile.decode_tokens_per_second.basis.strip()
+
+    # The contract itself refuses a row with no source, rather than trusting the table.
+    band = ThroughputBand(low=1.0, high=2.0, basis="made up for this test")
+    with pytest.raises(ValueError, match="the page it came from"):
+        HardwareProfile(
+            id="nowhere",
+            model="a model",
+            parameter_count_billions=7.0,
+            quantisation="Q4_0",
+            hardware="somebody's computer",
+            backend="something",
+            prefill_tokens_per_second=band,
+            decode_tokens_per_second=band,
+            harness="unstated",
+            confidence="estimated",
+        )
+
+    # And a measured row with no machine is refused for the mirror-image reason.
+    with pytest.raises(ValueError, match="the machine it was measured on"):
+        HardwareProfile(
+            id="somewhere",
+            model="a model",
+            parameter_count_billions=7.0,
+            quantisation="Q4_0",
+            hardware="somebody's computer",
+            backend="something",
+            prefill_tokens_per_second=band,
+            decode_tokens_per_second=band,
+            harness="two probes",
+            confidence="measured",
+        )
+
+
+def test_predictions_from_published_figures_are_labelled_estimated(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A number nobody measured must never be able to pass as one somebody did."""
+
+    from archiv.hardware_profiles import ProfileError, load_published_profiles, predict_ask_latency
+
+    profiles = {
+        row.id: row for row in load_published_profiles(ROOT / "docs/plan/hardware-profiles.json")
+    }
+    prediction = predict_ask_latency(
+        profiles["nvidia-rtx-4090-llama2-7b-q4-0"],
+        prompt_tokens=1400,
+        completion_tokens=300,
+        retrieval_ms=120.0,
+    )
+    assert prediction.label == "estimated"
+    assert prediction.band_fraction == pytest.approx(0.40)
+    assert prediction.source_url.startswith("https://")
+    assert prediction.retrieved_on
+    assert prediction.measured_on_machine == ""
+    # The two halves of the wait are reported apart, because they have different causes.
+    assert prediction.time_to_first_token.middle_ms != prediction.generation.middle_ms
+    assert prediction.total.low_ms < prediction.total.middle_ms < prediction.total.high_ms
+
+    # Asking about hardware there is no figure for gets a refusal, not a guess.
+    home = prepared_archive(tmp_path)
+    install_stub(monkeypatch, ReportedUsage(prompt_tokens=900, completion_tokens=120))
+    calibration = run_calibration(home=home, questions=question_file(tmp_path))
+    with pytest.raises(ProfileError, match="will not guess"):
+        predict_from_calibration(
+            calibration,
+            "some-machine-nobody-measured",
+            home=home,
+            published=ROOT / "docs/plan/hardware-profiles.json",
+        )
+
+
+def test_calibrate_local_overwrites_a_row_as_measured(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Once the hardware exists, the estimate is replaced by a fact about that machine.
+
+    And the fact lives in the archive, never in the committed table: a figure measured on
+    somebody's laptop is about their laptop, and publishing it would also mean the table's
+    rows no longer all came from a page anyone can check.
+    """
+
+    from archiv.hardware_profiles import (
+        available_profiles,
+        load_published_profiles,
+        measured_profiles_path,
+        save_measured_profile,
+    )
+
+    home = prepared_archive(tmp_path)
+    stub_local_server(
+        monkeypatch, prompt_tokens=1400, prefill_per_second=200.0, decode_per_second=8.0
+    )
+
+    measured = measure_local_throughput(home=home, prompt="a prompt of some length")
+    # Recovered from two replies of different lengths, to within rounding.
+    assert measured.decode_tokens_per_second == pytest.approx(8.0, rel=0.02)
+    assert measured.prefill_tokens_per_second == pytest.approx(200.0, rel=0.02)
+    assert measured.machine
+
+    saved = save_measured_profile(local_profile_from(measured), home)
+    assert saved == measured_profiles_path(home)
+    assert str(home) in str(saved), "a machine's own figures stay inside its archive"
+
+    rows = available_profiles(home, ROOT / "docs/plan/hardware-profiles.json")
+    this_machine = next(row for row in rows if row.id == "this-machine")
+    assert this_machine.confidence == "measured"
+    assert this_machine.measured_on_machine == measured.machine
+    # The published rows are still there, and still estimated.
+    published = load_published_profiles(ROOT / "docs/plan/hardware-profiles.json")
+    assert len(rows) == len(published) + 1
+    assert all(row.confidence == "estimated" for row in rows if row.id != "this-machine")
+
+    # A prediction from it is labelled measured and names the machine.
+    install_stub(monkeypatch, ReportedUsage(prompt_tokens=900, completion_tokens=120))
+    calibration = run_calibration(home=home, questions=question_file(tmp_path))
+    prediction = predict_from_calibration(
+        calibration, "this-machine", home=home, published=ROOT / "docs/plan/hardware-profiles.json"
+    )
+    assert prediction.label == "measured"
+    assert prediction.measured_on_machine == measured.machine
+
+
+def test_local_measurement_refuses_rather_than_reporting_a_remote_model_as_this_machine(
+    tmp_path: Path,
+) -> None:
+    """A paid model on somebody else's computer is not this machine's speed."""
+
+    from archiv.model_adapter import ModelConfig, save_model_config
+
+    home = prepared_archive(tmp_path)
+    save_model_config(
+        ModelConfig(
+            adapter="remote-evaluation",
+            endpoint="https://api.openai.com",
+            model="a-model",
+            api_key_env="ARCHIV_TEST_S09_KEY",
+        ),
+        home,
+    )
+    with pytest.raises(LocalMeasurementRefused, match="not this machine's speed"):
+        measure_local_throughput(home=home, prompt="a prompt")
+
+
+def test_prediction_lands_within_the_stated_band_for_a_known_fingerprint() -> None:
+    """Fixed workload, fixed throughput: this checks the arithmetic, not the world."""
+
+    from archiv.hardware_profiles import (
+        HardwareProfile,
+        ThroughputBand,
+        bandwidth_anchor,
+        predict_ask_latency,
+    )
+
+    # 1000 prompt tokens at 100 a second is 10 s; 200 reply tokens at 10 a second is 20 s.
+    profile = HardwareProfile(
+        id="fixed-for-arithmetic",
+        model="a model",
+        parameter_count_billions=8.0,
+        quantisation="Q4_0",
+        hardware="a machine chosen to make the sums obvious",
+        backend="none",
+        prefill_tokens_per_second=ThroughputBand(low=100.0, high=100.0, basis="fixed"),
+        decode_tokens_per_second=ThroughputBand(low=10.0, high=10.0, basis="fixed"),
+        harness="fixed",
+        confidence="measured",
+        measured_on_machine="a machine chosen to make the sums obvious",
+    )
+    prediction = predict_ask_latency(
+        profile, prompt_tokens=1000, completion_tokens=200, retrieval_ms=500.0
+    )
+
+    assert prediction.time_to_first_token.middle_ms == pytest.approx(10_500.0)
+    assert prediction.generation.middle_ms == pytest.approx(20_000.0)
+    assert prediction.total.middle_ms == pytest.approx(30_500.0)
+    # The band is the stated fraction either side, not something wider or narrower.
+    assert prediction.total.low_ms == pytest.approx(30_500.0 * 0.6)
+    assert prediction.total.high_ms == pytest.approx(30_500.0 * 1.4)
+    assert prediction.total.low_ms <= prediction.total.middle_ms <= prediction.total.high_ms
+
+    # With no bandwidth figure there is one anchor, and it says so rather than pretending.
+    assert isinstance(prediction.second_anchor, HardwareUnavailable)
+    assert prediction.anchors_disagree_by is None
+
+    # Given one, the second anchor is derived and a large disagreement is reported as
+    # the uncertainty rather than averaged into a single confident number.
+    with_bandwidth = profile.model_copy(
+        update={
+            "memory_bandwidth_bytes_per_second": 100e9,
+            "model_file_bytes": 5e9,
+        }
+    )
+    anchor = bandwidth_anchor(with_bandwidth)
+    assert not isinstance(anchor, HardwareUnavailable)
+    # 100 GB/s over a 5 GB file is 20 reads a second; at 70% that is 14 tokens a second.
+    assert anchor.decode_tokens_per_second_middle == pytest.approx(14.0)
+    assert anchor.utilisation_assumed == pytest.approx(0.70)
+
+    second = predict_ask_latency(
+        with_bandwidth, prompt_tokens=1000, completion_tokens=200, retrieval_ms=500.0
+    )
+    # Published 10 a second against a derived 14 is a 29% gap: under the threshold, so
+    # recorded without a warning.
+    assert second.anchors_disagree_by == pytest.approx(0.2857, abs=0.001)
+    assert second.anchor_disagreement_note == ""
+
+
+def test_the_plans_prefill_heavy_expectation_is_wrong_for_a_cited_answer() -> None:
+    """The step's own premise does not survive the figures it sent me to find.
+
+    `docs/plan/steps/S09.md` was written expecting the wait on a processor without a
+    graphics card to be almost all prompt reading. Against published measurements it is
+    not: generating the answer dominates on every row in the table, because those
+    measurements put processor prompt reading at 130-268 tokens a second rather than the
+    60 the step assumed, while generation runs at 4-14.
+
+    This test pins the finding so nobody quietly reverts to the original expectation. It
+    also pins the thing that is actually true and is what the two terms are reported
+    separately for: which half dominates depends on how long the answer is, and the
+    turning point is short enough that a cited answer is past it.
+    """
+
+    from archiv.hardware_profiles import load_published_profiles
+
+    profiles = {
+        row.id: row for row in load_published_profiles(ROOT / "docs/plan/hardware-profiles.json")
+    }
+    prompt_tokens = 1400
+
+    for row_id in (
+        "amd-ryzen-7950x-cpu-only-llama31-8b-q8-0",
+        "apple-m2-max-cpu-only-llama31-8b-q8-0",
+        "nvidia-rtx-4090-llama2-7b-q4-0",
+    ):
+        row = profiles[row_id]
+        prefill_seconds = prompt_tokens / row.prefill_tokens_per_second.middle
+        generation_seconds = 300 / row.decode_tokens_per_second.middle
+        assert generation_seconds > prefill_seconds, (
+            f"{row_id}: the plan expected prompt reading to dominate, but generating a "
+            f"300-token answer takes {generation_seconds:.1f}s against {prefill_seconds:.1f}s"
+        )
+        # The turning point: below this answer length, prompt reading really does dominate.
+        crossover = prompt_tokens * (
+            row.decode_tokens_per_second.middle / row.prefill_tokens_per_second.middle
+        )
+        assert crossover < 200, (
+            f"{row_id}: prompt reading dominates only for answers under "
+            f"{crossover:.0f} tokens, which is shorter than a cited answer"
+        )

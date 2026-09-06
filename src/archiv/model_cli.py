@@ -13,8 +13,12 @@ from pydantic import BaseModel
 from archiv.calibration import (
     CalibrationInputError,
     Distribution,
+    LocalMeasurementRefused,
     Unmeasured,
     calibration_path,
+    local_profile_from,
+    measure_local_throughput,
+    predict_from_calibration,
     run_calibration,
 )
 from archiv.cost_control import (
@@ -33,6 +37,11 @@ from archiv.evaluation_config import (
     clear_evaluation_mark,
     load_evaluation_config,
     mark_for_evaluation,
+)
+from archiv.hardware_profiles import (
+    ProfileError,
+    available_profiles,
+    save_measured_profile,
 )
 from archiv.model_adapter import (
     REMOTE_EVALUATION_ENDPOINT,
@@ -181,6 +190,43 @@ def model_configure_loopback_command(
     _emit_json({"config_path": str(path), "config": config.model_dump(mode="json")})
 
 
+@model_app.command("profiles")
+def model_profiles_command(
+    home: Annotated[
+        Path | None,
+        typer.Option("--home", file_okay=False, resolve_path=True),
+    ] = None,
+    json_output: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """List the hardware a prediction can be made for, and where each figure came from."""
+
+    try:
+        profiles = available_profiles(home)
+    except ProfileError as error:
+        typer.echo(f"cannot read the hardware profiles: {error}", err=True)
+        raise typer.Exit(code=2) from error
+
+    if json_output:
+        _emit_json([profile.model_dump(mode="json") for profile in profiles])
+        return
+
+    for profile in profiles:
+        prefill = profile.prefill_tokens_per_second
+        decode = profile.decode_tokens_per_second
+        typer.echo(f"{profile.id}")
+        typer.echo(f"  {profile.hardware}")
+        typer.echo(f"  {profile.model} ({profile.quantisation}), {profile.backend}")
+        typer.echo(
+            f"  Reads a prompt at {prefill.low}-{prefill.high} tokens a second; "
+            f"generates at {decode.low}-{decode.high}"
+        )
+        if profile.confidence == "measured":
+            typer.echo(f"  Measured on: {profile.measured_on_machine}")
+        else:
+            typer.echo(f"  Published figure: {profile.source_url} (read {profile.retrieved_on})")
+        typer.echo("")
+
+
 @model_app.command("calibrate")
 def model_calibrate_command(
     home: Annotated[
@@ -208,6 +254,20 @@ def model_calibrate_command(
         ),
     ] = None,
     evidence_limit: Annotated[int, typer.Option("--evidence-limit", min=1, max=50)] = 8,
+    predict_for: Annotated[
+        str | None,
+        typer.Option(
+            "--predict-for",
+            help="A hardware profile id to predict this workload's wall clock on.",
+        ),
+    ] = None,
+    local: Annotated[
+        bool,
+        typer.Option(
+            "--local",
+            help="Measure this machine's own speed and record it as a measured profile.",
+        ),
+    ] = False,
     json_output: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
     """Measure what a question costs here, and how the configured model answers it."""
@@ -224,8 +284,38 @@ def model_calibrate_command(
         typer.echo(f"calibration could not start: {error}", err=True)
         raise typer.Exit(code=2) from error
 
+    prediction = None
+    if local:
+        # Measured first, so a prediction asked for in the same breath uses this
+        # machine's own figures rather than somebody else's published ones.
+        try:
+            measured = measure_local_throughput(
+                home=home, prompt="Summarise the evidence you were given, with citations."
+            )
+        except LocalMeasurementRefused as error:
+            typer.echo(f"this machine's speed was not measured: {error}", err=True)
+            raise typer.Exit(code=2) from error
+        saved = save_measured_profile(local_profile_from(measured), home)
+        typer.echo(
+            f"Measured on this machine: {measured.prefill_tokens_per_second} tokens a second "
+            f"reading a prompt, {measured.decode_tokens_per_second} generating. "
+            f"Recorded in {saved}"
+        )
+        predict_for = predict_for or "this-machine"
+
+    if predict_for is not None:
+        try:
+            prediction = predict_from_calibration(calibration, predict_for, home=home)
+        except ProfileError as error:
+            typer.echo(f"no prediction: {error}", err=True)
+            raise typer.Exit(code=2) from error
+
     if json_output:
-        _emit_json(calibration)
+        payload = calibration.model_dump(mode="json")
+        payload["prediction"] = (
+            prediction.model_dump(mode="json") if prediction is not None else None
+        )
+        _emit_json(payload)
         return
 
     workload = calibration.workload
@@ -256,6 +346,34 @@ def model_calibrate_command(
             f"{calibration.quality.mean_recall_at_evidence_limit}"
             f", fabricated citations {calibration.quality.fabricated_identifier_count}"
         )
+    if prediction is not None:
+        typer.echo("")
+        typer.echo(f"Predicted on {prediction.hardware}")
+        typer.echo(f"  {prediction.model} ({prediction.quantisation})")
+        typer.echo(
+            f"  Before the first word: {prediction.time_to_first_token.middle_ms / 1000:.1f} s"
+            f" (between {prediction.time_to_first_token.low_ms / 1000:.1f}"
+            f" and {prediction.time_to_first_token.high_ms / 1000:.1f})"
+        )
+        typer.echo(
+            f"  Writing the answer: {prediction.generation.middle_ms / 1000:.1f} s"
+            f" (between {prediction.generation.low_ms / 1000:.1f}"
+            f" and {prediction.generation.high_ms / 1000:.1f})"
+        )
+        typer.echo(
+            f"  Whole question: {prediction.total.middle_ms / 1000:.1f} s"
+            f" (between {prediction.total.low_ms / 1000:.1f}"
+            f" and {prediction.total.high_ms / 1000:.1f})"
+        )
+        if prediction.label == "measured":
+            typer.echo(f"  Measured on: {prediction.measured_on_machine}")
+        else:
+            typer.echo(
+                f"  Estimated, plus or minus {prediction.band_fraction * 100:.0f}%, from "
+                f"{prediction.source_url} read on {prediction.retrieved_on}"
+            )
+        if prediction.anchor_disagreement_note:
+            typer.echo(f"  {prediction.anchor_disagreement_note}")
     typer.echo(f"  Written to: {calibration_path(home, calibration.calibration_id)}")
 
 

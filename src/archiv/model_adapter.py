@@ -221,7 +221,20 @@ class OpenAICompatibleLoopbackAdapter:
         # an unverified promise about somebody else's server.
         return False
 
-    def complete(self, prompt: str) -> str:
+    def probe(self, prompt: str, max_output_tokens: int) -> tuple[str, ReportedUsage | None]:
+        """Ask for a reply of at most a given length, and hand back what was reported.
+
+        Only this adapter has it, and only local calibration calls it. Separating the time
+        spent reading a prompt from the time spent generating needs two replies of
+        different lengths; without a way to ask for a short one there is nothing to
+        compare. It is deliberately absent from the remote adapter: a caller choosing its
+        own reply length there would be choosing its own bill.
+        """
+
+        reply = self.complete(prompt, max_output_tokens=max_output_tokens)
+        return reply, self.usage_reports()[-1] if self.reported else None
+
+    def complete(self, prompt: str, max_output_tokens: int | None = None) -> str:
         endpoint = cast(str, self.config.endpoint).rstrip("/") + "/v1/chat/completions"
         headers = {"Content-Type": "application/json"}
         if self.config.api_key_env:
@@ -232,13 +245,14 @@ class OpenAICompatibleLoopbackAdapter:
                     f"{self.config.api_key_env}"
                 )
             headers["Authorization"] = f"Bearer {value}"
-        payload = json.dumps(
-            {
-                "model": self.config.model,
-                "messages": [{"role": "user", "content": prompt}],
-                "stream": False,
-            }
-        ).encode("utf-8")
+        body_fields: dict[str, object] = {
+            "model": self.config.model,
+            "messages": [{"role": "user", "content": prompt}],
+            "stream": False,
+        }
+        if max_output_tokens is not None:
+            body_fields["max_tokens"] = max_output_tokens
+        payload = json.dumps(body_fields).encode("utf-8")
         request = Request(endpoint, data=payload, headers=headers, method="POST")
         try:
             with urlopen(request, timeout=self.config.timeout_seconds) as response:  # noqa: S310
