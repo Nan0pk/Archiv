@@ -11,13 +11,14 @@ from uuid import uuid4
 
 from archiv.ask_contracts import AskRunResult
 from archiv.contracts import Citation, RunStatus, SearchResult
-from archiv.cost_control import decide_spend
+from archiv.cost_control import SpendRefusedError, decide_spend, summarise_spend
 from archiv.evaluation_config import EvaluationNotEnabledError, check_evaluation_opt_in
 from archiv.grounding_contracts import GroundedModelResponse
 from archiv.model_adapter import (
     ModelConfig,
     build_model_adapter,
     load_model_config,
+    spend_payload,
     usage_payload,
 )
 from archiv.reports.formatting import format_locator
@@ -231,6 +232,7 @@ def run_grounded_ask(
             query=query,
             evidence_dir=str(evidence_dir),
             model=model_config,
+            text_may_have_been_sent=text_may_have_been_sent,
             errors=["model use is disabled; Archiv will not select a hidden fallback"],
         )
         return _finalise(evidence_dir, result, text_may_have_been_sent=text_may_have_been_sent)
@@ -250,6 +252,7 @@ def run_grounded_ask(
                 query=query,
                 evidence_dir=str(evidence_dir),
                 model=model_config,
+                text_may_have_been_sent=text_may_have_been_sent,
                 errors=[str(error)],
             )
             return _finalise(evidence_dir, result, text_may_have_been_sent=text_may_have_been_sent)
@@ -271,6 +274,7 @@ def run_grounded_ask(
             query=query,
             evidence_dir=str(evidence_dir),
             model=model_config,
+            text_may_have_been_sent=text_may_have_been_sent,
             errors=[f"evidence retrieval failed: {type(error).__name__}: {error}"],
         )
         return _finalise(evidence_dir, result, text_may_have_been_sent=text_may_have_been_sent)
@@ -304,6 +308,7 @@ def run_grounded_ask(
             query=query,
             evidence_dir=str(evidence_dir),
             model=model_config,
+            text_may_have_been_sent=text_may_have_been_sent,
             retrieved_citations=retrieved_citations,
             retrieval_diagnostics=retrieval.diagnostics,
             errors=errors,
@@ -320,6 +325,7 @@ def run_grounded_ask(
             query=query,
             evidence_dir=str(evidence_dir),
             model=model_config,
+            text_may_have_been_sent=text_may_have_been_sent,
             retrieved_citations=[],
             retrieval_diagnostics=retrieval.diagnostics,
             grounded_response=grounded_resp.model_dump(mode="json"),
@@ -350,7 +356,10 @@ def run_grounded_ask(
             # of the check meant a refused run left no cost record at all, and a refusal
             # is the run somebody comes back to asking what the ceiling was.
             spend = decide_spend(prompt, layout.root)
-            _write_json(evidence_dir / "cost.json", spend.model_dump(mode="json"))
+            _write_json(
+                evidence_dir / "cost.json",
+                summarise_spend([spend]).model_dump(mode="json"),
+            )
             if spend.refused_because is not None:
                 result = AskRunResult(
                     run_id=run_id,
@@ -358,6 +367,7 @@ def run_grounded_ask(
                     query=query,
                     evidence_dir=str(evidence_dir),
                     model=model_config,
+                    text_may_have_been_sent=text_may_have_been_sent,
                     retrieved_citations=retrieved_citations,
                     retrieval_diagnostics=retrieval.diagnostics,
                     errors=[spend.explanation],
@@ -380,6 +390,13 @@ def run_grounded_ask(
             usage = usage_payload(adapter)
             if usage is not None:
                 _write_json(evidence_dir / "usage.json", usage)
+            # Replaces the decision written before the call with what actually happened
+            # across every attempt. The gate runs per attempt, so a run allowed to send
+            # and then stopped has more than one answer -- and the earlier file recorded
+            # only the first, which said the spending was allowed.
+            spent = spend_payload(adapter)
+            if spent is not None:
+                _write_json(evidence_dir / "cost.json", spent)
         _write_json(
             evidence_dir / "structured_output.json",
             structured.record.model_dump(mode="json"),
@@ -389,6 +406,24 @@ def run_grounded_ask(
             indent=2,
             sort_keys=True,
         )
+    except SpendRefusedError as error:
+        # A ceiling reached part-way through is the same boundary as one reached before
+        # the first attempt, and is recorded the same way. Caught ahead of the general
+        # case below, which would otherwise report a policy stop as a broken product.
+        # `text_may_have_been_sent` is left exactly as it is: an earlier attempt did
+        # reach the model, and the disclosure has nothing to do with the refusal.
+        result = AskRunResult(
+            run_id=run_id,
+            status=RunStatus.BLOCKED_BY_POLICY,
+            query=query,
+            evidence_dir=str(evidence_dir),
+            model=model_config,
+            text_may_have_been_sent=text_may_have_been_sent,
+            retrieved_citations=retrieved_citations,
+            retrieval_diagnostics=retrieval.diagnostics,
+            errors=[str(error)],
+        )
+        return _finalise(evidence_dir, result, text_may_have_been_sent=text_may_have_been_sent)
     except Exception as error:
         result = AskRunResult(
             run_id=run_id,
@@ -396,6 +431,7 @@ def run_grounded_ask(
             query=query,
             evidence_dir=str(evidence_dir),
             model=model_config,
+            text_may_have_been_sent=text_may_have_been_sent,
             retrieved_citations=retrieved_citations,
             retrieval_diagnostics=retrieval.diagnostics,
             errors=[f"model request failed: {type(error).__name__}: {error}"],
@@ -421,6 +457,7 @@ def run_grounded_ask(
             query=query,
             evidence_dir=str(evidence_dir),
             model=model_config,
+            text_may_have_been_sent=text_may_have_been_sent,
             retrieved_citations=retrieved_citations,
             retrieval_diagnostics=retrieval.diagnostics,
             raw_model_response=raw_response,
@@ -434,6 +471,7 @@ def run_grounded_ask(
         query=query,
         evidence_dir=str(evidence_dir),
         model=model_config,
+        text_may_have_been_sent=text_may_have_been_sent,
         retrieved_citations=retrieved_citations,
         retrieval_diagnostics=retrieval.diagnostics,
         raw_model_response=raw_response,
