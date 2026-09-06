@@ -178,6 +178,23 @@ project is worse than one working from none, because it is confident.
 - End with one verdict line: `MERGE`, or `FIX FIRST` with numbered, specific problems,
   each naming a file and what would fix it.
 
+**How the author briefs it.** Say what the change was trying to do, briefly, and stop
+there.
+
+- **Do not list things to look at.** A checklist tells the reviewer where the author has
+  already looked, which is precisely where the defects are not. Steering it toward the
+  parts the author finds interesting steers it away from the parts they have not thought
+  about, and those are the ones that ship.
+- Do not ask it to confirm a property, argue for the change, or explain why a decision
+  was right. It will read the code. An argument in the brief only tells it which
+  conclusion the author wants, and its whole value is not wanting one.
+- Do say plainly what is unverified — a job that could not be run, a platform not
+  available — because that is a fact about the evidence, not a hint about where to look.
+- Facts it cannot get from the diff belong in the brief: the current commit, what changed
+  in the rules since last time, which steps the batch covers. Check those before stating
+  them; a wrong commit hash in a brief is the same carelessness as a wrong claim in a
+  pull request.
+
 **What it cannot do.** It cannot approve a change that fails a required check. It cannot
 waive any hard rule in this file — a step that needs one waived needs re-planning. It
 cannot mark a step complete; only the acceptance checks do that. And it cannot substitute
