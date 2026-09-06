@@ -170,33 +170,27 @@ Separately: **no calibration run has ever measured a paid model.** Everything ex
 so far used a stand-in that answers instantly. The timings are real timings of that
 stand-in, which is to say they measure this machine and this archive, not a provider.
 
-## `cost.json` has two shapes, and only the second says which it is
+## `cost.json` has had three shapes, and each says which it is
 
-Step S07 wrote a run's cost record as the pre-flight numbers alone, at the top level of
-`runs/ask/<id>/cost.json`, marked `schema_version: "1"`. Step S07A changed it: the file
-now carries the decision — allowed or refused, and why — with those same numbers nested
-under `preflight`, and is marked `schema_version: "2"`.
+The cost record at `runs/ask/<id>/cost.json` has been rewritten twice, and each version
+number is meaningful:
 
-So a file marked version 1 is the older, flatter shape. Nothing writes version 1 any
-more, and anything reading these files should treat the version as meaningful rather than
-assuming the nesting. The window in which version 1 could have been written was one
-commit on `main`, so it is unlikely any archive holds one — but "unlikely" is not
-"cannot", which is why this is written down rather than assumed away.
+- **Version 1** (step S07) — the pre-flight numbers alone, at the top level.
+- **Version 2** (step S07A) — one decision, allowed or refused and why, with those
+  numbers nested under `preflight`.
+- **Version 3** (step S07B) — one record per attempt under `attempts`, because the gate
+  runs per attempt, with the run's `outcome` above them.
 
-## A run refused part-way through records itself as allowed
+Anything reading these files should treat the version as meaningful rather than assuming
+a shape. Versions 1 and 2 each existed on `main` for about one commit, so it is unlikely
+any archive holds one — but "unlikely" is not "cannot", which is why this is written down
+rather than assumed away.
 
-The cost decision for a question is taken once, before the model is called, and written
-to `runs/ask/<id>/cost.json`. But the retry layer can send the same question up to three
-times, and each attempt passes the spend gate again.
-
-So a question whose first attempt was allowed, and whose second is refused because the
-first pushed recorded spend past the ceiling, leaves a run that says `failed` with a cost
-record that says `"decision": "allowed"`. The reason it actually stopped appears only
-inside an error string.
-
-No money leaks: the ceiling held and nothing was sent after the refusal. What is wrong is
-the evidence — it tells a later reader the run was allowed to spend when it was stopped
-from spending. Queued as step S07B.
+**`result.json` was not versioned again**, although step S07B added a field to it
+(`text_may_have_been_sent`). The distinction is whether a reader can be misled: an added
+field leaves every existing field exactly where it was, so code looking for `status`
+still finds it. `cost.json` version 2 moved the numbers a version 1 reader was looking
+for, which is the case a version number exists to warn about.
 
 ## `Unmeasured.status` can say `externally_blocked`, and nothing ever says it
 

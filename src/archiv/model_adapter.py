@@ -19,7 +19,7 @@ from urllib.request import (
 from pydantic import Field, model_validator
 
 from archiv.contracts import StrictModel
-from archiv.cost_control import check_spend_allowance, record_spend
+from archiv.cost_control import SpendDecision, check_spend_allowance, record_spend, summarise_spend
 from archiv.evaluation_config import check_evaluation_opt_in
 from archiv.storage.layout import ArchivLayout
 
@@ -157,6 +157,15 @@ class ModelAdapter(Protocol):
 
         return ()
 
+    def spend_decisions(self) -> tuple[SpendDecision, ...]:
+        """Every cost decision this adapter took, in the order it took them.
+
+        One per attempt, because the gate runs per attempt. Empty for an adapter that
+        costs nothing to call, which is every adapter but the remote one.
+        """
+
+        return ()
+
     def can_enforce_schema(self) -> bool:
         """Whether this backend can actually hold a reply to a JSON schema.
 
@@ -181,6 +190,10 @@ class DisabledModelAdapter:
     def usage_reports(self) -> tuple[ReportedUsage, ...]:
         return ()
 
+    def spend_decisions(self) -> tuple[SpendDecision, ...]:
+        # Nothing to decide: this adapter never opens a connection, so it never spends.
+        return ()
+
     def can_enforce_schema(self) -> bool:
         return False
 
@@ -194,6 +207,11 @@ class OpenAICompatibleLoopbackAdapter:
 
     def usage_reports(self) -> tuple[ReportedUsage, ...]:
         return tuple(self.reported)
+
+    def spend_decisions(self) -> tuple[SpendDecision, ...]:
+        # A loopback model runs on the machine asking the question. There is no bill,
+        # so there is no ceiling and nothing to decide.
+        return ()
 
     def can_enforce_schema(self) -> bool:
         # False, and deliberately so. This adapter sends no schema constraint at all, and
@@ -311,9 +329,13 @@ class RemoteEvaluationAdapter:
     config: ModelConfig
     home: Path | None = None
     reported: list[ReportedUsage] = field(default_factory=list[ReportedUsage])
+    decided: list[SpendDecision] = field(default_factory=list[SpendDecision])
 
     def usage_reports(self) -> tuple[ReportedUsage, ...]:
         return tuple(self.reported)
+
+    def spend_decisions(self) -> tuple[SpendDecision, ...]:
+        return tuple(self.decided)
 
     def can_enforce_schema(self) -> bool:
         # False for now. This provider does offer a schema-constrained reply mode, but
@@ -326,7 +348,9 @@ class RemoteEvaluationAdapter:
         # Both pre-flight gates together, before the API key is read and long before a
         # socket is opened: may this archive send anything at all, and can it afford to.
         check_evaluation_opt_in(self.home)
-        preflight = check_spend_allowance(prompt, self.home)
+        # Recorded whichever way it goes. The gate runs once per attempt, so a run
+        # that was allowed to send and then stopped has two answers, not one.
+        preflight = check_spend_allowance(prompt, self.home, record_into=self.decided)
 
         api_key_env = cast(str, self.config.api_key_env)
         # Stripped, not just checked for emptiness: a key with a stray newline -- the
@@ -392,6 +416,23 @@ class RemoteEvaluationAdapter:
         if not isinstance(content, str) or not content.strip():
             raise RuntimeError("remote evaluation model returned empty content")
         return content
+
+
+def spend_payload(adapter: object) -> dict[str, object] | None:
+    """Every cost decision this adapter took, shaped for a run's evidence, or nothing.
+
+    Written by both run paths after the call, replacing the single decision written
+    before it. The one written before exists only so a run refused up front still leaves
+    a record; once the call has happened, what actually happened is this.
+    """
+
+    decisions = getattr(adapter, "spend_decisions", None)
+    if decisions is None:
+        return None
+    taken = cast("tuple[SpendDecision, ...]", decisions())
+    if not taken:
+        return None
+    return summarise_spend(taken).model_dump(mode="json")
 
 
 def usage_payload(adapter: object) -> dict[str, object] | None:

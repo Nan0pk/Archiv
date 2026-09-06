@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Literal, Protocol, cast
 
@@ -49,15 +50,25 @@ class Tokenizer(Protocol):
     def encode(self, text: str) -> list[int]: ...
 
 
-class SpendPolicyMissingError(RuntimeError):
+class SpendRefusedError(RuntimeError):
+    """Base for every refusal to spend, so a caller can tell one from a real failure.
+
+    A run stopped by the ceiling is a boundary doing its job. Without a common base, the
+    only way to catch that was to name all three subclasses, and the retry path caught
+    none of them -- so a refusal on a retry arrived as a generic model-request failure
+    and the run was recorded as broken rather than as refused.
+    """
+
+
+class SpendPolicyMissingError(SpendRefusedError):
     """Raised when a remote call is attempted with no spend policy recorded."""
 
 
-class SpendCeilingReachedError(RuntimeError):
+class SpendCeilingReachedError(SpendRefusedError):
     """Raised before any network activity when a call would exceed the ceiling."""
 
 
-class SpendLedgerUnreadableError(RuntimeError):
+class SpendLedgerUnreadableError(SpendRefusedError):
     """Raised when what has been spent cannot be read, so the ceiling cannot be applied.
 
     Absent is not the same as unreadable. An absent ledger means nothing has been spent.
@@ -176,6 +187,68 @@ class SpendDecision(StrictModel):
             if not self.explanation.strip():
                 raise ValueError("a refused call must record what the person was told")
         return self
+
+
+class SpendRecord(StrictModel):
+    """Every cost decision one run made, and what happened taken together.
+
+    A run makes more than one when it retries: the layer above the model call can send
+    the same question up to three times, and each attempt passes the gate again. An
+    earlier version of this file held only the decision taken before the first attempt,
+    so a run whose first attempt was allowed and whose retry was refused left a record
+    saying the spending had been allowed -- next to a result saying the run failed, with
+    the real reason nowhere but inside an error string.
+    """
+
+    schema_version: str = "3"
+    outcome: Literal[
+        "all-attempts-allowed",
+        "refused-before-any-request",
+        "refused-after-spending",
+    ]
+    """What happened, in terms that cannot be read the wrong way.
+
+    Deliberately not "allowed" or "refused". A run whose first attempt was sent and
+    billed, and whose second was refused, was neither: it spent money and was then
+    stopped. Calling that "refused" hides the spending and calling it "allowed" hides the
+    stop, so it has its own name.
+    """
+    refused_because: SpendRefusalReason | None = None
+    explanation: str = ""
+    attempts: list[SpendDecision] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _outcome_matches_its_attempts(self) -> SpendRecord:
+        refused = [index for index, item in enumerate(self.attempts) if item.refused_because]
+        if not refused:
+            if self.outcome != "all-attempts-allowed":
+                raise ValueError("no attempt was refused, so the run cannot record a refusal")
+            if self.refused_because is not None:
+                raise ValueError("no attempt was refused, so there is no reason to record")
+            return self
+        expected = "refused-before-any-request" if refused[0] == 0 else "refused-after-spending"
+        if self.outcome != expected:
+            raise ValueError(f"attempt {refused[0] + 1} was refused, so the outcome is {expected}")
+        if self.refused_because is None or not self.explanation.strip():
+            raise ValueError("a refused run must record what refused it, and what was said")
+        return self
+
+
+def summarise_spend(decisions: Sequence[SpendDecision]) -> SpendRecord:
+    """Turn one run's decisions into the record written to its evidence."""
+
+    if not decisions:
+        raise ValueError("a spend record needs at least one decision")
+    first_refusal = next((item for item in decisions if item.refused_because), None)
+    if first_refusal is None:
+        return SpendRecord(outcome="all-attempts-allowed", attempts=list(decisions))
+    refused_at = decisions.index(first_refusal)
+    return SpendRecord(
+        outcome="refused-before-any-request" if refused_at == 0 else "refused-after-spending",
+        refused_because=first_refusal.refused_because,
+        explanation=first_refusal.explanation,
+        attempts=list(decisions),
+    )
 
 
 def spend_policy_path(home: Path | None = None) -> Path:
@@ -408,14 +481,25 @@ _REFUSAL_ERRORS: dict[SpendRefusalReason, type[RuntimeError]] = {
 }
 
 
-def check_spend_allowance(prompt: str, home: Path | None = None) -> CostPreflight:
+def check_spend_allowance(
+    prompt: str,
+    home: Path | None = None,
+    *,
+    record_into: list[SpendDecision] | None = None,
+) -> CostPreflight:
     """Decide whether this call may be made, before anything is sent, and raise if not.
 
     Sits beside the evaluation-marker check and is called from the same place, so the
     two read as one gate rather than two policies scattered across the path.
+
+    `record_into` collects the decision whether it allowed the call or refused it, so the
+    caller can write down every attempt rather than only the first. Deciding and raising
+    stays in one place; only the keeping of the answer is the caller's.
     """
 
     decision = decide_spend(prompt, home)
+    if record_into is not None:
+        record_into.append(decision)
     if decision.refused_because is not None:
         raise _REFUSAL_ERRORS[decision.refused_because](decision.explanation)
     if decision.preflight is None:  # pragma: no cover - the model rejects this combination

@@ -410,7 +410,15 @@ def _counted_prompt_tokens(evidence_dir: Path) -> int | None:
         return None
     if not isinstance(loaded, dict):
         return None
-    preflight = cast("dict[str, object]", loaded).get("preflight")
+    attempts = cast("dict[str, object]", loaded).get("attempts")
+    if not isinstance(attempts, list) or not attempts:
+        return None
+    # The first attempt's count. Later attempts carry a retry prompt, which is longer
+    # than the question actually asked, so it is not what this workload costs.
+    first = cast("list[object]", attempts)[0]
+    if not isinstance(first, dict):
+        return None
+    preflight = cast("dict[str, object]", first).get("preflight")
     if not isinstance(preflight, dict):
         return None
     counted = cast("dict[str, object]", preflight).get("prompt_tokens")

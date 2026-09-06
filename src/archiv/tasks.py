@@ -9,7 +9,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from archiv.contracts import RetrievalDiagnostics, RunStatus, SearchResult
-from archiv.cost_control import decide_spend
+from archiv.cost_control import SpendRefusedError, decide_spend, summarise_spend
 from archiv.evaluation_config import EvaluationNotEnabledError, check_evaluation_opt_in
 from archiv.grounding import build_grounding_prompt
 from archiv.hashing import sha256_file
@@ -18,6 +18,7 @@ from archiv.model_adapter import (
     describe_model,
     describe_unused_model,
     load_model_config,
+    spend_payload,
     usage_payload,
 )
 from archiv.report_contracts import ReportManifest, ReportStatus
@@ -179,7 +180,10 @@ def run_task(task_path: Path, *, home: Path | None = None) -> TaskRunResult:
                     # cost record has to be written here too or a refused report leaves
                     # no trace of what refused it. Decided, written, then acted on.
                     spend = decide_spend(prompt, layout.root)
-                    _write_json(evidence_dir / "cost.json", spend.model_dump(mode="json"))
+                    _write_json(
+                        evidence_dir / "cost.json",
+                        summarise_spend([spend]).model_dump(mode="json"),
+                    )
                     if spend.refused_because is not None:
                         result = TaskRunResult(
                             run_id=run_id,
@@ -207,6 +211,11 @@ def run_task(task_path: Path, *, home: Path | None = None) -> TaskRunResult:
                     usage = usage_payload(adapter)
                     if usage is not None:
                         _write_json(evidence_dir / "usage.json", usage)
+                    # And, as there, what actually happened across every attempt
+                    # replaces the single decision written before the call.
+                    spent = spend_payload(adapter)
+                    if spent is not None:
+                        _write_json(evidence_dir / "cost.json", spent)
                 _write_json(
                     evidence_dir / "structured_output.json",
                     structured.record.model_dump(mode="json"),
@@ -269,6 +278,20 @@ def run_task(task_path: Path, *, home: Path | None = None) -> TaskRunResult:
             retrieval_diagnostics=retrieval_diagnostics,
             model=model,
             errors=errors,
+        )
+    except SpendRefusedError as error:
+        # As on the ask path: a ceiling reached part-way through is a boundary, not a
+        # broken product, and is recorded the same way as one reached up front.
+        result = TaskRunResult(
+            run_id=run_id,
+            status=RunStatus.BLOCKED_BY_POLICY,
+            task_path=str(task_path),
+            evidence_dir=str(evidence_dir),
+            source_hashes_before=before,
+            source_hashes_after=_source_hashes(layout) if before else {},
+            retrieval_diagnostics=retrieval_diagnostics,
+            model=model,
+            errors=[str(error)],
         )
     except Exception as error:
         after = _source_hashes(layout) if before else {}

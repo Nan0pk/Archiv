@@ -606,12 +606,13 @@ def register_user_commands(app: typer.Typer) -> tuple[Callable[..., None], ...]:
             return
 
         if run_result.status is not RunStatus.SUCCEEDED:
-            # A refusal is the one failure that needs no banner: nothing was sent, that
-            # is the whole point of it, and its own message says so. Every other failure
-            # may well have sent the archive's text before going wrong, so the warning
-            # belongs there too -- otherwise the run that really did reach outside says
-            # nothing while quieter runs shout.
-            if run_result.status is not RunStatus.BLOCKED_BY_POLICY:
+            # Keyed on whether the text was actually sent, not on how the run ended.
+            # Keying it on the ending suppressed the warning for every refusal, on the
+            # premise that a refusal means nothing was sent -- which is true of a run
+            # refused before its first attempt and false of one refused on its second,
+            # after the first had already been sent and billed. That is the one run that
+            # most needs to say so, and it was the one saying nothing.
+            if run_result.text_may_have_been_sent:
                 # To stderr, matching the error it accompanies. On stdout, redirecting
                 # one stream would show a warning with no error or an error with no
                 # warning.

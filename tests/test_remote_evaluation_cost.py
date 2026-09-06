@@ -456,13 +456,14 @@ def test_a_refused_run_records_the_numbers_that_refused_it(
     assert opener.calls == [], "nothing may be sent once the ceiling is reached"
 
     recorded = json.loads((Path(result.evidence_dir) / "cost.json").read_text())
-    assert recorded["decision"] == "refused"
+    assert recorded["outcome"] == "refused-before-any-request"
     assert recorded["refused_because"] == "ceiling-already-reached"
-    assert recorded["preflight"]["ceiling_usd"] == pytest.approx(1.0)
-    assert recorded["preflight"]["spent_before_usd"] == pytest.approx(1.0)
+    preflight = recorded["attempts"][0]["preflight"]
+    assert preflight["ceiling_usd"] == pytest.approx(1.0)
+    assert preflight["spent_before_usd"] == pytest.approx(1.0)
     # Whether there was a projection at all is part of the record, not an omission.
-    assert recorded["preflight"]["tokenizer_status"] == "not-configured"
-    assert recorded["preflight"]["prompt_tokens"] is None
+    assert preflight["tokenizer_status"] == "not-configured"
+    assert preflight["prompt_tokens"] is None
     assert "ceiling" in recorded["explanation"]
 
 
@@ -524,6 +525,215 @@ def test_the_report_path_records_a_refusal_too(
     assert any("ceiling" in error for error in result.errors)
 
     recorded = json.loads((Path(result.evidence_dir) / "cost.json").read_text())
-    assert recorded["decision"] == "refused"
+    assert recorded["outcome"] == "refused-before-any-request"
     assert recorded["refused_because"] == "ceiling-already-reached"
-    assert recorded["preflight"]["spent_before_usd"] == pytest.approx(1.0)
+    assert recorded["attempts"][0]["preflight"]["spent_before_usd"] == pytest.approx(1.0)
+
+
+# --- S07B: a run refused part-way through must not record itself as allowed ----
+
+
+def spent_out_after_one_call(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """An archive whose ceiling one call is enough to exhaust.
+
+    The point is a run that is allowed to send, sends, is billed, and is then refused on
+    its retry -- which is the case the run's cost record used to describe as allowed.
+    """
+
+    from archiv.model_adapter import save_model_config
+    from archiv.sample_vault import create_sample_vault
+
+    home = tmp_path / "home"
+    corpus = tmp_path / "corpus"
+    create_sample_vault(corpus)
+    runner.invoke(app, ["add", str(corpus), "--home", str(home)])
+    save_model_config(remote_config(), home)
+    mark_for_evaluation(home)
+    # A ceiling one reported call spends outright: 100k in at $10/million is $1.00.
+    save_spend_policy(policy(ceiling_usd=1.0), home)
+    monkeypatch.setenv(API_KEY_ENV, "a-secret")
+    return home
+
+
+def install_billing_opener(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """A transport that answers unusably and reports usage that exhausts the ceiling.
+
+    Unusable on purpose: the reply has to fail validation so the retry happens, and the
+    retry is the attempt that gets refused.
+    """
+
+    sent: list[str] = []
+
+    class Response:
+        def __init__(self, payload: dict[str, object]) -> None:
+            self._payload = json.dumps(payload).encode()
+
+        def read(self) -> bytes:
+            return self._payload
+
+        def __enter__(self) -> Response:
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+    class Opener:
+        def open(self, request: object, timeout: float | None = None) -> Response:
+            del timeout
+            sent.append(getattr(request, "full_url", "?"))
+            return Response(
+                {
+                    "choices": [{"message": {"content": "not a grounded answer at all"}}],
+                    "usage": {"prompt_tokens": 100_000, "completion_tokens": 0},
+                }
+            )
+
+    def opener_for(origin: tuple[str, str, int | None]) -> Opener:
+        del origin
+        return Opener()
+
+    monkeypatch.setattr("archiv.model_adapter._opener_for", opener_for)
+    return sent
+
+
+def test_a_run_refused_on_a_retry_does_not_record_itself_as_allowed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The record used to describe the decision taken before the first attempt only.
+
+    So a run whose first attempt was allowed and whose second was refused left a cost
+    record saying the spending was allowed, beside a result saying the run failed. The
+    reason it actually stopped was nowhere but inside an error string.
+    """
+
+    from archiv.grounding import run_grounded_ask
+
+    home = spent_out_after_one_call(tmp_path, monkeypatch)
+    sent = install_billing_opener(monkeypatch)
+
+    result = run_grounded_ask("unique fixture marker", home=home)
+
+    # One request went out and was billed; the second was refused before being sent.
+    assert len(sent) == 1, "the retry must be refused before it reaches the transport"
+    assert load_ledger(home).spent_usd == pytest.approx(1.0)
+
+    recorded = json.loads((Path(result.evidence_dir) / "cost.json").read_text())
+    assert recorded["outcome"] == "refused-after-spending", (
+        "the run spent money and was then stopped; it is neither allowed nor simply refused"
+    )
+    assert len(recorded["attempts"]) == 2
+    assert recorded["attempts"][0]["decision"] == "allowed"
+    assert recorded["attempts"][1]["decision"] == "refused"
+    assert recorded["refused_because"] == "ceiling-already-reached"
+    # And what was already spent when the second attempt was weighed is on the record.
+    assert recorded["attempts"][1]["preflight"]["spent_before_usd"] == pytest.approx(1.0)
+
+
+def test_a_ceiling_reached_part_way_through_ends_as_blocked_by_policy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A boundary doing its job, whether it stops the first attempt or the third.
+
+    Recorded as a generic failure it reads to anyone auditing the runs as Archiv
+    breaking, which is exactly the confusion S07A removed for a refusal up front.
+    """
+
+    from archiv.contracts import RunStatus
+    from archiv.grounding import run_grounded_ask
+
+    home = spent_out_after_one_call(tmp_path, monkeypatch)
+    install_billing_opener(monkeypatch)
+
+    result = run_grounded_ask("unique fixture marker", home=home)
+    assert result.status == RunStatus.BLOCKED_BY_POLICY
+    assert any("ceiling" in error for error in result.errors)
+
+    on_disk = json.loads((Path(result.evidence_dir) / "result.json").read_text())
+    assert on_disk["status"] == "blocked_by_policy"
+
+
+def test_a_part_way_refusal_still_reports_that_text_was_sent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The refusal and the disclosure are independent, and must not be conflated.
+
+    An attempt did reach the model, so the archive's text did leave this machine. A
+    refusal arriving afterwards changes nothing about that. Reading the disclosure off
+    the ending rather than off what happened is how the banner defects in S05 happened.
+    """
+
+    from archiv.grounding import run_grounded_ask
+
+    home = spent_out_after_one_call(tmp_path, monkeypatch)
+    install_billing_opener(monkeypatch)
+
+    result = run_grounded_ask("unique fixture marker", home=home)
+    assert result.text_may_have_been_sent is True, (
+        "an earlier attempt reached the model; a later refusal does not unsend it"
+    )
+
+    # The human output has to say so too, not just the record. The command used to
+    # suppress the warning for every refusal, on the premise that a refusal means
+    # nothing was sent -- so the one run that really did reach outside said nothing.
+    # Its own archive, because the run above has already spent this one's ceiling, and
+    # a second run against it would be refused up front rather than part-way.
+    for_cli = spent_out_after_one_call(tmp_path / "cli", monkeypatch)
+    install_billing_opener(monkeypatch)
+    shown = runner.invoke(app, ["ask", "unique fixture marker", "--home", str(for_cli)])
+    assert "ceiling" in shown.output
+    assert "NOT A LOCAL ANSWER" in shown.output, (
+        "text reached a model on the first attempt; the person has to be told"
+    )
+
+    # And the opposite case still reads the opposite way: refused before anything was
+    # sent means nothing was sent.
+    fresh = spent_out_archive(tmp_path / "fresh", monkeypatch)
+    install_opener(monkeypatch)
+    refused_up_front = run_grounded_ask("unique fixture marker", home=fresh)
+    assert refused_up_front.text_may_have_been_sent is False
+    quiet = runner.invoke(app, ["ask", "unique fixture marker", "--home", str(fresh)])
+    assert "NOT A LOCAL ANSWER" not in quiet.output, (
+        "nothing was sent, so warning that something was would be its own false claim"
+    )
+
+
+def test_the_report_path_also_ends_a_part_way_refusal_as_blocked_by_policy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`report` re-implements the model call, so this has to be asserted twice.
+
+    Review found the handler on this path could be deleted with the whole suite still
+    green, which means the behaviour was held in place on one path by a test and on the
+    other by nothing. That is the exact shape of the trap `CLAUDE.md` records about these
+    two paths: anything that must appear in both has to be threaded twice, and a claim
+    about "both paths" backed by one test is a claim about one path.
+    """
+
+    from archiv.contracts import RunStatus
+    from archiv.tasks import run_task
+
+    home = spent_out_after_one_call(tmp_path, monkeypatch)
+    sent = install_billing_opener(monkeypatch)
+
+    task_path = tmp_path / "report-task.yaml"
+    task_path.write_text(
+        json.dumps(
+            {
+                "task": "cross-file-report",
+                "query": "unique fixture marker",
+                "render": False,
+                "model_policy": "configured-local",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_task(task_path, home=home)
+
+    assert len(sent) == 1, "the retry must be refused before it reaches the transport"
+    assert result.status == RunStatus.BLOCKED_BY_POLICY
+    assert any("ceiling" in error for error in result.errors)
+
+    recorded = json.loads((Path(result.evidence_dir) / "cost.json").read_text())
+    assert recorded["outcome"] == "refused-after-spending"
+    assert [attempt["decision"] for attempt in recorded["attempts"]] == ["allowed", "refused"]
