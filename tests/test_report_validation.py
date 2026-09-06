@@ -37,7 +37,15 @@ def test_uncited_report_is_rejected(
     home = tmp_path / "archiv-home"
     prepare_report_archive(ingestion_corpus, home)
     output = tmp_path / "report.docx"
-    generated = generate_report("MARKER", output, home=home, max_sources=3, render=False)
+    generated = generate_report(
+        "MARKER",
+        output,
+        home=home,
+        max_sources=3,
+        render=False,
+        model_identity="disabled",
+        model_provenance="none",
+    )
     manifest_path = Path(generated.manifest_path)
     manifest = ReportManifest.model_validate_json(manifest_path.read_text(encoding="utf-8"))
 

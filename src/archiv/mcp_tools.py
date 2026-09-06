@@ -17,6 +17,7 @@ from archiv.mcp_policy import (
     validate_ingest_source,
     validate_run_id,
 )
+from archiv.model_adapter import describe_unused_model, load_model_config
 from archiv.report_contracts import ReportStatus
 from archiv.reports import generate_report, validate_report
 from archiv.search import read_source_excerpt, search_documents
@@ -149,6 +150,9 @@ def archiv_generate_docx(
         )
         if any(path.exists() for path in sidecars):
             raise FileExistsError("MCP report output or sidecar already exists")
+        # Same as the command-line generator: this tool calls no model.
+        model_identity, model_provenance = describe_unused_model(load_model_config(layout.root))
+
         result = generate_report(
             query,
             output,
@@ -157,6 +161,8 @@ def archiv_generate_docx(
             max_sources=max_sources,
             render=render,
             evidence_dir=output.parent if render else None,
+            model_identity=model_identity,
+            model_provenance=model_provenance,
         )
         if result.status is not ReportStatus.SUCCEEDED or not result.validation.valid:
             raise RuntimeError("generated DOCX failed independent validation")

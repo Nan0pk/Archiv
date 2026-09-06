@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 from archiv.ingestion import ingest_file
+from archiv.model_adapter import describe_unused_model, load_model_config
 from archiv.report_contracts import ReportStatus
 from archiv.reports import generate_report
 from archiv.search import rebuild_search_index
@@ -38,6 +39,8 @@ def main() -> None:
     for filename in FIXTURES:
         ingest_file(corpus / filename, home=home)
     rebuild_search_index(home=home)
+    # This script calls no model, so it records that rather than inheriting a value.
+    model_identity, model_provenance = describe_unused_model(load_model_config(home))
     result = generate_report(
         "MARKER",
         output_dir / "archiv-evidence-report.docx",
@@ -45,6 +48,8 @@ def main() -> None:
         max_sources=len(FIXTURES),
         render=True,
         evidence_dir=output_dir,
+        model_identity=model_identity,
+        model_provenance=model_provenance,
     )
     if result.status is not ReportStatus.SUCCEEDED:
         raise SystemExit(

@@ -13,7 +13,7 @@ from archiv.ask_contracts import AskRunResult
 from archiv.contracts import Citation, RunStatus, SearchResult
 from archiv.evaluation_config import EvaluationNotEnabledError, check_evaluation_opt_in
 from archiv.grounding_contracts import GroundedModelResponse
-from archiv.model_adapter import build_model_adapter, load_model_config
+from archiv.model_adapter import ModelConfig, build_model_adapter, load_model_config
 from archiv.reports.formatting import format_locator
 from archiv.search import read_source_excerpt, retrieve_evidence, validate_citation
 from archiv.storage.layout import ArchivLayout
@@ -100,6 +100,23 @@ GroundedFailure = Literal["schema_violation", "valid_but_unsupported"]
 """The two ways a reply can be unusable, which have different causes and fixes."""
 
 
+class AskEvidenceUnwritableError(RuntimeError):
+    """An ask reached the model, but its own record could not be written.
+
+    This is the honest end of the one path that cannot be recorded: if writing
+    `result.json` is what failed, a handler that writes `result.json` fails too. So it
+    raises, carrying the model policy, because the caller still has to be able to tell
+    the user where the answer would have come from -- and that matters most in exactly
+    this case, since the archive's text has already been sent and there is nothing on
+    disk to say so.
+    """
+
+    def __init__(self, message: str, *, model: ModelConfig, text_may_have_been_sent: bool) -> None:
+        super().__init__(message)
+        self.model = model
+        self.text_may_have_been_sent = text_may_have_been_sent
+
+
 def classify_grounded_response(
     raw_text: str,
     allowed_citations: set[str],
@@ -149,6 +166,29 @@ def parse_and_validate_grounded_response(
     return response, errors
 
 
+def _finalise(
+    evidence_dir: Path, result: AskRunResult, *, text_may_have_been_sent: bool = False
+) -> AskRunResult:
+    """Persist a terminal result, or fail loudly rather than silently.
+
+    Every ending goes through here. Before this existed, the writes after the model call
+    sat outside every guard, so a filesystem failure escaped `run_grounded_ask` with the
+    archive's text already sent, no result on disk, and no warning shown -- because the
+    warning is driven by the returned result. Reproduced with a simulated full disk.
+    """
+
+    try:
+        _write_json(evidence_dir / "result.json", result.model_dump(mode="json"))
+    except OSError as error:
+        raise AskEvidenceUnwritableError(
+            f"the run ended but its record could not be written to {evidence_dir}: "
+            f"{type(error).__name__}: {error}",
+            model=result.model,
+            text_may_have_been_sent=text_may_have_been_sent,
+        ) from error
+    return result
+
+
 def _write_json(path: Path, payload: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
@@ -174,6 +214,10 @@ def run_grounded_ask(
     evidence_dir = layout.runs / "ask" / run_id
     evidence_dir.mkdir(parents=True, exist_ok=False)
 
+    # Tracks whether the archive's text has actually left this machine yet, so a failure
+    # after that point can say so. Every ending reads it; exactly one place sets it.
+    text_may_have_been_sent = False
+
     if model_config.adapter == "disabled":
         result = AskRunResult(
             run_id=run_id,
@@ -183,8 +227,7 @@ def run_grounded_ask(
             model=model_config,
             errors=["model use is disabled; Archiv will not select a hidden fallback"],
         )
-        _write_json(evidence_dir / "result.json", result.model_dump(mode="json"))
-        return result
+        return _finalise(evidence_dir, result, text_may_have_been_sent=text_may_have_been_sent)
 
     if model_config.adapter == "remote-evaluation":
         # Checked here as well as inside the adapter, and before anything is retrieved
@@ -203,14 +246,28 @@ def run_grounded_ask(
                 model=model_config,
                 errors=[str(error)],
             )
-            _write_json(evidence_dir / "result.json", result.model_dump(mode="json"))
-            return result
+            return _finalise(evidence_dir, result, text_may_have_been_sent=text_may_have_been_sent)
 
-    retrieval = retrieve_evidence(query, home=layout.root, evidence_limit=max_sources)
-    _write_json(
-        evidence_dir / "retrieval.json",
-        retrieval.diagnostics.model_dump(mode="json"),
-    )
+    try:
+        retrieval = retrieve_evidence(query, home=layout.root, evidence_limit=max_sources)
+        _write_json(
+            evidence_dir / "retrieval.json",
+            retrieval.diagnostics.model_dump(mode="json"),
+        )
+    except Exception as error:
+        # Nothing has been sent at this point, so this is not a disclosure -- but an
+        # escape here used to leave a run directory with nothing in it, and `runs/` is
+        # terminal append-only evidence. A run that happened leaves a record of having
+        # happened.
+        result = AskRunResult(
+            run_id=run_id,
+            status=RunStatus.FAILED,
+            query=query,
+            evidence_dir=str(evidence_dir),
+            model=model_config,
+            errors=[f"evidence retrieval failed: {type(error).__name__}: {error}"],
+        )
+        return _finalise(evidence_dir, result, text_may_have_been_sent=text_may_have_been_sent)
 
     citations_map: dict[str, SearchResult] = {}
     retrieved_citations: list[Citation] = []
@@ -245,8 +302,7 @@ def run_grounded_ask(
             retrieval_diagnostics=retrieval.diagnostics,
             errors=errors,
         )
-        _write_json(evidence_dir / "result.json", result.model_dump(mode="json"))
-        return result
+        return _finalise(evidence_dir, result, text_may_have_been_sent=text_may_have_been_sent)
 
     if not citations_map:
         grounded_resp = GroundedModelResponse(
@@ -262,8 +318,7 @@ def run_grounded_ask(
             retrieval_diagnostics=retrieval.diagnostics,
             grounded_response=grounded_resp.model_dump(mode="json"),
         )
-        _write_json(evidence_dir / "result.json", result.model_dump(mode="json"))
-        return result
+        return _finalise(evidence_dir, result, text_may_have_been_sent=text_may_have_been_sent)
 
     prompt = build_grounding_prompt(query, citations_map)
     _write_json(
@@ -285,6 +340,10 @@ def run_grounded_ask(
         # otherwise escape with no run result at all, which is worse than an unstamped
         # one: there would be nothing on disk saying what was attempted.
         adapter = build_model_adapter(model_config, layout.root)
+        # Set before the call, not after. Once this line is passed there is no way to be
+        # certain the request did not reach the provider, and over-reporting "the text
+        # may have left this machine" is the only safe direction to be wrong in.
+        text_may_have_been_sent = True
         structured = request_grounded_response(adapter, prompt, set(citations_map.keys()))
         _write_json(
             evidence_dir / "structured_output.json",
@@ -306,13 +365,19 @@ def run_grounded_ask(
             retrieval_diagnostics=retrieval.diagnostics,
             errors=[f"model request failed: {type(error).__name__}: {error}"],
         )
-        _write_json(evidence_dir / "result.json", result.model_dump(mode="json"))
-        return result
-
-    (evidence_dir / "model_response.txt").write_text(raw_response, encoding="utf-8")
+        return _finalise(evidence_dir, result, text_may_have_been_sent=text_may_have_been_sent)
 
     parsed_response = structured.response
     parse_errors = list(structured.errors)
+
+    try:
+        (evidence_dir / "model_response.txt").write_text(raw_response, encoding="utf-8")
+    except OSError as error:
+        # The transcript is useful, but the result is the record. Losing the transcript
+        # is worth reporting inside the result; losing the whole run over it is not.
+        parse_errors.append(
+            f"model response transcript could not be written: {type(error).__name__}: {error}"
+        )
 
     if parse_errors or parsed_response is None:
         result = AskRunResult(
@@ -326,8 +391,7 @@ def run_grounded_ask(
             raw_model_response=raw_response,
             errors=parse_errors or ["failed to parse model response"],
         )
-        _write_json(evidence_dir / "result.json", result.model_dump(mode="json"))
-        return result
+        return _finalise(evidence_dir, result, text_may_have_been_sent=text_may_have_been_sent)
 
     result = AskRunResult(
         run_id=run_id,
@@ -340,5 +404,4 @@ def run_grounded_ask(
         raw_model_response=raw_response,
         grounded_response=parsed_response.model_dump(mode="json"),
     )
-    _write_json(evidence_dir / "result.json", result.model_dump(mode="json"))
-    return result
+    return _finalise(evidence_dir, result, text_may_have_been_sent=text_may_have_been_sent)

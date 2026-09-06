@@ -24,7 +24,7 @@ from archiv.contracts import (
     SearchIndexBuild,
 )
 from archiv.evaluation_config import ENV_OVERRIDE as EVALUATION_ENV_OVERRIDE
-from archiv.grounding import run_grounded_ask
+from archiv.grounding import AskEvidenceUnwritableError, run_grounded_ask
 from archiv.ingestion import (
     PreparedCandidate,
     commit_candidate,
@@ -566,6 +566,22 @@ def register_user_commands(app: typer.Typer) -> tuple[Callable[..., None], ...]:
 
         try:
             run_result = run_grounded_ask(query, home=home, max_sources=max_sources)
+        except AskEvidenceUnwritableError as error:
+            # The one failure with no record to drive the warning, so the warning is
+            # driven from the error instead. This is the case where saying nothing would
+            # be worst: the archive's text has already been sent and nothing on disk
+            # says so.
+            if error.text_may_have_been_sent:
+                _echo_provenance_banner(error.model, home, to_stderr=True)
+            typer.echo(f"ask failed: {error}", err=True)
+            if error.text_may_have_been_sent:
+                typer.echo(
+                    "The request had already been started when this failed, so the "
+                    "sources may have been sent. There is no run record, so nothing on "
+                    "disk states either way.",
+                    err=True,
+                )
+            raise typer.Exit(code=1) from error
         except (OSError, RuntimeError, ValueError) as error:
             typer.echo(f"ask failed: {type(error).__name__}: {error}", err=True)
             raise typer.Exit(code=1) from error

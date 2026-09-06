@@ -354,6 +354,22 @@
       }
     },
     {
+      "id": "S14A",
+      "phase": "B",
+      "title": "Type-check the scripts that CI actually runs",
+      "doc": "docs/plan/steps/S14A.md",
+      "detail": "full",
+      "depends_on": [
+        "S14"
+      ],
+      "acceptance": {
+        "kind": "pytest",
+        "targets": [
+          "tests/test_github_governance.py::test_every_script_ci_runs_is_type_checked"
+        ]
+      }
+    },
+    {
       "id": "S15",
       "phase": "C",
       "title": "DOCX: tables, headers, footers, footnotes, comments, hyperlinks, headings",

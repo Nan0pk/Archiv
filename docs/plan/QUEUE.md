@@ -42,6 +42,7 @@ Every name, score and confidence value shown to a user is backed by a measuremen
 | **S12** | Graph person becomes candidate_mention; remove hardcoded confidences | `S11` | [**stub**](steps/S12.md) |
 | **S13** | Index staleness: refresh on add, report N of M, incremental image index | `S00` | [**stub**](steps/S13.md) |
 | **S14** | Doctor probes, README command coverage test, and status-line honesty | `S13` | [**stub**](steps/S14.md) |
+| **S14A** | Type-check the scripts that CI actually runs | `S14` | [full](steps/S14A.md) |
 ---
 
 ## Phase C — Recover the content being silently dropped
