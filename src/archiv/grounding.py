@@ -11,6 +11,7 @@ from uuid import uuid4
 
 from archiv.ask_contracts import AskRunResult
 from archiv.contracts import Citation, RunStatus, SearchResult
+from archiv.cost_control import check_spend_allowance
 from archiv.evaluation_config import EvaluationNotEnabledError, check_evaluation_opt_in
 from archiv.grounding_contracts import GroundedModelResponse
 from archiv.model_adapter import ModelConfig, build_model_adapter, load_model_config
@@ -339,6 +340,14 @@ def run_grounded_ask(
         # refuses to be constructed, or one whose configuration is rejected -- would
         # otherwise escape with no run result at all, which is worse than an unstamped
         # one: there would be nothing on disk saying what was attempted.
+        if model_config.provenance == "remote-evaluation":
+            # Written before the call, so a refused run still leaves the numbers that
+            # caused the refusal, and an allowed one records what it expected to cost.
+            _write_json(
+                evidence_dir / "cost.json",
+                check_spend_allowance(prompt, layout.root).model_dump(mode="json"),
+            )
+
         adapter = build_model_adapter(model_config, layout.root)
         # Set before the call, not after. Once this line is passed there is no way to be
         # certain the request did not reach the provider, and over-reporting "the text

@@ -89,3 +89,28 @@ output, the DOCX source-overview table and the source appendix, with no further 
 This is the cheapest way to attribute derived content — and the easiest way to leak
 something you did not mean to show. Both directions are deliberate; check which one you
 are in.
+
+## `tiktoken.get_encoding` downloads at runtime, which this project forbids
+
+Counting tokens for a paid request needs the provider's own tokenizer. The obvious call
+is `tiktoken.get_encoding("o200k_base")`, and it **fetches the encoding over the network**
+the first time it is asked for one — from `openaipublic.blob.core.windows.net`.
+
+That breaks the hard rule that no processor may download anything at runtime, and it also
+simply fails in the standard remote container, where the proxy refuses the host:
+
+```
+ProxyError: Unable to connect to proxy ... Tunnel connection failed: 403 Forbidden
+```
+
+So `src/archiv/cost_control.py` never calls `get_encoding`. It loads an encoding only
+from a file already on disk whose SHA-256 is recorded in `config/spend.json`, using
+`tiktoken.load.load_tiktoken_bpe` with `expected_hash`, and treats every failure as "no
+tokenizer" rather than as a reason to fetch one. That is the same shape as installed OCR
+languages: a pinned artefact or a recorded skip.
+
+The consequence, which is deliberate: with no pinned encoding, a prompt cannot be counted,
+so no cost is projected before a call. The ceiling still holds — it is enforced against
+recorded spend and a hard cap on reply length — but a single oversized call cannot be
+refused for its size before it is made. `archiv model spend status` says which of those
+two situations an archive is in.

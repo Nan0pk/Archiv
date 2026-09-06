@@ -23,6 +23,7 @@ from archiv.contracts import (
     RunStatus,
     SearchIndexBuild,
 )
+from archiv.cost_control import load_ledger, load_spend_policy
 from archiv.evaluation_config import ENV_OVERRIDE as EVALUATION_ENV_OVERRIDE
 from archiv.grounding import AskEvidenceUnwritableError, run_grounded_ask
 from archiv.ingestion import (
@@ -242,6 +243,15 @@ def _echo_provenance_banner(
         "the text of any source used to answer is sent there."
     )
     say(f"Turn it off with:  {disable}")
+    policy = load_spend_policy(home)
+    if policy is None:
+        say("Spending: no policy set, so a paid request will be refused.")
+    else:
+        say(
+            f"Spending: ${load_ledger(home).spent_usd:.4f} of "
+            f"${policy.ceiling_usd:.2f} used so far; each reply capped at "
+            f"{policy.max_output_tokens} tokens."
+        )
     if os.environ.get(EVALUATION_ENV_OVERRIDE):
         say(
             f"Note: {EVALUATION_ENV_OVERRIDE} is set in this environment, which turns "
