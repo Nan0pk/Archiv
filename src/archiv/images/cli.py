@@ -83,6 +83,17 @@ def find_similar_command(
         return
 
     if not results:
+        # Two different situations, and saying the wrong one is a false statement about
+        # the archive. An unbuilt index also returns nothing, and the earlier wording
+        # reported that as "nothing looks like this" -- for an image that is in the
+        # archive and matches itself exactly.
+        if not image_index_path(ArchivLayout.resolve(home)).is_file():
+            console.print(
+                "[yellow]This archive has no image index yet, so nothing can be "
+                "compared.[/yellow] Build one with [bold]archiv images "
+                "rebuild-index[/bold]."
+            )
+            return
         console.print(
             f"[yellow]Nothing in this archive looks like[/yellow] {image.name} "
             f"[yellow]at a similarity of {min_score} or above.[/yellow]"
@@ -111,9 +122,11 @@ def find_similar_command(
     console.print(table)
     console.print(
         "[dim]Similarity is a raw cosine over colour and edge features, not a calibrated "
-        "confidence. It separates duplicates from unrelated images when the images differ "
-        "in colour, and does not separate them at all on light pages of dark text -- "
-        "two unrelated scanned documents score above 0.999. See docs/known-issues.md.[/dim]"
+        "confidence. What decides whether it can be trusted is how close two images' "
+        "overall colour balance is: the closer it is, the less this can tell a duplicate "
+        "from an unrelated picture, and on light pages of dark text it cannot tell them "
+        "apart at all. Two unrelated photographs sharing a colour character can score "
+        "above 0.99. See docs/known-issues.md.[/dim]"
     )
 
 
@@ -148,10 +161,23 @@ def duplicates_command(
         )
         for member in group.members:
             m_prefix = member.object_sha256[:12]
-            sim_str = f"{member.similarity_to_lead:.4f}"
+            # Two decimals, for the same reason as the ranking surface: four implied a
+            # calibrated confidence that has never existed. This surface needs it more,
+            # not less -- a ranked row invites judgement, a duplicate group invites a
+            # deletion.
+            sim_str = f"{member.similarity_to_lead:.2f}"
             console.print(
                 f"  - [green]{member.source_name}[/green] ({m_prefix}) similarity: {sim_str}"
             )
+
+    console.print(
+        "\n[dim]Check these before deleting anything. Grouping is a raw cosine over "
+        "colour and edge features, and the closer two images' overall colour balance is, "
+        "the less it can tell a duplicate from an unrelated picture. On light pages of "
+        "dark text it cannot tell them apart at all, so unrelated scanned documents are "
+        "reported as duplicates of each other. This is a known defect with its own queue "
+        "step; see docs/known-issues.md.[/dim]"
+    )
 
 
 @images_app.command("status")

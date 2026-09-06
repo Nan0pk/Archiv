@@ -61,8 +61,11 @@ These are the `Fast checks / quality` required gate (`.github/workflows/fast-che
 Any change under `src/**` additionally triggers `office-validation`, `field-trial` and
 `offline-alpha`, so a source change is never as small as it looks.
 
-**Known-good baseline** on `d9a9b8d`: 384 passed, 2 failed (both environmental — see
-`TRAPS.md`), 2 skipped; ruff clean; pyright clean; 82% coverage.
+**Known-good baseline** on `ec96869`, run as `PATH="$PWD/.venv/bin:$PATH" pytest -q`:
+490 passed, **1** failed (the one environmental case — a tracked file mentioning the
+container's home directory), 2 skipped; ruff clean; pyright clean. Keep this current: a
+stale baseline is how a real failure gets waved through, which is `TRAPS.md`'s own
+argument.
 
 ---
 

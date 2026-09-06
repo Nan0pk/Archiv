@@ -57,6 +57,31 @@ def colourful(seed: int, size: tuple[int, int] = (320, 320)) -> Image.Image:
     return img
 
 
+def outdoor_scene(seed: int) -> Image.Image:
+    """Plainly different pictures that share a colour character: sky over ground.
+
+    The middle ground, and the class the first version of this test left out. Its two
+    classes were at opposite extremes -- three maximally distinct palettes, and near-white
+    pages of dark text -- so the measurement flattered the floor and the limitation was
+    written in terms of document scans. Real photograph archives look like this instead.
+    """
+
+    img = Image.new("RGB", (320, 320), (120, 170, 225))
+    draw = ImageDraw.Draw(img)
+    draw.rectangle([0, 200, 320, 320], fill=(70, 140, 60))
+    if seed % 3 == 0:
+        draw.rectangle([90, 120, 230, 210], fill=(190, 170, 150))
+        draw.polygon([(80, 120), (240, 120), (160, 60)], fill=(150, 70, 60))
+    elif seed % 3 == 1:
+        draw.rectangle([150, 140, 170, 210], fill=(110, 80, 50))
+        draw.ellipse([100, 70, 220, 170], fill=(40, 120, 50))
+    else:
+        for x in (110, 160, 210):
+            draw.ellipse([x - 12, 130, x + 12, 154], fill=(225, 195, 170))
+            draw.rectangle([x - 14, 154, x + 14, 210], fill=(60, 70, 130))
+    return img
+
+
 def document_page(seed: int) -> Image.Image:
     """A light page of dark text, which is what a scanned document looks like."""
 
@@ -226,30 +251,69 @@ def test_results_below_the_match_floor_return_nothing(tmp_path: Path) -> None:
 
 
 def test_the_match_floor_comes_from_a_measurement_not_a_guess(tmp_path: Path) -> None:
-    """The floor has to sit inside a gap somebody measured, or it is a number nobody checked.
+    """The floor must keep every true match and admit no unrelated pair it can exclude.
 
-    This measures the gap here, on generated fixtures, and asserts the shipped floor falls
-    inside it. If the embedder changes and the gap moves, this fails -- which is the point:
-    a floor is only defensible against the separation it was chosen for.
+    Measured across three content classes, not one. An earlier version of this test used
+    only the two extremes -- maximally distinct palettes and near-white text pages -- and
+    a floor of 0.99 sat comfortably inside the gap it found. Review generated the middle
+    ground and that floor admitted a quarter of the unrelated pairs: a photograph of a
+    tree came back as a match for a photograph of three people. The fixtures had been
+    flattering, so the floor was wrong and so was the sentence written under it.
+
+    What the numbers say now, and what the shipped floor is checked against:
+
+    | Content | Lowest true match | Highest unrelated |
+    |---|---|---|
+    | Maximally distinct palettes | 0.9994 | 0.9000 |
+    | Pictures sharing a colour character | 1.0000 | 0.9903 |
+    | Light pages of dark text | 1.0000 | 1.0000 |
     """
 
-    groups = {
-        f"g{seed}": filed_four_ways(colourful(seed), tmp_path / "corpus", f"g{seed}")
-        for seed in range(3)
+    classes = {
+        "distinct palettes": {
+            f"p{seed}": filed_four_ways(colourful(seed), tmp_path / "flat", f"p{seed}")
+            for seed in range(3)
+        },
+        "shared colour character": {
+            f"o{seed}": filed_four_ways(outdoor_scene(seed), tmp_path / "outdoor", f"o{seed}")
+            for seed in range(3)
+        },
     }
-    lowest_true_match, highest_unrelated = separation(groups)
 
-    assert highest_unrelated < MATCH_FLOOR < lowest_true_match, (
-        f"the shipped floor {MATCH_FLOOR} is not inside the measured gap "
-        f"({highest_unrelated:.4f} to {lowest_true_match:.4f})"
-    )
-    # And the gap is wide enough for a floor to mean something at all.
-    assert lowest_true_match - highest_unrelated > 0.05
+    for label, groups in classes.items():
+        lowest_true_match, highest_unrelated = separation(groups)
+        # Every true match survives the floor. A floor that loses duplicates is worse
+        # than none: the whole point is finding them.
+        assert lowest_true_match >= MATCH_FLOOR, (
+            f"{label}: the floor {MATCH_FLOOR} excludes a genuine duplicate at "
+            f"{lowest_true_match:.4f}"
+        )
+        # And no unrelated pair gets through, in every class where the two populations
+        # are separable at all.
+        assert highest_unrelated < MATCH_FLOOR, (
+            f"{label}: the floor {MATCH_FLOOR} admits an unrelated pair at {highest_unrelated:.4f}"
+        )
 
-    # The constant carries the measurement with it, so a reader is not asked to trust it.
+    # The floor sits between the two populations of the tightest separable class rather
+    # than merely above the easiest one.
+    tightest = min(separation(groups)[0] - separation(groups)[1] for groups in classes.values())
+    assert tightest > 0, "no class separates at all, so no floor is defensible"
+
+    # The figures written into the constant are the figures just measured, not numbers
+    # that were true once. A recorded measurement that can drift while the test passes
+    # is a claim nobody is checking.
     source = (SOURCE_ROOT / "images" / "search.py").read_text(encoding="utf-8")
     assert "Measured, not chosen" in source
-    assert "0.9994" in source and "0.9000" in source
+    for groups in classes.values():
+        lowest_true_match, highest_unrelated = separation(groups)
+        assert f"{lowest_true_match:.4f}" in source, (
+            f"{lowest_true_match:.4f} was measured but is not the figure recorded in "
+            "search.py; re-record it rather than leaving a stale number"
+        )
+        assert f"{highest_unrelated:.4f}" in source, (
+            f"{highest_unrelated:.4f} was measured but is not the figure recorded in "
+            "search.py; re-record it rather than leaving a stale number"
+        )
 
 
 def test_low_colour_variance_pages_are_not_discriminated(tmp_path: Path) -> None:

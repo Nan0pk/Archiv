@@ -1,4 +1,4 @@
-"""Image embeddings, semantic image search, and near-duplicate detection."""
+"""Perceptual image embeddings, an index over them, and near-duplicate detection."""
 
 from archiv.images.contracts import (
     ImageIndexBuildResult,

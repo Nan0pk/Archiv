@@ -26,23 +26,38 @@ def _cosine_similarity(v1: list[float], v2: list[float]) -> float:
     return max(-1.0, min(1.0, dot))
 
 
-MATCH_FLOOR = 0.99
+MATCH_FLOOR = 0.995
 """Below this similarity, nothing is returned. Measured, not chosen.
 
-Measurement, recorded in `docs/plan/steps/S10.md` and asserted in
-`tests/test_image_similarity.py`: three groups of generated images, each group being one
-image filed four ways -- the original, re-encoded as JPEG at quality 72, resized to half,
-and brightened by 12%. On colour-diverse images, no true match fell below 0.9994 and no
-unrelated pair rose above 0.9000. This floor sits inside that gap.
+Measured across three classes of content, because the class matters more than anything
+else here. Each measurement takes three groups of generated images, each group being one
+image filed four ways: the original, re-encoded as JPEG at quality 72, resized to half,
+and brightened by 12%. Within a group is a true duplicate pair; across groups is
+unrelated.
 
-What the floor does **not** do, and cannot: on light pages of dark text every pair lands
-between 0.9993 and 1.0000, matching or not, so no floor separates them. The floor stops a
-weak match being presented as a match. It does nothing about a corpus where the scores
-carry no information, and `archiv images find-similar` on scanned documents is exactly
-that corpus.
+| Content | Lowest true match | Highest unrelated |
+|---|---|---|
+| Maximally distinct palettes | 0.9994 | 0.9000 |
+| Pictures sharing a colour character | 1.0000 | 0.9903 |
+| Light pages of dark text | 1.0000 | 1.0000 |
 
-The sample is three groups of four generated images: enough to place a floor inside a gap
-of about 0.10, not enough to justify a third decimal place.
+This floor is the midpoint of the gap in the tightest class that separates at all. It
+keeps every true duplicate in all three, and admits no unrelated pair in the two where
+the populations can be told apart. It was 0.99 until review generated the middle class
+and found that value let a quarter of unrelated pictures through -- a photograph of a
+tree came back as a match for a photograph of three people.
+
+**What no floor can do.** The deciding property is how close two images' overall colour
+statistics are, and when they are close enough this embedding cannot tell a duplicate
+from an unrelated image at any threshold. Light pages of dark text are the extreme case,
+where every pair lands at 1.0000 whether it matches or not, but the effect is a continuum
+and not a property of documents: any two pictures with nearly the same colour balance
+are affected. The floor stops a weak match being shown as a match. It cannot promise that
+what passes it is a duplicate.
+
+The sample is three groups of four generated images per class. Enough to place a floor
+between two populations and to show that a third class moves them; not enough for a fourth
+decimal place, and not real photographs or real scans at all.
 """
 
 

@@ -236,7 +236,7 @@ future row added to that table needs the same treatment — a person or a review
 the page and checking which column was taken — and the row's `backend` field exists to
 make the answer explicit rather than assumed.
 
-## Image similarity does not work on scanned documents
+## Image similarity degrades as two images' colour balance converges
 
 `archiv images find-similar` finds near-duplicate images by comparing colour and edge
 statistics. Measured on generated fixtures — one image filed four ways, against unrelated
@@ -244,14 +244,21 @@ images:
 
 | Content | Lowest true match | Highest unrelated | Gap |
 |---|---|---|---|
-| Images that differ in colour | 0.9994 | 0.9000 | 0.0994 |
+| Maximally distinct palettes | 0.9994 | 0.9000 | 0.0994 |
+| Pictures sharing a colour character | 1.0000 | 0.9903 | 0.0097 |
 | Light pages of dark text | 1.0000 | 1.0000 | 0.0000 |
 
-On colour-diverse images it works and the shipped floor of 0.99 sits inside the gap. On
-document scans there is no gap at all: the same page twice and two entirely unrelated
-invoices both score above 0.999, because the 128-dimensional vector is dominated by global
-colour statistics and two light pages of dark text have nearly identical ones whatever
-they say.
+The middle row is the important one, and the first version of this entry did not have it.
+Measuring only the two extremes made the gap look like a property of documents versus
+photographs, and a floor of 0.99 looked safe. It is not: with pictures that share a colour
+character — three different outdoor scenes, sky over ground — 0.99 admits a quarter of the
+unrelated pairs, and a photograph of a tree comes back as a match for a photograph of
+three people. The floor is now 0.995, the midpoint of the gap in the tightest class that
+separates at all.
+
+What decides it is how close two images' overall colour balance is, on a continuum. Light
+pages of dark text are the extreme, where there is no gap at all and no threshold can
+work. Documents are not a special case; they are the end of the scale.
 
 So the case usually given for wanting this feature — the same scan filed in four folders —
 is the case it cannot serve. The terminal output says so under every result table. The
@@ -281,3 +288,16 @@ span about 0.23, which is a clean separation to test against.
 
 Not fixed in step S10, whose declared scope is the search surface, and filed as its own
 step rather than widening that change. It is a live defect and should be taken next.
+
+## `docs/capability-expansion-plan.md` still reads as though its milestones were verified
+
+That document carries "Status: Implemented … verified with comprehensive acceptance tests"
+against milestones whose measurements were never produced. That overclaiming is the reason
+the current work queue exists — `CLAUDE.md` names it under **Evidence** — but no queue step
+covers correcting the document itself.
+
+One specific claim in it was corrected during step S10, because that step made it flatly
+false: it said "You can find pictures by description", and the surface answering those
+queries has been deleted. The rest of the document has not been audited against what the
+code does, and until it has, it should be read as a record of what was intended rather
+than of what was delivered.

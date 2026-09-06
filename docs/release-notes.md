@@ -21,9 +21,21 @@
   - Archive recursion (ZIP, TAR) unpacking members as first-class content-addressed objects with `containment` hierarchy tracking.
   - PDF layout-aware reading order, table extraction into `NormalizedTable`, and embedded attachment ingestion.
   - OCR text-density heuristics to recover watermarked and scanned documents.
-  - Image embeddings, semantic search, and near-duplicate detection in `indexes/images.sqlite3`.
+  - Image embeddings and near-duplicate detection in `indexes/images.sqlite3`. There is no
+    semantic search over images: the text-query surface that claimed it was a nineteen-entry
+    colour lookup table and has been removed — see the breaking change below.
   - Privacy-first (GDPR Art. 9 / BIPA) opt-in face clustering, evidence-cited candidate name attribution (`archiv who`, `archiv faces`), and first-class erasure.
   - Rebuildable evidence-backed entity graph (`indexes/graph.sqlite3`, `archiv graph`) enabling multi-hop cross-corpus queries and 360° entity profiles.
+
+### Breaking changes
+
+- **`archiv images search <words>` is gone.** It has become `archiv images find-similar
+  --image PATH`, which takes a path to an image and finds images that look like it. The
+  removed command searched by text description, and the thing answering those queries was
+  a nineteen-entry colour lookup table with a hash-scatter fallback, so every string
+  produced confident-looking ranked results: in a corpus with no people in it, "a photo of
+  a person smiling" ranked a document first. A script calling the old command will now
+  fail rather than return nonsense. See `docs/plan/steps/S10.md` for the measurements.
 
 ### Reliability
 

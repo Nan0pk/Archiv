@@ -143,6 +143,26 @@ filename name guessing, and every confidence number that was never measured.
 **Why.** The capabilities are not the problem; the labels and the score columns are. A
 ranked table with four-decimal scores implies a calibrated similarity that does not exist.
 
+**Amended 2026-09-06, while doing step S10.** The sentence above is wrong about one of the
+two capabilities it keeps. For near-duplicate detection the capability *is* partly the
+problem, not only its labels. Measured on generated images, each filed four ways:
+
+| Content | Lowest true match | Highest unrelated |
+|---|---|---|
+| Maximally distinct palettes | 0.9994 | 0.9000 |
+| Pictures sharing a colour character | 1.0000 | 0.9903 |
+| Light pages of dark text | 1.0000 | 1.0000 |
+
+The deciding property is how close two images' overall colour balance is. Where it is
+close, no threshold separates a duplicate from an unrelated image, and on light pages of
+dark text there is no separation at all — so `archiv images duplicates` reports unrelated
+scanned documents as duplicates of each other, which is filed as step S10A.
+
+The decision to keep it still stands: it works on pictures whose colour character differs,
+and a measured floor of 0.995 holds there. What changes is that "the capabilities are not
+the problem" cannot be said of this one without that qualification. Recorded here because
+this file is what a later session reads, not the step document.
+
 ---
 
 ## 7. Plan progress is derived, never declared

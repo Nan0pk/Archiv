@@ -1,5 +1,9 @@
 # pyright: reportMissingTypeStubs=false, reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false
-"""Pluggable image and text embedding generation for semantic search and duplicate detection."""
+"""Perceptual image embedding, for finding near-duplicates of an image.
+
+There is no text embedding here and no semantic search. What used to provide them was a
+nineteen-entry colour lookup table with a hash-scatter fallback; step S10 deleted it.
+"""
 
 from __future__ import annotations
 
@@ -28,7 +32,7 @@ def normalize_vector(vec: list[float]) -> list[float]:
 
 
 class ImageEmbedder(Protocol):
-    """Protocol for multimodal image and text embedding providers."""
+    """What this package needs from an embedder: a vector for an image, and nothing else."""
 
     @property
     def model_name(self) -> str: ...

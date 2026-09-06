@@ -69,7 +69,7 @@ Measured on `d9a9b8d` in a clean 3.12 venv:
 | `ruff format --check .` | 256 files already formatted |
 | `ruff check .` | All checks passed |
 | `pyright --pythonpath .venv/bin/python` | 0 errors, 174 files |
-| `pytest -q` | 384 passed, 2 failed (both above), 2 skipped |
+| `pytest -q` | 490 passed, 1 failed, 2 skipped on `ec96869` with `.venv/bin` on `PATH`; without it, 3 failed |
 | line coverage | 82% (9,545 statements) |
 
 If your numbers differ materially from these, something you did caused it.
