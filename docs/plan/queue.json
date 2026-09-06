@@ -305,7 +305,7 @@
       "phase": "B",
       "title": "Rename image search to find-similar and delete the text embedder",
       "doc": "docs/plan/steps/S10.md",
-      "detail": "stub",
+      "detail": "full",
       "depends_on": [
         "S00"
       ],
@@ -314,7 +314,9 @@
         "targets": [
           "tests/test_image_similarity.py::test_no_text_query_surface_remains",
           "tests/test_image_similarity.py::test_image_to_image_similarity_still_works",
-          "tests/test_image_similarity.py::test_results_below_the_match_floor_return_nothing"
+          "tests/test_image_similarity.py::test_results_below_the_match_floor_return_nothing",
+          "tests/test_image_similarity.py::test_the_match_floor_comes_from_a_measurement_not_a_guess",
+          "tests/test_image_similarity.py::test_low_colour_variance_pages_are_not_discriminated"
         ]
       }
     },
