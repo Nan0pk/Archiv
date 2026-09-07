@@ -323,18 +323,16 @@
     {
       "id": "S10A",
       "phase": "B",
-      "title": "Stop reporting unrelated documents as duplicates",
+      "title": "Decide what the image duplicate feature should be",
       "doc": "docs/plan/steps/S10A.md",
       "detail": "full",
       "depends_on": [
         "S10"
       ],
       "acceptance": {
-        "kind": "pytest",
+        "kind": "artifact",
         "targets": [
-          "tests/test_image_similarity.py::test_unrelated_document_pages_are_not_reported_as_duplicates",
-          "tests/test_image_similarity.py::test_genuine_duplicates_are_still_grouped",
-          "tests/test_image_similarity.py::test_the_discrimination_guard_is_measured_not_chosen"
+          "docs/plan/decisions/S10A-image-similarity-method.md"
         ]
       }
     },

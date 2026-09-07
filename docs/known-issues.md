@@ -281,13 +281,34 @@ containing all three**, with similarities of 0.9999 to the lead.
 A person acting on that output would delete two unrelated documents.
 
 Raising the threshold does not fix it: unrelated pages reach 1.0000, so there is no value
-that separates them. What would work is refusing to report a group when the similarities
-across the whole candidate set are bunched so tightly that the ranking carries no
-information — measured here, document pages span about 0.0007 while colour-diverse images
-span about 0.23, which is a clean separation to test against.
+that separates them.
 
-Not fixed in step S10, whose declared scope is the search surface, and filed as its own
-step rather than widening that change. It is a live defect and should be taken next.
+**A proposed fix was withdrawn, and there is no known fix yet.** This entry used to say
+that refusing to report groups when the similarities across a corpus are bunched too
+tightly would work. It does not. A corpus that is entirely genuine copies — which is
+exactly the case the feature exists for — bunches just as tightly as one the scorer cannot
+read. Measured on generated corpora, each image filed four ways, spread being the highest
+pairwise similarity minus the lowest:
+
+| Corpus | Images | Pairs | Spread | Grouping them is |
+|---|---:|---:|---:|---|
+| 5 different document pages | 20 | 190 | 0.0002 | wrong |
+| 1 document page, 16 filings | 16 | 120 | 0.0000 | right |
+| 1 outdoor scene, 16 filings | 16 | 120 | 0.0000 | right |
+| 1 colourful image, 16 filings | 16 | 120 | 0.0006 | right |
+| 5 generated outdoor images (3 distinct scenes) | 20 | 190 | 0.0140 | wrong |
+| 6 generated colourful images (3 distinct palettes) | 24 | 276 | 0.4483 | wrong |
+
+A cut-off of 0.0004 rejects the unrelated documents at 0.0002 and admits the colourful
+copies at 0.0006, but also rejects genuine document and outdoor copies at 0.0000.
+Low spread therefore does not establish that a corpus contains unrelated images.
+Colour and edge statistics cannot reliably establish that two documents are duplicates.
+
+Not fixed in step S10, whose declared scope is the search surface. What to do instead is
+an open decision recorded at `docs/plan/steps/S10A.md` — remove the feature, refuse where
+the method is not known to work, or use a different method per job. Until that is settled
+this defect is live, and the terminal output carries a warning to check before deleting
+anything.
 
 ## `docs/capability-expansion-plan.md` still reads as though its milestones were verified
 

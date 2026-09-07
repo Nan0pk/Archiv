@@ -61,11 +61,15 @@ These are the `Fast checks / quality` required gate (`.github/workflows/fast-che
 Any change under `src/**` additionally triggers `office-validation`, `field-trial` and
 `offline-alpha`, so a source change is never as small as it looks.
 
-**Known-good baseline** on `ec96869`, run as `PATH="$PWD/.venv/bin:$PATH" pytest -q`:
-490 passed, **1** failed (the one environmental case — a tracked file mentioning the
-container's home directory), 2 skipped; ruff clean; pyright clean. Keep this current: a
-stale baseline is how a real failure gets waved through, which is `TRAPS.md`'s own
-argument.
+**Known-good baseline** measured on `1edeb92`, the head of
+[#139](https://github.com/Nan0pk/Archiv/pull/139), run as
+`PATH="$PWD/.venv/bin:$PATH" pytest -q`: **491 passed, 0 failed**, 2 skipped; ruff clean;
+pyright clean. There is no expected failure any more — the one that was called
+environmental was a real leak this file's own test was catching, and it is fixed. Keep
+this current, and treat any failure as real: a tolerated red test is how the next one gets
+ignored. Name the commit when you update it. The baseline this replaced named `ec96869`,
+which is not reachable in this repository, so nobody could tell whether it had gone
+stale.
 
 ---
 
@@ -171,12 +175,9 @@ project is worse than one working from none, because it is confident.
 **What it must do.**
 
 - Run the checks itself rather than trusting the author's report of them, and report the
-  actual output. How many failures are environmental depends on how the suite was
-  invoked, so run it as `PATH="$PWD/.venv/bin:$PATH" pytest -q`. That way exactly **one**
-  failure is environmental: a tracked file mentioning the container's home directory.
-  Anything else is real. Run plainly, without that `PATH`, two more fail for reasons that
-  are also environmental but easy to mistake for a licence to dismiss a third — see
-  `TRAPS.md`.
+  actual output. Run the suite as `PATH="$PWD/.venv/bin:$PATH" pytest -q`.
+  There are no expected failures. Investigate every failure; report optional-dependency
+  skips separately and name what was unavailable. See `TRAPS.md` for setup problems.
 - Check the pull request text against the code. Overclaiming is the specific failure this
   queue exists to prevent, so a description that says more than the code does is itself a
   finding, not a wording nit.
