@@ -175,12 +175,9 @@ project is worse than one working from none, because it is confident.
 **What it must do.**
 
 - Run the checks itself rather than trusting the author's report of them, and report the
-  actual output. How many failures are environmental depends on how the suite was
-  invoked, so run it as `PATH="$PWD/.venv/bin:$PATH" pytest -q`. That way exactly **one**
-  failure is environmental: a tracked file mentioning the container's home directory.
-  Anything else is real. Run plainly, without that `PATH`, two more fail for reasons that
-  are also environmental but easy to mistake for a licence to dismiss a third — see
-  `TRAPS.md`.
+  actual output. Run the suite as `PATH="$PWD/.venv/bin:$PATH" pytest -q`.
+  There are no expected failures. Investigate every failure; report optional-dependency
+  skips separately and name what was unavailable. See `TRAPS.md` for setup problems.
 - Check the pull request text against the code. Overclaiming is the specific failure this
   queue exists to prevent, so a description that says more than the code does is itself a
   finding, not a wording nit.

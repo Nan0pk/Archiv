@@ -296,13 +296,13 @@ pairwise similarity minus the lowest:
 | 1 document page, 16 filings | 16 | 120 | 0.0000 | right |
 | 1 outdoor scene, 16 filings | 16 | 120 | 0.0000 | right |
 | 1 colourful image, 16 filings | 16 | 120 | 0.0006 | right |
-| 5 different outdoor scenes | 20 | 190 | 0.0140 | wrong |
-| 6 different palettes | 24 | 276 | 0.4483 | wrong |
+| 5 generated outdoor images (3 distinct scenes) | 20 | 190 | 0.0140 | wrong |
+| 6 generated colourful images (3 distinct palettes) | 24 | 276 | 0.4483 | wrong |
 
-The corpus that is all copies of one colourful image spreads *wider* than the corpus of
-five unrelated documents, so any cut-off between them refuses a set of real duplicates
-while still admitting the case this entry is about. The reason is in what the score is:
-colour and edge statistics, which have no access to what a page says.
+A cut-off of 0.0004 rejects the unrelated documents at 0.0002 and admits the colourful
+copies at 0.0006, but also rejects genuine document and outdoor copies at 0.0000.
+Low spread therefore does not establish that a corpus contains unrelated images.
+Colour and edge statistics cannot reliably establish that two documents are duplicates.
 
 Not fixed in step S10, whose declared scope is the search surface. What to do instead is
 an open decision recorded at `docs/plan/steps/S10A.md` — remove the feature, refuse where
