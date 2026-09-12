@@ -41,7 +41,8 @@ Every name, score and confidence value shown to a user is backed by a measuremen
 |---|---|---|---|
 | **S10** | Rename image search to find-similar and delete the text embedder | `S00` | [full](steps/S10.md) |
 | **S10A** | Decide what the image duplicate feature should be | `S10` | [full](steps/S10A.md) |
-| **S11** | Faces to clustering only; remove filename name guessing; add negative fixtures | `S10` | [**stub**](steps/S11.md) |
+| **S10B** | Refuse unsafe image duplicate claims | `S10A` | [full](steps/S10B.md) |
+| **S11** | Faces to clustering only; remove filename name guessing; add negative fixtures | `S10B` | [**stub**](steps/S11.md) |
 | **S12** | Graph person becomes candidate_mention; remove hardcoded confidences | `S11` | [**stub**](steps/S12.md) |
 | **S13** | Index staleness: refresh on add, report N of M, incremental image index | `S00` | [**stub**](steps/S13.md) |
 | **S14** | Doctor probes, README command coverage test, and status-line honesty | `S13` | [**stub**](steps/S14.md) |
@@ -86,6 +87,6 @@ A real detector, name candidates only from evidence a user can open, and entity 
 
 ---
 
-29 steps across 5 phases. Every step must be completable
+30 steps across 5 phases. Every step must be completable
 in one session; if one turns out not to be, split it in `queue.json` and say so in the
 pull request.

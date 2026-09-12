@@ -199,3 +199,23 @@ video, and raising it globally would weaken the fail-closed guarantee for every 
 format at once. Video is also the one input where a single file can produce thousands of
 derived objects, so its ceilings need to be specific and its overflow behaviour needs to
 be a clean `degraded` outcome that keeps the original and the transcript.
+
+---
+
+## 10. Image duplicates use different evidence for different jobs
+
+**Decided 2026-09-12 by the repository owner.** The owner chose option 3 from step S10A:
+replace the single weak duplicate score with methods matched to the question being asked.
+The full decision is recorded in
+[`decisions/S10A-image-similarity-method.md`](decisions/S10A-image-similarity-method.md).
+
+**Consequences.** Exact copies continue to use content identity. Resized or recompressed
+photographs get a separately measured perceptual-hash method. Documents use document
+evidence such as normalized extracted text, with explicit refusal when the needed evidence
+is unavailable. General visual similarity remains a separate problem and is never treated
+as proof of duplication.
+
+Until those replacements are measured and landed, `archiv images duplicates` must refuse
+to emit duplicate groups from the current colour-and-edge score. `archiv images
+find-similar --image PATH` may remain under its measured limitations, but its output is not
+duplicate evidence.

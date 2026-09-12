@@ -265,7 +265,7 @@
     {
       "id": "S08",
       "phase": "A",
-      "title": "archiv model calibrate \u2014 measure the workload and the remote model",
+      "title": "archiv model calibrate — measure the workload and the remote model",
       "doc": "docs/plan/steps/S08.md",
       "detail": "full",
       "depends_on": [
@@ -337,13 +337,31 @@
       }
     },
     {
+      "id": "S10B",
+      "phase": "B",
+      "title": "Refuse unsafe image duplicate claims",
+      "doc": "docs/plan/steps/S10B.md",
+      "detail": "full",
+      "depends_on": [
+        "S10A"
+      ],
+      "acceptance": {
+        "kind": "pytest",
+        "targets": [
+          "tests/test_image_duplicates.py::test_duplicates_command_refuses_the_old_similarity_method",
+          "tests/test_image_duplicates.py::test_refusal_explains_why_no_duplicate_groups_are_reported",
+          "tests/test_image_duplicates.py::test_exact_content_duplicate_accounting_still_works"
+        ]
+      }
+    },
+    {
       "id": "S11",
       "phase": "B",
       "title": "Faces to clustering only; remove filename name guessing; add negative fixtures",
       "doc": "docs/plan/steps/S11.md",
       "detail": "stub",
       "depends_on": [
-        "S10"
+        "S10B"
       ],
       "acceptance": {
         "kind": "pytest",
