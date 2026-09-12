@@ -268,47 +268,33 @@ programmatically has no way to be told.
 This is a property of the embedder, not of the floor, and no floor can fix it. Fixing it
 needs features that respond to layout and text rather than colour.
 
-## `archiv images duplicates` reports unrelated documents as duplicates
+## `archiv images duplicates` is disabled while its replacement is built
 
-The same limitation with a worse consequence, because this surface names things as
-duplicates rather than ranking them by similarity.
+The old duplicate surface used the same colour-and-edge similarity with a worse
+consequence: it named things as duplicates rather than merely ranking them by similarity.
+Given three clearly different generated document pages — an invoice, a contract of sale
+and a medical report — the old path reported one group containing all three, with
+similarities of 0.9999 to the lead. Unrelated pages can reach 1.0000, so raising the
+threshold cannot make that method safe.
 
-`find_near_duplicates` uses `threshold: float = 0.95` — a number nobody measured. Given
-three clearly different generated document pages (an invoice, a contract of sale and a
-medical report, with different text and different line layouts), it reports **one group
-containing all three**, with similarities of 0.9999 to the lead.
+The proposed spread guard was also withdrawn. Genuine copies can bunch as tightly as a
+corpus the scorer cannot distinguish, so low spread does not establish that grouping is
+wrong. The measurements and rejected guard remain recorded in
+`docs/plan/steps/S10A.md`.
 
-A person acting on that output would delete two unrelated documents.
+The owner chose option 3 on 2026-09-12: use different evidence for different jobs. The
+full decision is `docs/plan/decisions/S10A-image-similarity-method.md`.
 
-Raising the threshold does not fix it: unrelated pages reach 1.0000, so there is no value
-that separates them.
+Step S10B therefore disables the user-facing grouping path while the replacement is
+built. `archiv images duplicates` exits with a refusal and emits no duplicate groups;
+with `--json` it reports `status = "refused"`, reason `unsafe_similarity_method`, and an
+empty `duplicate_groups` list. Exact-content duplicate tracking during ingestion is
+unchanged.
 
-**A proposed fix was withdrawn, and there is no known fix yet.** This entry used to say
-that refusing to report groups when the similarities across a corpus are bunched too
-tightly would work. It does not. A corpus that is entirely genuine copies — which is
-exactly the case the feature exists for — bunches just as tightly as one the scorer cannot
-read. Measured on generated corpora, each image filed four ways, spread being the highest
-pairwise similarity minus the lowest:
-
-| Corpus | Images | Pairs | Spread | Grouping them is |
-|---|---:|---:|---:|---|
-| 5 different document pages | 20 | 190 | 0.0002 | wrong |
-| 1 document page, 16 filings | 16 | 120 | 0.0000 | right |
-| 1 outdoor scene, 16 filings | 16 | 120 | 0.0000 | right |
-| 1 colourful image, 16 filings | 16 | 120 | 0.0006 | right |
-| 5 generated outdoor images (3 distinct scenes) | 20 | 190 | 0.0140 | wrong |
-| 6 generated colourful images (3 distinct palettes) | 24 | 276 | 0.4483 | wrong |
-
-A cut-off of 0.0004 rejects the unrelated documents at 0.0002 and admits the colourful
-copies at 0.0006, but also rejects genuine document and outdoor copies at 0.0000.
-Low spread therefore does not establish that a corpus contains unrelated images.
-Colour and edge statistics cannot reliably establish that two documents are duplicates.
-
-Not fixed in step S10, whose declared scope is the search surface. What to do instead is
-an open decision recorded at `docs/plan/steps/S10A.md` — remove the feature, refuse where
-the method is not known to work, or use a different method per job. Until that is settled
-this defect is live, and the terminal output carries a warning to check before deleting
-anything.
+The limitation itself is not fixed yet. Photograph near-copies still need a separately
+measured perceptual method, document duplicates need document evidence such as normalized
+text, and unsupported cases must continue to refuse rather than fall back to the old
+colour score.
 
 ## `docs/capability-expansion-plan.md` still reads as though its milestones were verified
 
