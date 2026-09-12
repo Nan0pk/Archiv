@@ -47,7 +47,8 @@ Until a replacement method has passed its own acceptance measurements:
   should not be disabled.
 
 This temporary refusal is a safety consequence of option 3, not a separate owner choice.
-It prevents the known dangerous output while the replacement is built.
+It prevents the known dangerous output while the replacement is built. The canonical queue
+records this immediate work as `S10B`, before the later face work can proceed.
 
 ## Follow-up work authorized by this decision
 
