@@ -37,6 +37,14 @@ large to finish in one session, split it in `docs/plan/queue.json` and say so in
 **Settled decisions:** `docs/plan/DECISIONS.md` · **Environment gotchas:**
 `docs/plan/TRAPS.md`
 
+### Concurrent workers
+
+Archiv may have several humans and AI agents working at once. Before any non-read-only
+work, read `docs/agent-coordination.md` and check active `[agent-claim]` issues, open pull
+requests, recent overlapping branches/commits, and review activity. A coordination claim
+never changes the ordered queue or proves a step complete; it only prevents workers from
+colliding on the same work surface.
+
 ---
 
 ## Setup
