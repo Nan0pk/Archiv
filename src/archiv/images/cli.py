@@ -15,12 +15,7 @@ from archiv.images.index import (
     image_index_path,
     rebuild_image_index,
 )
-from archiv.images.search import (
-    MATCH_FLOOR,
-    NotAnImageError,
-    find_near_duplicates,
-    find_similar_images,
-)
+from archiv.images.search import MATCH_FLOOR, NotAnImageError, find_similar_images
 from archiv.storage.layout import ArchivLayout
 
 images_app = typer.Typer(
@@ -28,6 +23,13 @@ images_app = typer.Typer(
     help="Find images that look like a given image, and manage the image index.",
 )
 console = Console()
+
+DUPLICATE_DETECTION_REFUSAL = (
+    "Image duplicate detection is temporarily unavailable. The previous method could not "
+    "safely distinguish some unrelated images, so Archiv will not report duplicate groups "
+    "from it while the replacement is being built. No duplicate groups were reported. "
+    "Exact-content duplicate tracking during ingestion is unchanged."
+)
 
 
 @images_app.command("rebuild-index")
@@ -139,45 +141,27 @@ def duplicates_command(
     home: Annotated[Path | None, typer.Option("--home", file_okay=False)] = None,
     json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
 ) -> None:
-    """Find near-duplicate image clusters across the corpus."""
-    groups = find_near_duplicates(threshold=threshold, home=home)
+    """Refuse duplicate grouping until an evidence-backed replacement is available."""
+    # Keep the existing arguments during the transition so callers receive an explicit
+    # refusal instead of an unrelated command-parsing failure. Neither value is used to
+    # make a duplicate claim.
+    _ = (threshold, home)
+
     if json_output:
-        typer.echo(json.dumps([g.model_dump(mode="json") for g in groups], indent=2))
-        return
-
-    if not groups:
-        console.print(f"[green]No duplicate images found above threshold {threshold:.2f}.[/green]")
-        return
-
-    console.print(
-        f"[bold yellow]Found {len(groups)} duplicate cluster(s) "
-        f"(threshold >= {threshold:.2f}):[/bold yellow]"
-    )
-    for idx, group in enumerate(groups, 1):
-        lead_prefix = group.lead_sha256[:12]
-        console.print(
-            f"\n[bold]Cluster #{idx}:[/bold] "
-            f"Lead: [cyan]{group.lead_source_name}[/cyan] ({lead_prefix})"
-        )
-        for member in group.members:
-            m_prefix = member.object_sha256[:12]
-            # Two decimals, for the same reason as the ranking surface: four implied a
-            # calibrated confidence that has never existed. This surface needs it more,
-            # not less -- a ranked row invites judgement, a duplicate group invites a
-            # deletion.
-            sim_str = f"{member.similarity_to_lead:.2f}"
-            console.print(
-                f"  - [green]{member.source_name}[/green] ({m_prefix}) similarity: {sim_str}"
+        typer.echo(
+            json.dumps(
+                {
+                    "status": "refused",
+                    "reason": "unsafe_similarity_method",
+                    "message": DUPLICATE_DETECTION_REFUSAL,
+                    "duplicate_groups": [],
+                },
+                indent=2,
             )
-
-    console.print(
-        "\n[dim]Check these before deleting anything. Grouping is a raw cosine over "
-        "colour and edge features, and the closer two images' overall colour balance is, "
-        "the less it can tell a duplicate from an unrelated picture. On light pages of "
-        "dark text it cannot tell them apart at all, so unrelated scanned documents are "
-        "reported as duplicates of each other. This is a known defect with its own queue "
-        "step; see docs/known-issues.md.[/dim]"
-    )
+        )
+    else:
+        typer.echo(DUPLICATE_DETECTION_REFUSAL, err=True)
+    raise typer.Exit(code=2)
 
 
 @images_app.command("status")
