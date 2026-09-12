@@ -1,0 +1,91 @@
+name: Agent work claim
+description: Coordinate temporary ownership of a bounded Archiv work surface between concurrent workers.
+title: "[agent-claim] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This issue coordinates workers only. It does not change Archiv's queue, priority, acceptance evidence, completion state, or reviewer requirements. Read `docs/agent-coordination.md` and `CLAUDE.md` before using it.
+
+  - type: input
+    id: work
+    attributes:
+      label: Canonical work
+      description: Plan step or other owner-authorized work this claim belongs to.
+      placeholder: S11 — faces to clustering only
+    validations:
+      required: true
+
+  - type: input
+    id: worker
+    attributes:
+      label: Worker/session
+      description: Identify the worker and session so another agent can distinguish it.
+      placeholder: codex-cli:session-42
+    validations:
+      required: true
+
+  - type: dropdown
+    id: role
+    attributes:
+      label: Role
+      options:
+        - builder
+        - reviewer
+        - coordinator
+        - verifier
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Bounded scope
+      description: State the exact subsystem/files you expect to touch and what you are not claiming.
+      placeholder: "Working on face-name guessing removal and its tests; not touching graph-person work."
+    validations:
+      required: true
+
+  - type: input
+    id: branch
+    attributes:
+      label: Branch or pull request
+      description: Fill this when known; update the issue when it changes.
+      placeholder: work/20260912-example or #123
+
+  - type: dropdown
+    id: state
+    attributes:
+      label: Coordination state
+      options:
+        - working
+        - review-ready
+        - reviewing
+        - fix-required
+        - merge-ready
+        - blocked
+        - handed-off
+        - finished
+    validations:
+      required: true
+
+  - type: input
+    id: lease
+    attributes:
+      label: Lease expiry (UTC)
+      description: When you expect this claim to stop being actively refreshed. Expiry alone never authorizes overwriting work.
+      placeholder: 2026-09-13T01:30:00Z
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: acknowledgements
+    attributes:
+      label: Coordination checks
+      options:
+        - label: I checked open claims, pull requests, recent branches/commits, and overlapping review activity before claiming this work.
+          required: true
+        - label: I understand that a stale claim is not proof that work is abandoned; takeover requires checking the branch/PR/activity first.
+          required: true
+        - label: This issue is coordination metadata only and cannot prove a plan step complete.
+          required: true
