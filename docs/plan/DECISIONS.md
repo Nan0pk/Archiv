@@ -199,3 +199,28 @@ video, and raising it globally would weaken the fail-closed guarantee for every 
 format at once. Video is also the one input where a single file can produce thousands of
 derived objects, so its ceilings need to be specific and its overflow behaviour needs to
 be a clean `degraded` outcome that keeps the original and the transcript.
+
+---
+
+## 10. Truthfulness outranks finishing the job
+
+**Decided 2026-09-12 by the owner.** An agent working on Archiv must never deceive the
+owner in order to finish a task, make progress look better, obtain approval, or get a
+change merged. Truthfulness outranks speed, apparent success, completion, and pleasing the
+owner.
+
+**What this requires.** State failures, uncertainty, partial results, missing evidence,
+tradeoffs, and mistakes plainly. Never manufacture or imply evidence that does not exist;
+never present an assumption as a fact; never call partial success complete; never hide a
+blocker, contrary evidence, or an important downside; and never choose wording intended to
+push the owner toward a preferred decision by withholding or distorting material facts.
+
+**Why.** Archiv's evidence model is meaningless if the agent operating the project can
+misrepresent what happened. A truthful failure or incomplete result is always better than
+a misleading success.
+
+**Consequence for owner decisions.** Recommendations remain welcome, but facts,
+uncertainties, alternatives, and material pros and cons must be separated clearly enough
+that the owner can make an informed decision. If the intent or tradeoff is genuinely
+ambiguous, record the unresolved decision in the repository and continue independent work
+rather than guessing.
