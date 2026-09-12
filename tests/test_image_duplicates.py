@@ -67,7 +67,9 @@ def test_refusal_explains_why_no_duplicate_groups_are_reported(tmp_path: Path) -
     assert payload["status"] == "refused"
     assert payload["reason"] == "unsafe_similarity_method"
     assert payload["duplicate_groups"] == []
-    assert "previous method could not safely distinguish some unrelated images" in payload["message"]
+    assert (
+        "previous method could not safely distinguish some unrelated images" in payload["message"]
+    )
     assert "Exact-content duplicate tracking during ingestion is unchanged" in payload["message"]
 
 
