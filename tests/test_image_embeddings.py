@@ -263,7 +263,10 @@ def test_cli_images_subcommands(tmp_path: Path) -> None:
     res_old = runner.invoke(app, ["images", "search", "red", "--home", str(home), "--json"])
     assert res_old.exit_code != 0, "the text-query command must not still exist"
 
-    # Duplicates CLI
+    # The duplicate command remains parse-compatible but now refuses instead of returning
+    # an empty success or a colour-score group that looks authoritative.
     res_dup = runner.invoke(app, ["images", "duplicates", "--home", str(home), "--json"])
-    assert res_dup.exit_code == 0
-    assert res_dup.output.strip() == "[]"
+    assert res_dup.exit_code == 2
+    assert '"status": "refused"' in res_dup.output
+    assert '"reason": "unsafe_similarity_method"' in res_dup.output
+    assert '"duplicate_groups": []' in res_dup.output
