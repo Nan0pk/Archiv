@@ -1,3 +1,4 @@
+# pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownArgumentType=false
 """Face embedding support while automatic detection is disabled."""
 
 from __future__ import annotations
