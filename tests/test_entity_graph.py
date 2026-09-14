@@ -6,13 +6,19 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from PIL import Image, ImageDraw
 from typer.testing import CliRunner
 
 from archiv.cli import app
 from archiv.faces.clustering import scan_and_cluster_faces
 from archiv.faces.config import save_face_config
-from archiv.faces.contracts import FaceConfig
+from archiv.faces.contracts import FaceConfig, FaceDetection
+from archiv.faces.storage import (
+    confirm_cluster_name,
+    connect_face_index,
+    face_index_path,
+)
 from archiv.graph.builder import rebuild_graph
 from archiv.graph.queries import get_entity_profile, query_cross_corpus
 from archiv.graph.storage import connect_graph_index, graph_index_path
@@ -38,7 +44,9 @@ def _draw_synthetic_face(
     return img
 
 
-def test_entity_graph_cross_corpus_queries_and_citations(tmp_path: Path) -> None:
+def test_entity_graph_cross_corpus_queries_and_citations(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     home = tmp_path / "archiv_home"
     save_face_config(FaceConfig(opt_in=True), home=home)
 
@@ -84,17 +92,49 @@ def test_entity_graph_cross_corpus_queries_and_citations(tmp_path: Path) -> None
     ingest_file(doc_ada, home=home)
     ingest_file(doc_joint, home=home)
 
-    # Scan faces
+    # S11 deliberately disables the old colour heuristic until a real detector lands.
+    # This graph test supplies detector output at that boundary so it continues testing
+    # face clustering, explicit confirmation and graph composition without depending on
+    # the retired fake detector or filename-derived identity guesses.
+    def _fake_detect(
+        _path: Path,
+        object_sha256: str,
+        source_name: str,
+        min_confidence: float = 0.50,
+    ) -> list[FaceDetection]:
+        del min_confidence
+        embedding = [0.0] * 64
+        embedding[0 if source_name.endswith("1998.png") else 1] = 1.0
+        return [
+            FaceDetection(
+                face_id=f"face-{object_sha256[:12]}",
+                object_sha256=object_sha256,
+                source_name=source_name,
+                bbox=[0.2, 0.2, 0.8, 0.8],
+                confidence=1.0,
+                embedding=embedding,
+            )
+        ]
+
+    monkeypatch.setattr("archiv.faces.clustering.detect_faces_in_image", _fake_detect)
+
     faces_detected, total_clusters = scan_and_cluster_faces(home=home, threshold=0.96)
     assert faces_detected == 2
     assert total_clusters == 2
+
+    # Identity now comes only from an explicit user confirmation in this S11 path.
+    layout = ArchivLayout.resolve(home)
+    with connect_face_index(face_index_path(layout)) as conn:
+        rows = conn.execute("SELECT source_name, cluster_id FROM faces").fetchall()
+        clusters_by_source = {str(row["source_name"]): str(row["cluster_id"]) for row in rows}
+    confirm_cluster_name(layout, clusters_by_source[photo_ada.name], "Ada Lovelace")
+    confirm_cluster_name(layout, clusters_by_source[photo_babbage.name], "Charles Babbage")
 
     # Rebuild entity graph
     nodes_count, edges_count = rebuild_graph(home=home)
     assert nodes_count > 0
     assert edges_count > 0
 
-    layout = ArchivLayout.resolve(home)
     db_path = graph_index_path(layout)
     assert db_path.is_file()
 
@@ -149,8 +189,8 @@ def test_entity_graph_cross_corpus_queries_and_citations(tmp_path: Path) -> None
     # Test CLI subcommands
     res_stats = runner.invoke(app, ["graph", "stats", "--home", str(home), "--json"])
     assert res_stats.exit_code == 0
-    assert '"total_nodes":' in res_stats.output
-    assert '"total_edges":' in res_stats.output
+    assert '\"total_nodes\":' in res_stats.output
+    assert '\"total_edges\":' in res_stats.output
 
     res_cli_query = runner.invoke(
         app,
