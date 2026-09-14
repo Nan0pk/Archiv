@@ -32,7 +32,7 @@ A claim is temporary ownership of a work surface, not authority over project dir
 
 ### Lease behavior
 
-Refresh the claim while actively working. When stopping, change it to a truthful terminal or handoff state and record the exact next action.
+Refresh the claim while actively working by extending its UTC lease expiry and leaving a visible activity note. When stopping, change it to a truthful terminal or handoff state and record the exact next action.
 
 An expired lease is a warning, **not permission to overwrite work**. Before taking over an expired claim, inspect its branch, pull request, commits, comments, CI, and recent activity. Take over only when the work is clearly abandoned or explicitly handed off, and record the takeover in the issue.
 
@@ -99,6 +99,8 @@ Before a worker stops substantial work, repository-visible state must say:
 - blocker, if any;
 - exact next action;
 - whether the claim is still active, handed off, blocked, or finished.
+
+Close the claim issue when it reaches `finished`. A `handed-off` claim stays open only until the successor claim exists, so fresh workers do not have to repeatedly inspect completed claims while discovery remains conservative during a transfer.
 
 Do not leave essential continuation context only in a private chat session.
 
