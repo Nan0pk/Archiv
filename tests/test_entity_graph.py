@@ -189,8 +189,8 @@ def test_entity_graph_cross_corpus_queries_and_citations(
     # Test CLI subcommands
     res_stats = runner.invoke(app, ["graph", "stats", "--home", str(home), "--json"])
     assert res_stats.exit_code == 0
-    assert '\"total_nodes\":' in res_stats.output
-    assert '\"total_edges\":' in res_stats.output
+    assert '"total_nodes":' in res_stats.output
+    assert '"total_edges":' in res_stats.output
 
     res_cli_query = runner.invoke(
         app,
