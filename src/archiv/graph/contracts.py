@@ -6,7 +6,15 @@ from typing import Any, Literal
 
 from archiv.contracts import StrictModel
 
-NodeType = Literal["person", "document", "image", "date", "location", "organization"]
+NodeType = Literal[
+    "person",
+    "candidate_mention",
+    "document",
+    "image",
+    "date",
+    "location",
+    "organization",
+]
 RelationType = Literal["appears_in", "mentioned_in", "co_occurs_with", "associated_with"]
 ConfidenceStatus = Literal["confirmed", "probable", "possible"]
 
