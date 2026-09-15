@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import typer
 from rich.console import Console
@@ -20,6 +20,19 @@ graph_app = typer.Typer(
     help="Entity graph, cross-corpus traversals, and evidence-backed relationship queries.",
 )
 console = Console()
+
+
+def _without_unmeasured_confidence(value: Any) -> Any:
+    """Remove internal graph confidence numbers from user-visible JSON."""
+    if isinstance(value, dict):
+        return {
+            key: _without_unmeasured_confidence(item)
+            for key, item in value.items()
+            if key != "confidence"
+        }
+    if isinstance(value, list):
+        return [_without_unmeasured_confidence(item) for item in value]
+    return value
 
 
 @graph_app.command("rebuild")
@@ -62,52 +75,32 @@ def stats_command(
     table = Table(title="Entity Graph Statistics")
     table.add_column("Metric", style="bold")
     table.add_column("Count", justify="right")
-
     table.add_row("Total Entities (Nodes)", str(stats["total_nodes"]))
     table.add_row("Total Relationships (Edges)", str(stats["total_edges"]))
-
     for ntype, count in stats.get("nodes_by_type", {}).items():
         table.add_row(f"  • Node: {ntype}", str(count))
-
     for rel, count in stats.get("edges_by_relation", {}).items():
         table.add_row(f"  • Edge: {rel}", str(count))
-
     for status, count in stats.get("edges_by_status", {}).items():
         color = "green" if status == "confirmed" else ("cyan" if status == "probable" else "yellow")
         table.add_row(f"  • Status: [{color}]{status}[/{color}]", str(count))
-
     console.print(table)
 
 
 @graph_app.command("query")
 def query_command(
-    person: Annotated[
-        str | None,
-        typer.Option("--person", "-p", help="Filter by person name."),
-    ] = None,
-    date_from: Annotated[
-        int | None,
-        typer.Option("--date-from", help="Start year (inclusive)."),
-    ] = None,
-    date_to: Annotated[
-        int | None,
-        typer.Option("--date-to", help="End year (inclusive)."),
-    ] = None,
+    person: Annotated[str | None, typer.Option("--person", "-p", help="Filter by person name.")] = None,
+    date_from: Annotated[int | None, typer.Option("--date-from", help="Start year (inclusive).")] = None,
+    date_to: Annotated[int | None, typer.Option("--date-to", help="End year (inclusive).")] = None,
     home: Annotated[Path | None, typer.Option("--home", file_okay=False)] = None,
     json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
 ) -> None:
     """Query across photographs and mentioning documents."""
-    results = query_cross_corpus(
-        person_name=person,
-        date_from=date_from,
-        date_to=date_to,
-        home=home,
-    )
-
+    results = query_cross_corpus(person_name=person, date_from=date_from, date_to=date_to, home=home)
     if json_output:
-        typer.echo(json.dumps([r.model_dump(mode="json") for r in results], indent=2))
+        payload = [r.model_dump(mode="json") for r in results]
+        typer.echo(json.dumps(_without_unmeasured_confidence(payload), indent=2))
         return
-
     if not results:
         console.print("[yellow]No matching entities found for query criteria.[/yellow]")
         return
@@ -117,25 +110,16 @@ def query_command(
     table.add_column("Status")
     table.add_column("Photographs Appeared In")
     table.add_column("Documents Mentioning Person")
-
     for res in results:
         status_color = "green" if res.status == "confirmed" else "yellow"
-        photo_lines = [
-            f"📷 {p.image_name} ({p.year or 'undated'}) [dim]{p.confidence * 100:.0f}% conf[/dim]"
-            for p in res.photographs
-        ]
-        doc_lines = [
-            f"📄 {d.document_name} [dim]'{d.snippet[:50]}...'[/dim]"
-            for d in res.mentioning_documents
-        ]
-
+        photo_lines = [f"📷 {p.image_name} ({p.year or 'undated'})" for p in res.photographs]
+        doc_lines = [f"📄 {d.document_name} [dim]'{d.snippet[:50]}...'[/dim]" for d in res.mentioning_documents]
         table.add_row(
             res.person_name,
             f"[{status_color}]{res.status}[/{status_color}]",
             "\n".join(photo_lines) if photo_lines else "[dim]None[/dim]",
             "\n".join(doc_lines) if doc_lines else "[dim]None[/dim]",
         )
-
     console.print(table)
 
 
@@ -152,55 +136,42 @@ def entity_command(
         raise typer.Exit(code=1)
 
     if json_output:
-        typer.echo(profile.model_dump_json(indent=2))
+        payload = profile.model_dump(mode="json")
+        typer.echo(json.dumps(_without_unmeasured_confidence(payload), indent=2))
         return
 
     console.print(
         f"[bold cyan]Entity Profile:[/bold cyan] {profile.entity.canonical_name} "
         f"({profile.entity.entity_type})"
     )
-
     if profile.appearances:
         t_app = Table(title="Photograph Appearances")
         t_app.add_column("Image", style="bold")
         t_app.add_column("Year")
-        t_app.add_column("Confidence")
         t_app.add_column("Status")
         t_app.add_column("Citation Detail")
         for app in profile.appearances:
             t_app.add_row(
                 app.image_name,
                 str(app.year or "—"),
-                f"{app.confidence * 100:.1f}%",
                 app.status,
                 app.citations[0].snippet if app.citations else "",
             )
         console.print(t_app)
-
     if profile.mentions:
         t_men = Table(title="Document Mentions")
         t_men.add_column("Document", style="bold")
         t_men.add_column("Locator", style="dim")
         t_men.add_column("Snippet")
         for men in profile.mentions:
-            t_men.add_row(
-                men.document_name,
-                str(men.locator),
-                men.snippet,
-            )
+            t_men.add_row(men.document_name, str(men.locator), men.snippet)
         console.print(t_men)
-
     if profile.co_occurrences:
         t_co = Table(title="Co-occurring Entities")
         t_co.add_column("Entity", style="bold")
         t_co.add_column("Type")
-        t_co.add_column("Confidence")
         for co in profile.co_occurrences:
-            t_co.add_row(
-                str(co["entity_name"]),
-                str(co["entity_type"]),
-                f"{float(co['confidence']) * 100:.1f}%",
-            )
+            t_co.add_row(str(co["entity_name"]), str(co["entity_type"]))
         console.print(t_co)
 
 
