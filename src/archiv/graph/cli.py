@@ -43,7 +43,11 @@ def rebuild_command(
     """Rebuild the SQLite entity graph from canonical objects, derived segments, and faces."""
     nodes_count, edges_count = rebuild_graph(home=home)
     if json_output:
-        typer.echo(json.dumps({"nodes_count": nodes_count, "edges_count": edges_count}, indent=2))
+        typer.echo(
+            json.dumps(
+                {"nodes_count": nodes_count, "edges_count": edges_count}, indent=2
+            )
+        )
     else:
         console.print(
             f"[bold green]Entity graph rebuilt:[/bold green] {nodes_count} nodes, "
@@ -82,21 +86,33 @@ def stats_command(
     for rel, count in stats.get("edges_by_relation", {}).items():
         table.add_row(f"  • Edge: {rel}", str(count))
     for status, count in stats.get("edges_by_status", {}).items():
-        color = "green" if status == "confirmed" else ("cyan" if status == "probable" else "yellow")
+        color = (
+            "green"
+            if status == "confirmed"
+            else ("cyan" if status == "probable" else "yellow")
+        )
         table.add_row(f"  • Status: [{color}]{status}[/{color}]", str(count))
     console.print(table)
 
 
 @graph_app.command("query")
 def query_command(
-    person: Annotated[str | None, typer.Option("--person", "-p", help="Filter by person name.")] = None,
-    date_from: Annotated[int | None, typer.Option("--date-from", help="Start year (inclusive).")] = None,
-    date_to: Annotated[int | None, typer.Option("--date-to", help="End year (inclusive).")] = None,
+    person: Annotated[
+        str | None, typer.Option("--person", "-p", help="Filter by person name.")
+    ] = None,
+    date_from: Annotated[
+        int | None, typer.Option("--date-from", help="Start year (inclusive).")
+    ] = None,
+    date_to: Annotated[
+        int | None, typer.Option("--date-to", help="End year (inclusive).")
+    ] = None,
     home: Annotated[Path | None, typer.Option("--home", file_okay=False)] = None,
     json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
 ) -> None:
     """Query across photographs and mentioning documents."""
-    results = query_cross_corpus(person_name=person, date_from=date_from, date_to=date_to, home=home)
+    results = query_cross_corpus(
+        person_name=person, date_from=date_from, date_to=date_to, home=home
+    )
     if json_output:
         payload = [r.model_dump(mode="json") for r in results]
         typer.echo(json.dumps(_without_unmeasured_confidence(payload), indent=2))
@@ -112,8 +128,13 @@ def query_command(
     table.add_column("Documents Mentioning Person")
     for res in results:
         status_color = "green" if res.status == "confirmed" else "yellow"
-        photo_lines = [f"📷 {p.image_name} ({p.year or 'undated'})" for p in res.photographs]
-        doc_lines = [f"📄 {d.document_name} [dim]'{d.snippet[:50]}...'[/dim]" for d in res.mentioning_documents]
+        photo_lines = [
+            f"📷 {p.image_name} ({p.year or 'undated'})" for p in res.photographs
+        ]
+        doc_lines = [
+            f"📄 {d.document_name} [dim]'{d.snippet[:50]}...'[/dim]"
+            for d in res.mentioning_documents
+        ]
         table.add_row(
             res.person_name,
             f"[{status_color}]{res.status}[/{status_color}]",
