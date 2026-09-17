@@ -179,21 +179,14 @@ def rebuild_graph(home: Path | None = None) -> tuple[int, int]:
             return
         old_edges = list(edges_by_id.values())
         for edge in old_edges:
-            if (
-                edge.source_node_id != candidate_id
-                and edge.target_node_id != candidate_id
-            ):
+            if edge.source_node_id != candidate_id and edge.target_node_id != candidate_id:
                 continue
             edges_by_id.pop(edge.edge_id, None)
             source_id = (
-                person_node.node_id
-                if edge.source_node_id == candidate_id
-                else edge.source_node_id
+                person_node.node_id if edge.source_node_id == candidate_id else edge.source_node_id
             )
             target_id = (
-                person_node.node_id
-                if edge.target_node_id == candidate_id
-                else edge.target_node_id
+                person_node.node_id if edge.target_node_id == candidate_id else edge.target_node_id
             )
             if source_id == target_id:
                 continue
@@ -229,9 +222,7 @@ def rebuild_graph(home: Path | None = None) -> tuple[int, int]:
                     canonical_name=source_name,
                     properties={"sha256": sha256, "media_type": media_type},
                 )
-                year_match = re.search(
-                    r"(?:^|[\W_])(18\d\d|19\d\d|20\d\d)(?:$|[\W_])", source_name
-                )
+                year_match = re.search(r"(?:^|[\W_])(18\d\d|19\d\d|20\d\d)(?:$|[\W_])", source_name)
                 obj_year: int | None = int(year_match.group(1)) if year_match else None
                 if obj_year:
                     date_node = _get_or_create_node(
@@ -253,21 +244,15 @@ def rebuild_graph(home: Path | None = None) -> tuple[int, int]:
                         ],
                     )
 
-                derived_file = (
-                    layout.derived_root(sha256) / "normalized" / "document.json"
-                )
+                derived_file = layout.derived_root(sha256) / "normalized" / "document.json"
                 if derived_file.is_file():
                     try:
-                        doc_payload = json.loads(
-                            derived_file.read_text(encoding="utf-8")
-                        )
+                        doc_payload = json.loads(derived_file.read_text(encoding="utf-8"))
                         segments = doc_payload.get("segments", [])
                         for idx, seg in enumerate(segments):
                             seg_text = seg.get("text", "")
                             seg_loc = seg.get("locator", {"segment_index": idx})
-                            raw_names = re.findall(
-                                r"\b([A-Z][a-z]+ [A-Z][a-z]+)\b", seg_text
-                            )
+                            raw_names = re.findall(r"\b([A-Z][a-z]+ [A-Z][a-z]+)\b", seg_text)
                             mention_nodes: list[GraphNode] = []
                             for rn in raw_names:
                                 pn = _clean_person_name(rn)
@@ -368,9 +353,7 @@ def rebuild_graph(home: Path | None = None) -> tuple[int, int]:
     if f_db.is_file():
         try:
             with connect_face_index(f_db) as f_conn:
-                clusters = f_conn.execute(
-                    "SELECT cluster_id, label FROM face_clusters"
-                ).fetchall()
+                clusters = f_conn.execute("SELECT cluster_id, label FROM face_clusters").fetchall()
                 for c_row in clusters:
                     cid = str(c_row["cluster_id"])
                     label = str(c_row["label"])
@@ -381,11 +364,7 @@ def rebuild_graph(home: Path | None = None) -> tuple[int, int]:
                         p_conf = 1.0
                     else:
                         attr = attribute_cluster(layout, cid, label)
-                        if (
-                            attr
-                            and attr.candidates
-                            and attr.candidates[0].confidence >= 0.50
-                        ):
+                        if attr and attr.candidates and attr.candidates[0].confidence >= 0.50:
                             person_name = attr.candidates[0].name
                             status = "probable"
                             p_conf = attr.candidates[0].confidence
@@ -393,9 +372,7 @@ def rebuild_graph(home: Path | None = None) -> tuple[int, int]:
                             person_name = label
                             status = "possible"
                             p_conf = 0.50
-                    person_node = _get_or_create_node(
-                        "person", canonical_name=person_name
-                    )
+                    person_node = _get_or_create_node("person", canonical_name=person_name)
                     if conf:
                         _promote_candidate_edges(person_node)
                     m_rows = f_conn.execute(
