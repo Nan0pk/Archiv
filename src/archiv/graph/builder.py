@@ -222,7 +222,9 @@ def rebuild_graph(home: Path | None = None) -> tuple[int, int]:
                     canonical_name=source_name,
                     properties={"sha256": sha256, "media_type": media_type},
                 )
-                year_match = re.search(r"(?:^|[\W_])(18\d\d|19\d\d|20\d\d)(?:$|[\W_])", source_name)
+                year_match = re.search(
+                    r"(?:^|[\W_])(18\d\d|19\d\d|20\d\d)(?:$|[\W_])", source_name
+                )
                 obj_year: int | None = int(year_match.group(1)) if year_match else None
                 if obj_year:
                     date_node = _get_or_create_node(
@@ -324,7 +326,9 @@ def rebuild_graph(home: Path | None = None) -> tuple[int, int]:
                                                     source_name=source_name,
                                                     locator=seg_loc,
                                                     snippet=(
-                                                        f"Co-occur in {source_name}: '{p1.canonical_name}' and '{p2.canonical_name}'"
+                                                        f"Co-occur in {source_name}: "
+                                                        f"'{p1.canonical_name}' and "
+                                                        f"'{p2.canonical_name}'"
                                                     ),
                                                 )
                                             ],
@@ -341,7 +345,9 @@ def rebuild_graph(home: Path | None = None) -> tuple[int, int]:
                                                     source_name=source_name,
                                                     locator=seg_loc,
                                                     snippet=(
-                                                        f"Co-occur in {source_name}: '{p2.canonical_name}' and '{p1.canonical_name}'"
+                                                        f"Co-occur in {source_name}: "
+                                                        f"'{p2.canonical_name}' and "
+                                                        f"'{p1.canonical_name}'"
                                                     ),
                                                 )
                                             ],
@@ -353,7 +359,9 @@ def rebuild_graph(home: Path | None = None) -> tuple[int, int]:
     if f_db.is_file():
         try:
             with connect_face_index(f_db) as f_conn:
-                clusters = f_conn.execute("SELECT cluster_id, label FROM face_clusters").fetchall()
+                clusters = f_conn.execute(
+                    "SELECT cluster_id, label FROM face_clusters"
+                ).fetchall()
                 for c_row in clusters:
                     cid = str(c_row["cluster_id"])
                     label = str(c_row["label"])
