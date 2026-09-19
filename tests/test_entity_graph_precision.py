@@ -9,7 +9,12 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from archiv.cli import app
-from archiv.faces.storage import connect_face_index, confirm_cluster_name, face_index_path, pack_vector
+from archiv.faces.storage import (
+    connect_face_index,
+    confirm_cluster_name,
+    face_index_path,
+    pack_vector,
+)
 from archiv.graph.builder import rebuild_graph
 from archiv.graph.storage import connect_graph_index, graph_index_path
 from archiv.ingestion import ingest_file
