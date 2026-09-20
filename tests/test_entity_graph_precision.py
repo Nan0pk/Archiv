@@ -10,8 +10,8 @@ from typer.testing import CliRunner
 
 from archiv.cli import app
 from archiv.faces.storage import (
-    connect_face_index,
     confirm_cluster_name,
+    connect_face_index,
     face_index_path,
     pack_vector,
 )
