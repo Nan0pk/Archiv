@@ -308,3 +308,53 @@ false: it said "You can find pictures by description", and the surface answering
 queries has been deleted. The rest of the document has not been audited against what the
 code does, and until it has, it should be read as a record of what was intended rather
 than of what was delivered.
+
+## Code scanning has never run: every CodeQL workflow run fails before it starts
+
+`.github/workflows/codeql.yml` has run 87 times and failed 87 times, every one with the
+conclusion `startup_failure`, from its very first run through the current head of `main`.
+A `startup_failure` means GitHub rejected the run before creating any job, so there are no
+logs and no steps to read. Nothing was ever scanned. The failure is silent in the way that
+matters: a workflow that never starts looks quiet on the pull request rather than red, so
+this went unnoticed while every other gate was being enforced strictly.
+
+Two candidate causes in the workflow file were checked and ruled out. That is not the
+same as clearing the file entirely — other workflow-level conditions were not examined:
+
+- The file is valid YAML and parses cleanly.
+- It pins `actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1`, the same commit
+  pinned by `fast-checks.yml`, `office-validation.yml`, `field-trial.yml`,
+  `offline-alpha.yml` and `mcp-validation.yml`, all of which run and pass.
+
+What is established is narrower than a diagnosis: every observed run fails before a job
+starts, the committed workflow parses, and its checkout pin is known good elsewhere. Where
+the block actually sits is not established.
+
+The leading hypothesis is code scanning **default setup** being enabled. GitHub then refuses
+to start any repository CodeQL analysis workflow, and the refusal appears as
+`startup_failure` with no job, which matches this signature.
+
+The sibling Rush-linux repository, under the same owner, supports this. Its code scanning
+runs as a workflow named for the pull request with the path
+`dynamic/github-code-scanning/codeql` and the event type `dynamic` — that is default setup,
+not a committed file — and it runs normally. Rush-linux has no `codeql.yml` of its own to
+collide with it. Archiv has one, and Archiv's is the one that never starts. Two repositories
+under one owner, one with default setup and no file, the other with a file and nothing but
+`startup_failure`, is the pattern default setup produces.
+
+It is still not confirmed for Archiv specifically. Repository code-scanning settings cannot
+be read through the interfaces available to an agent session here, and no equivalent
+`dynamic` run was observed in Archiv's history — though that absence proves little, since
+the query that would have isolated it does not filter by event type.
+
+Confirming it takes one look, at **Settings → Code security → Code scanning**:
+
+- If default setup is enabled, then scanning is running after all but this workflow is
+  redundant. Delete `.github/workflows/codeql.yml` so the repository stops logging a failed
+  run on every push to `main`.
+- If default setup is not enabled, then nothing is scanning this code and the cause is
+  something else — most likely an Actions permissions policy blocking `github/codeql-action`.
+  The workflow's own run page names the reason where the runs list does not.
+
+Until one of those is done, treat this repository as having **no static security analysis**,
+whatever the workflow list suggests.
