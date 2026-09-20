@@ -328,9 +328,20 @@ The workflow file is not the cause, and was checked rather than assumed:
 So the block is above the file, in repository configuration, and cannot be fixed by editing
 the workflow. The documented cause matching this exact signature is code scanning **default
 setup** being enabled: GitHub then refuses to start any repository CodeQL analysis workflow,
-and the refusal appears as `startup_failure` with no job. This has not been confirmed,
-because repository code-scanning settings cannot be read through the interfaces available to
-an agent session here.
+and the refusal appears as `startup_failure` with no job.
+
+The sibling Rush-linux repository, under the same owner, supports this. Its code scanning
+runs as a workflow named for the pull request with the path
+`dynamic/github-code-scanning/codeql` and the event type `dynamic` — that is default setup,
+not a committed file — and it runs normally. Rush-linux has no `codeql.yml` of its own to
+collide with it. Archiv has one, and Archiv's is the one that never starts. Two repositories
+under one owner, one with default setup and no file, the other with a file and nothing but
+`startup_failure`, is the pattern default setup produces.
+
+It is still not confirmed for Archiv specifically. Repository code-scanning settings cannot
+be read through the interfaces available to an agent session here, and no equivalent
+`dynamic` run was observed in Archiv's history — though that absence proves little, since
+the query that would have isolated it does not filter by event type.
 
 Confirming it takes one look, at **Settings → Code security → Code scanning**:
 
