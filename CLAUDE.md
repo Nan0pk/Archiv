@@ -209,12 +209,17 @@ project is worse than one working from none, because it is confident.
   side to sound decisive.
 - End with one verdict line: `MERGE`, or `FIX FIRST` with numbered, specific problems,
   each naming a file and what would fix it.
-- **Confirm the head has moved before reviewing again.** A verdict belongs to the commit it
-  names. If the head is the commit you last reviewed, your answer is the answer you already
-  gave: post nothing and wait for a push. On pull request #158 nine consecutive reviews read
-  the same commit `b668c45` and reported the same lint failure, because none of them checked
-  whether the code had changed first. Nine rounds, no new information, and the author learned
-  nothing they had not been told the first time.
+- **Confirm something has moved before reviewing again.** A verdict is tied to a head *and* a
+  base, and it stands only while **both** are unchanged — then post nothing and wait. A moved
+  base invalidates a verdict exactly as a moved head does, even when the head is
+  byte-identical, because the change now integrates against different code. That is the same
+  reason the merge requirements below turn on the commit actually being merged.
+  On pull request #158, nine consecutive reviews read the same head `b668c45`, but across
+  three different bases. Six of the nine repeated a verdict on a head and base that had both
+  already been reviewed, and taught the author nothing. The other three were legitimate,
+  and the distinction is not academic: the review that first saw base `4b1957b` found a real
+  defect the earlier ones could not have — the declared acceptance test never exercised a
+  confirmed face identity. Suppress the repeat, never the re-integration.
 
 **How the author briefs it.** Say what the change was trying to do, briefly, and stop
 there.
