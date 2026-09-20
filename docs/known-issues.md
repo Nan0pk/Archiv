@@ -318,17 +318,21 @@ logs and no steps to read. Nothing was ever scanned. The failure is silent in th
 matters: a workflow that never starts looks quiet on the pull request rather than red, so
 this went unnoticed while every other gate was being enforced strictly.
 
-The workflow file is not the cause, and was checked rather than assumed:
+Two candidate causes in the workflow file were checked and ruled out. That is not the
+same as clearing the file entirely — other workflow-level conditions were not examined:
 
 - The file is valid YAML and parses cleanly.
 - It pins `actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1`, the same commit
   pinned by `fast-checks.yml`, `office-validation.yml`, `field-trial.yml`,
   `offline-alpha.yml` and `mcp-validation.yml`, all of which run and pass.
 
-So the block is above the file, in repository configuration, and cannot be fixed by editing
-the workflow. The documented cause matching this exact signature is code scanning **default
-setup** being enabled: GitHub then refuses to start any repository CodeQL analysis workflow,
-and the refusal appears as `startup_failure` with no job.
+What is established is narrower than a diagnosis: every observed run fails before a job
+starts, the committed workflow parses, and its checkout pin is known good elsewhere. Where
+the block actually sits is not established.
+
+The leading hypothesis is code scanning **default setup** being enabled. GitHub then refuses
+to start any repository CodeQL analysis workflow, and the refusal appears as
+`startup_failure` with no job, which matches this signature.
 
 The sibling Rush-linux repository, under the same owner, supports this. Its code scanning
 runs as a workflow named for the pull request with the path
