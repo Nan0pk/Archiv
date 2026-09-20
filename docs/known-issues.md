@@ -308,3 +308,38 @@ false: it said "You can find pictures by description", and the surface answering
 queries has been deleted. The rest of the document has not been audited against what the
 code does, and until it has, it should be read as a record of what was intended rather
 than of what was delivered.
+
+## Code scanning has never run: every CodeQL workflow run fails before it starts
+
+`.github/workflows/codeql.yml` has run 87 times and failed 87 times, every one with the
+conclusion `startup_failure`, from its very first run through the current head of `main`.
+A `startup_failure` means GitHub rejected the run before creating any job, so there are no
+logs and no steps to read. Nothing was ever scanned. The failure is silent in the way that
+matters: a workflow that never starts looks quiet on the pull request rather than red, so
+this went unnoticed while every other gate was being enforced strictly.
+
+The workflow file is not the cause, and was checked rather than assumed:
+
+- The file is valid YAML and parses cleanly.
+- It pins `actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1`, the same commit
+  pinned by `fast-checks.yml`, `office-validation.yml`, `field-trial.yml`,
+  `offline-alpha.yml` and `mcp-validation.yml`, all of which run and pass.
+
+So the block is above the file, in repository configuration, and cannot be fixed by editing
+the workflow. The documented cause matching this exact signature is code scanning **default
+setup** being enabled: GitHub then refuses to start any repository CodeQL analysis workflow,
+and the refusal appears as `startup_failure` with no job. This has not been confirmed,
+because repository code-scanning settings cannot be read through the interfaces available to
+an agent session here.
+
+Confirming it takes one look, at **Settings → Code security → Code scanning**:
+
+- If default setup is enabled, then scanning is running after all but this workflow is
+  redundant. Delete `.github/workflows/codeql.yml` so the repository stops logging a failed
+  run on every push to `main`.
+- If default setup is not enabled, then nothing is scanning this code and the cause is
+  something else — most likely an Actions permissions policy blocking `github/codeql-action`.
+  The workflow's own run page names the reason where the runs list does not.
+
+Until one of those is done, treat this repository as having **no static security analysis**,
+whatever the workflow list suggests.

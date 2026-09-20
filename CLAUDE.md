@@ -69,6 +69,22 @@ These are the `Fast checks / quality` required gate (`.github/workflows/fast-che
 Any change under `src/**` additionally triggers `office-validation`, `field-trial` and
 `offline-alpha`, so a source change is never as small as it looks.
 
+**Run them where you are working, not by pushing.** Every check above runs locally in
+seconds, and `ruff format .` fixes formatting outright rather than only reporting it.
+Pushing to find out whether the formatter is happy spends a full run of six workflows, and
+if a reviewer is waiting, a whole review round as well.
+
+That is not a hypothetical cost. Pull request #158 took twenty-two independent reviews
+across five days before it merged. Twenty-one of them were `FIX FIRST`, and roughly fifteen
+of those were formatting or lint — nothing that needed a second opinion, only `ruff format .`
+and `ruff check .`. Eleven of the twenty commits in the merged change are named for the
+fight: `style: format S12 graph CLI`, `fix: apply formatter output to graph CLI`,
+`fix: restore formatter-canonical graph CLI`, and so on.
+
+If you cannot run these checks where you are working, say so plainly in the pull request
+rather than substituting a push for a run. Getting a real checkout is the cheaper fix: the
+venv above installs in about two minutes.
+
 **Known-good baseline** measured on `1edeb92`, the head of
 [#139](https://github.com/Nan0pk/Archiv/pull/139), run as
 `PATH="$PWD/.venv/bin:$PATH" pytest -q`: **491 passed, 0 failed**, 2 skipped; ruff clean;
@@ -193,6 +209,12 @@ project is worse than one working from none, because it is confident.
   side to sound decisive.
 - End with one verdict line: `MERGE`, or `FIX FIRST` with numbered, specific problems,
   each naming a file and what would fix it.
+- **Confirm the head has moved before reviewing again.** A verdict belongs to the commit it
+  names. If the head is the commit you last reviewed, your answer is the answer you already
+  gave: post nothing and wait for a push. On pull request #158 nine consecutive reviews read
+  the same commit `b668c45` and reported the same lint failure, because none of them checked
+  whether the code had changed first. Nine rounds, no new information, and the author learned
+  nothing they had not been told the first time.
 
 **How the author briefs it.** Say what the change was trying to do, briefly, and stop
 there.
