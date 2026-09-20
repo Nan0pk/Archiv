@@ -303,7 +303,7 @@ def rebuild_graph(home: Path | None = None) -> tuple[int, int]:
                                                 source_name=source_name,
                                                 locator=seg_loc,
                                                 snippet=(
-                                                    f"Mentioned in {source_name} alongside year {y_val}"
+                                                    f"Mentioned in {source_name} alongside year {y_val}"  # noqa: E501
                                                 ),
                                             )
                                         ],
@@ -408,7 +408,7 @@ def rebuild_graph(home: Path | None = None) -> tuple[int, int]:
                                     source_name=src_name,
                                     locator={"bbox": bbox},
                                     snippet=(
-                                        f"Detected face in photograph '{src_name}' (conf: {det_conf:.2f})"
+                                        f"Detected face in photograph '{src_name}' (conf: {det_conf:.2f})"  # noqa: E501
                                     ),
                                 )
                             ],
