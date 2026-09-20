@@ -99,17 +99,12 @@ def _hash_id(prefix: str, value: str) -> str:
 
 
 def rebuild_graph(home: Path | None = None) -> tuple[int, int]:
-    """Rebuild the SQLite entity graph from canonical objects, derived segments, and faces.
-
-    Returns (total_nodes_created, total_edges_created).
-    """
+    """Rebuild the SQLite entity graph from canonical objects, derived segments, and faces."""
     layout = ArchivLayout.resolve(home)
     layout.ensure()
-
     final_path = graph_index_path(layout)
     tmp_path = layout.temporary / f"graph-{uuid4().hex[:12]}.sqlite3.tmp"
     tmp_path.parent.mkdir(parents=True, exist_ok=True)
-
     now = datetime.now(UTC).isoformat()
     nodes_by_id: dict[str, GraphNode] = {}
     edges_by_id: dict[str, GraphEdge] = {}
@@ -141,11 +136,9 @@ def rebuild_graph(home: Path | None = None) -> tuple[int, int]:
         status: ConfidenceStatus,
         citations: list[GraphCitation],
     ) -> None:
-        # Edge key based on endpoints and relation
         ekey = f"{source_node_id}::{relation_type}::{target_node_id}"
         eid = _hash_id("edge", ekey)
         if eid in edges_by_id:
-            # Merge citations and update confidence if higher
             existing = edges_by_id[eid]
             new_conf = max(existing.confidence, confidence)
             new_cits = list(existing.citations)
@@ -179,7 +172,34 @@ def rebuild_graph(home: Path | None = None) -> tuple[int, int]:
                 created_at=now,
             )
 
-    # 1. Read Canonical Objects
+    def _promote_candidate_edges(person_node: GraphNode) -> None:
+        """Attach text evidence to an explicitly confirmed person with the same name."""
+        candidate_id = _hash_id("can", person_node.canonical_name)
+        if candidate_id not in nodes_by_id:
+            return
+        old_edges = list(edges_by_id.values())
+        for edge in old_edges:
+            if edge.source_node_id != candidate_id and edge.target_node_id != candidate_id:
+                continue
+            edges_by_id.pop(edge.edge_id, None)
+            source_id = (
+                person_node.node_id if edge.source_node_id == candidate_id else edge.source_node_id
+            )
+            target_id = (
+                person_node.node_id if edge.target_node_id == candidate_id else edge.target_node_id
+            )
+            if source_id == target_id:
+                continue
+            _add_edge(
+                source_id,
+                target_id,
+                edge.relation_type,
+                edge.confidence,
+                edge.status,
+                edge.citations,
+            )
+        nodes_by_id.pop(candidate_id, None)
+
     if layout.database.is_file():
         with sqlite3.connect(layout.database) as db_conn:
             db_conn.row_factory = sqlite3.Row
@@ -191,36 +211,30 @@ def rebuild_graph(home: Path | None = None) -> tuple[int, int]:
                 GROUP BY o.sha256
                 """
             ).fetchall()
-
             for r in rows:
                 sha256 = str(r["sha256"])
                 media_type = str(r["media_type"])
                 source_name = str(r["source_name"])
                 is_image = media_type.startswith("image/")
-
-                # Create document / image node
                 entity_type: NodeType = "image" if is_image else "document"
                 obj_node = _get_or_create_node(
                     entity_type,
                     canonical_name=source_name,
                     properties={"sha256": sha256, "media_type": media_type},
                 )
-
-                # Check year in filename / metadata
-                year_match = re.search(r"(?:^|[\W_])(18\d\d|19\d\d|20\d\d)(?:$|[\W_])", source_name)
+                year_match = re.search(r"(?:^|[\W_])(18\d\d|19\d\d|20\d\d)(?:$|[\W_])", source_name)  # noqa: E501
                 obj_year: int | None = int(year_match.group(1)) if year_match else None
-
                 if obj_year:
                     date_node = _get_or_create_node(
                         "date", canonical_name=str(obj_year), properties={"year": obj_year}
                     )
                     _add_edge(
-                        source_node_id=obj_node.node_id,
-                        target_node_id=date_node.node_id,
-                        relation_type="associated_with",
-                        confidence=0.90,
-                        status="probable",
-                        citations=[
+                        obj_node.node_id,
+                        date_node.node_id,
+                        "associated_with",
+                        0.90,
+                        "probable",
+                        [
                             GraphCitation(
                                 object_sha256=sha256,
                                 source_name=source_name,
@@ -230,38 +244,33 @@ def rebuild_graph(home: Path | None = None) -> tuple[int, int]:
                         ],
                     )
 
-                # Inspect derived document segments
                 derived_file = layout.derived_root(sha256) / "normalized" / "document.json"
                 if derived_file.is_file():
                     try:
                         doc_payload = json.loads(derived_file.read_text(encoding="utf-8"))
                         segments = doc_payload.get("segments", [])
-
                         for idx, seg in enumerate(segments):
                             seg_text = seg.get("text", "")
                             seg_loc = seg.get("locator", {"segment_index": idx})
-
-                            # Extract names
                             raw_names = re.findall(r"\b([A-Z][a-z]+ [A-Z][a-z]+)\b", seg_text)
-                            person_nodes: list[GraphNode] = []
+                            mention_nodes: list[GraphNode] = []
                             for rn in raw_names:
                                 pn = _clean_person_name(rn)
                                 if pn:
-                                    p_node = _get_or_create_node("person", canonical_name=pn)
-                                    person_nodes.append(p_node)
-
-                                    # Edge: Person mentioned_in Document
+                                    mention_node = _get_or_create_node(
+                                        "candidate_mention", canonical_name=pn
+                                    )
+                                    mention_nodes.append(mention_node)
                                     snip_start = max(0, seg_text.find(rn) - 20)
                                     snip_end = min(len(seg_text), snip_start + 100)
                                     snippet = seg_text[snip_start:snip_end].strip()
-
                                     _add_edge(
-                                        source_node_id=p_node.node_id,
-                                        target_node_id=obj_node.node_id,
-                                        relation_type="mentioned_in",
-                                        confidence=0.85,
-                                        status="probable",
-                                        citations=[
+                                        mention_node.node_id,
+                                        obj_node.node_id,
+                                        "mentioned_in",
+                                        0.85,
+                                        "probable",
+                                        [
                                             GraphCitation(
                                                 object_sha256=sha256,
                                                 source_name=source_name,
@@ -270,10 +279,9 @@ def rebuild_graph(home: Path | None = None) -> tuple[int, int]:
                                             )
                                         ],
                                     )
-
-                            # Extract dates in segment
                             seg_years = re.findall(
-                                r"(?:^|[\W_])(18\d\d|19\d\d|20\d\d)(?:$|[\W_])", seg_text
+                                r"(?:^|[\W_])(18\d\d|19\d\d|20\d\d)(?:$|[\W_])",
+                                seg_text,
                             )
                             for sy in seg_years:
                                 y_val = int(sy)
@@ -282,38 +290,35 @@ def rebuild_graph(home: Path | None = None) -> tuple[int, int]:
                                     canonical_name=str(y_val),
                                     properties={"year": y_val},
                                 )
-                                for p_node in person_nodes:
+                                for mention_node in mention_nodes:
                                     _add_edge(
-                                        source_node_id=p_node.node_id,
-                                        target_node_id=d_node.node_id,
-                                        relation_type="associated_with",
-                                        confidence=0.80,
-                                        status="probable",
-                                        citations=[
+                                        mention_node.node_id,
+                                        d_node.node_id,
+                                        "associated_with",
+                                        0.80,
+                                        "probable",
+                                        [
                                             GraphCitation(
                                                 object_sha256=sha256,
                                                 source_name=source_name,
                                                 locator=seg_loc,
                                                 snippet=(
-                                                    f"Mentioned in {source_name} alongside "
-                                                    f"year {y_val}"
+                                                    f"Mentioned in {source_name} alongside year {y_val}"  # noqa: E501
                                                 ),
                                             )
                                         ],
                                     )
-
-                            # Co-occurrences between persons in same segment
-                            for i in range(len(person_nodes)):
-                                for j in range(i + 1, len(person_nodes)):
-                                    p1, p2 = person_nodes[i], person_nodes[j]
+                            for i in range(len(mention_nodes)):
+                                for j in range(i + 1, len(mention_nodes)):
+                                    p1, p2 = mention_nodes[i], mention_nodes[j]
                                     if p1.node_id != p2.node_id:
                                         _add_edge(
-                                            source_node_id=p1.node_id,
-                                            target_node_id=p2.node_id,
-                                            relation_type="co_occurs_with",
-                                            confidence=0.75,
-                                            status="probable",
-                                            citations=[
+                                            p1.node_id,
+                                            p2.node_id,
+                                            "co_occurs_with",
+                                            0.75,
+                                            "probable",
+                                            [
                                                 GraphCitation(
                                                     object_sha256=sha256,
                                                     source_name=source_name,
@@ -327,12 +332,12 @@ def rebuild_graph(home: Path | None = None) -> tuple[int, int]:
                                             ],
                                         )
                                         _add_edge(
-                                            source_node_id=p2.node_id,
-                                            target_node_id=p1.node_id,
-                                            relation_type="co_occurs_with",
-                                            confidence=0.75,
-                                            status="probable",
-                                            citations=[
+                                            p2.node_id,
+                                            p1.node_id,
+                                            "co_occurs_with",
+                                            0.75,
+                                            "probable",
+                                            [
                                                 GraphCitation(
                                                     object_sha256=sha256,
                                                     source_name=source_name,
@@ -348,16 +353,14 @@ def rebuild_graph(home: Path | None = None) -> tuple[int, int]:
                     except Exception:
                         pass
 
-    # 2. Read Face Detections, Clusters, and Confirmations
     f_db = face_index_path(layout)
     if f_db.is_file():
         try:
             with connect_face_index(f_db) as f_conn:
-                clusters = f_conn.execute("SELECT cluster_id, label FROM face_clusters").fetchall()
+                clusters = f_conn.execute("SELECT cluster_id, label FROM face_clusters").fetchall()  # noqa: E501
                 for c_row in clusters:
                     cid = str(c_row["cluster_id"])
                     label = str(c_row["label"])
-
                     conf = get_confirmation(f_conn, cid)
                     if conf:
                         person_name = conf[0]
@@ -373,52 +376,43 @@ def rebuild_graph(home: Path | None = None) -> tuple[int, int]:
                             person_name = label
                             status = "possible"
                             p_conf = 0.50
-
                     person_node = _get_or_create_node("person", canonical_name=person_name)
-
-                    # Fetch member faces
+                    if conf:
+                        _promote_candidate_edges(person_node)
                     m_rows = f_conn.execute(
                         """
                         SELECT face_id, object_sha256, source_name, bbox_json, confidence
-                        FROM faces
-                        WHERE cluster_id = ?
+                        FROM faces WHERE cluster_id = ?
                         """,
                         (cid,),
                     ).fetchall()
-
                     for mr in m_rows:
                         img_sha = str(mr["object_sha256"])
                         src_name = str(mr["source_name"])
                         bbox = json.loads(str(mr["bbox_json"]))
                         det_conf = float(mr["confidence"])
-
                         img_node = _get_or_create_node(
                             "image",
                             canonical_name=src_name,
                             properties={"sha256": img_sha},
                         )
-
-                        # Edge: Person appears_in Image
                         _add_edge(
-                            source_node_id=person_node.node_id,
-                            target_node_id=img_node.node_id,
-                            relation_type="appears_in",
-                            confidence=round(p_conf * det_conf, 3),
-                            status=status,
-                            citations=[
+                            person_node.node_id,
+                            img_node.node_id,
+                            "appears_in",
+                            round(p_conf * det_conf, 3),
+                            status,
+                            [
                                 GraphCitation(
                                     object_sha256=img_sha,
                                     source_name=src_name,
                                     locator={"bbox": bbox},
                                     snippet=(
-                                        f"Detected face in photograph '{src_name}' "
-                                        f"(conf: {det_conf:.2f})"
+                                        f"Detected face in photograph '{src_name}' (conf: {det_conf:.2f})"  # noqa: E501
                                     ),
                                 )
                             ],
                         )
-
-                        # Check if this image has an associated year
                         img_edges = [
                             e
                             for e in edges_by_id.values()
@@ -427,23 +421,21 @@ def rebuild_graph(home: Path | None = None) -> tuple[int, int]:
                         ]
                         for ie in img_edges:
                             _add_edge(
-                                source_node_id=person_node.node_id,
-                                target_node_id=ie.target_node_id,
-                                relation_type="associated_with",
-                                confidence=round(p_conf * 0.90, 3),
-                                status=status,
-                                citations=ie.citations,
+                                person_node.node_id,
+                                ie.target_node_id,
+                                "associated_with",
+                                round(p_conf * 0.90, 3),
+                                status,
+                                ie.citations,
                             )
         except Exception:
             pass
 
-    # 3. Write into SQLite database atomically
     with connect_graph_index(tmp_path) as g_conn:
         for node in nodes_by_id.values():
             save_node(g_conn, node)
         for edge in edges_by_id.values():
             save_edge(g_conn, edge)
         g_conn.commit()
-
     os.replace(tmp_path, final_path)
     return len(nodes_by_id), len(edges_by_id)

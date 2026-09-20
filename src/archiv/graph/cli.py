@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any, cast
 
 import typer
 from rich.console import Console
@@ -20,6 +20,21 @@ graph_app = typer.Typer(
     help="Entity graph, cross-corpus traversals, and evidence-backed relationship queries.",
 )
 console = Console()
+
+
+def _without_unmeasured_confidence(value: Any) -> Any:
+    """Remove internal graph confidence numbers from user-visible JSON."""
+    if isinstance(value, dict):
+        mapping = cast(dict[str, Any], value)
+        return {
+            key: _without_unmeasured_confidence(item)
+            for key, item in mapping.items()
+            if key != "confidence"
+        }
+    if isinstance(value, list):
+        items = cast(list[Any], value)
+        return [_without_unmeasured_confidence(item) for item in items]
+    return value
 
 
 @graph_app.command("rebuild")
@@ -56,7 +71,7 @@ def stats_command(
         stats = get_graph_stats(conn)
 
     if json_output:
-        typer.echo(json.dumps(stats, indent=2))
+        typer.echo(json.dumps(_without_unmeasured_confidence(stats), indent=2))
         return
 
     table = Table(title="Entity Graph Statistics")
@@ -105,7 +120,8 @@ def query_command(
     )
 
     if json_output:
-        typer.echo(json.dumps([r.model_dump(mode="json") for r in results], indent=2))
+        payload = [r.model_dump(mode="json") for r in results]
+        typer.echo(json.dumps(_without_unmeasured_confidence(payload), indent=2))
         return
 
     if not results:
@@ -120,10 +136,7 @@ def query_command(
 
     for res in results:
         status_color = "green" if res.status == "confirmed" else "yellow"
-        photo_lines = [
-            f"📷 {p.image_name} ({p.year or 'undated'}) [dim]{p.confidence * 100:.0f}% conf[/dim]"
-            for p in res.photographs
-        ]
+        photo_lines = [f"📷 {p.image_name} ({p.year or 'undated'})" for p in res.photographs]
         doc_lines = [
             f"📄 {d.document_name} [dim]'{d.snippet[:50]}...'[/dim]"
             for d in res.mentioning_documents
@@ -152,7 +165,8 @@ def entity_command(
         raise typer.Exit(code=1)
 
     if json_output:
-        typer.echo(profile.model_dump_json(indent=2))
+        payload = profile.model_dump(mode="json")
+        typer.echo(json.dumps(_without_unmeasured_confidence(payload), indent=2))
         return
 
     console.print(
@@ -164,14 +178,12 @@ def entity_command(
         t_app = Table(title="Photograph Appearances")
         t_app.add_column("Image", style="bold")
         t_app.add_column("Year")
-        t_app.add_column("Confidence")
         t_app.add_column("Status")
         t_app.add_column("Citation Detail")
         for app in profile.appearances:
             t_app.add_row(
                 app.image_name,
                 str(app.year or "—"),
-                f"{app.confidence * 100:.1f}%",
                 app.status,
                 app.citations[0].snippet if app.citations else "",
             )
@@ -194,12 +206,10 @@ def entity_command(
         t_co = Table(title="Co-occurring Entities")
         t_co.add_column("Entity", style="bold")
         t_co.add_column("Type")
-        t_co.add_column("Confidence")
         for co in profile.co_occurrences:
             t_co.add_row(
                 str(co["entity_name"]),
                 str(co["entity_type"]),
-                f"{float(co['confidence']) * 100:.1f}%",
             )
         console.print(t_co)
 
