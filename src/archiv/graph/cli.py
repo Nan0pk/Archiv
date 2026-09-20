@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 
 import typer
 from rich.console import Console
@@ -25,13 +25,15 @@ console = Console()
 def _without_unmeasured_confidence(value: Any) -> Any:
     """Remove internal graph confidence numbers from user-visible JSON."""
     if isinstance(value, dict):
+        mapping = cast(dict[str, Any], value)
         return {
             key: _without_unmeasured_confidence(item)
-            for key, item in value.items()
+            for key, item in mapping.items()
             if key != "confidence"
         }
     if isinstance(value, list):
-        return [_without_unmeasured_confidence(item) for item in value]
+        items = cast(list[Any], value)
+        return [_without_unmeasured_confidence(item) for item in items]
     return value
 
 
@@ -56,134 +58,91 @@ def stats_command(
     home: Annotated[Path | None, typer.Option("--home", file_okay=False)] = None,
     json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
 ) -> None:
-    """Show summary statistics of entities, relationships, and evidence edges."""
+    """Show graph statistics."""
     layout = ArchivLayout.resolve(home)
-    db_path = graph_index_path(layout)
-    if not db_path.is_file():
-        console.print(
-            "[yellow]Entity graph has not been built yet. Run 'archiv graph rebuild'.[/yellow]"
-        )
-        return
-
-    with connect_graph_index(db_path) as conn:
-        stats = get_graph_stats(conn)
-
+    stats = get_graph_stats(layout)
     if json_output:
         typer.echo(json.dumps(stats, indent=2))
+    else:
+        table = Table(title="Entity graph statistics")
+        table.add_column("Metric")
+        table.add_column("Value", justify="right")
+        for key, value in stats.items():
+            table.add_row(str(key), str(value))
+        console.print(table)
+
+
+@graph_app.command("entity")
+def entity_command(
+    name: Annotated[str, typer.Argument(help="Entity name to inspect.")],
+    home: Annotated[Path | None, typer.Option("--home", file_okay=False)] = None,
+    json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
+) -> None:
+    """Show an entity profile and its evidence-backed relationships."""
+    layout = ArchivLayout.resolve(home)
+    path = graph_index_path(layout)
+    if not path.is_file():
+        raise typer.BadParameter("Entity graph index not found. Run `archiv graph rebuild` first.")
+    with connect_graph_index(path, read_only=True) as conn:
+        profile = get_entity_profile(conn, name)
+    if profile is None:
+        raise typer.BadParameter(f"Entity not found: {name}")
+    if json_output:
+        typer.echo(json.dumps(_without_unmeasured_confidence(profile), indent=2))
         return
 
-    table = Table(title="Entity Graph Statistics")
-    table.add_column("Metric", style="bold")
-    table.add_column("Count", justify="right")
-    table.add_row("Total Entities (Nodes)", str(stats["total_nodes"]))
-    table.add_row("Total Relationships (Edges)", str(stats["total_edges"]))
-    for ntype, count in stats.get("nodes_by_type", {}).items():
-        table.add_row(f"  • Node: {ntype}", str(count))
-    for rel, count in stats.get("edges_by_relation", {}).items():
-        table.add_row(f"  • Edge: {rel}", str(count))
-    for status, count in stats.get("edges_by_status", {}).items():
-        color = "green" if status == "confirmed" else ("cyan" if status == "probable" else "yellow")
-        table.add_row(f"  • Status: [{color}]{status}[/{color}]", str(count))
+    node = profile["node"]
+    console.print(f"[bold]Entity Profile:[/bold] {node['canonical_name']} ({node['entity_type']})")
+    relationships = profile["relationships"]
+    if not relationships:
+        console.print("No relationships found.")
+        return
+    table = Table(title="Relationships")
+    table.add_column("Relation")
+    table.add_column("Entity")
+    table.add_column("Status")
+    table.add_column("Evidence")
+    for relationship in relationships:
+        citations = relationship.get("citations", [])
+        evidence = ", ".join(str(citation.get("source_name", "unknown")) for citation in citations)
+        table.add_row(
+            str(relationship.get("relation_type", "")),
+            str(relationship.get("other_name", "")),
+            str(relationship.get("status", "")),
+            evidence,
+        )
     console.print(table)
 
 
 @graph_app.command("query")
 def query_command(
-    person: Annotated[
-        str | None, typer.Option("--person", "-p", help="Filter by person name.")
-    ] = None,
-    date_from: Annotated[
-        int | None, typer.Option("--date-from", help="Start year (inclusive).")
-    ] = None,
-    date_to: Annotated[int | None, typer.Option("--date-to", help="End year (inclusive).")] = None,
+    query: Annotated[str, typer.Argument(help="Cross-corpus graph query.")],
     home: Annotated[Path | None, typer.Option("--home", file_okay=False)] = None,
     json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
 ) -> None:
-    """Query across photographs and mentioning documents."""
-    results = query_cross_corpus(
-        person_name=person, date_from=date_from, date_to=date_to, home=home
-    )
+    """Run a cross-corpus graph query."""
+    layout = ArchivLayout.resolve(home)
+    path = graph_index_path(layout)
+    if not path.is_file():
+        raise typer.BadParameter("Entity graph index not found. Run `archiv graph rebuild` first.")
+    with connect_graph_index(path, read_only=True) as conn:
+        results = query_cross_corpus(conn, query)
     if json_output:
-        payload = [r.model_dump(mode="json") for r in results]
-        typer.echo(json.dumps(_without_unmeasured_confidence(payload), indent=2))
+        typer.echo(json.dumps(_without_unmeasured_confidence(results), indent=2))
         return
     if not results:
-        console.print("[yellow]No matching entities found for query criteria.[/yellow]")
+        console.print("No graph relationships matched the query.")
         return
-
-    table = Table(title="Cross-Corpus Traversal Results")
-    table.add_column("Person", style="bold")
+    table = Table(title="Graph query results")
+    table.add_column("Source")
+    table.add_column("Relation")
+    table.add_column("Target")
     table.add_column("Status")
-    table.add_column("Photographs Appeared In")
-    table.add_column("Documents Mentioning Person")
-    for res in results:
-        status_color = "green" if res.status == "confirmed" else "yellow"
-        photo_lines = [f"📷 {p.image_name} ({p.year or 'undated'})" for p in res.photographs]
-        doc_lines = [
-            f"📄 {d.document_name} [dim]'{d.snippet[:50]}...'[/dim]"
-            for d in res.mentioning_documents
-        ]
+    for result in results:
         table.add_row(
-            res.person_name,
-            f"[{status_color}]{res.status}[/{status_color}]",
-            "\n".join(photo_lines) if photo_lines else "[dim]None[/dim]",
-            "\n".join(doc_lines) if doc_lines else "[dim]None[/dim]",
+            str(result.get("source_name", "")),
+            str(result.get("relation_type", "")),
+            str(result.get("target_name", "")),
+            str(result.get("status", "")),
         )
     console.print(table)
-
-
-@graph_app.command("entity")
-def entity_command(
-    target: Annotated[str, typer.Argument(help="Entity name or node ID to inspect.")],
-    home: Annotated[Path | None, typer.Option("--home", file_okay=False)] = None,
-    json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
-) -> None:
-    """Inspect complete 360-degree graph profile and evidence citations of an entity."""
-    profile = get_entity_profile(target, home=home)
-    if not profile:
-        console.print(f"[red]Entity not found:[/red] '{target}'")
-        raise typer.Exit(code=1)
-
-    if json_output:
-        payload = profile.model_dump(mode="json")
-        typer.echo(json.dumps(_without_unmeasured_confidence(payload), indent=2))
-        return
-
-    console.print(
-        f"[bold cyan]Entity Profile:[/bold cyan] {profile.entity.canonical_name} "
-        f"({profile.entity.entity_type})"
-    )
-    if profile.appearances:
-        t_app = Table(title="Photograph Appearances")
-        t_app.add_column("Image", style="bold")
-        t_app.add_column("Year")
-        t_app.add_column("Status")
-        t_app.add_column("Citation Detail")
-        for app in profile.appearances:
-            t_app.add_row(
-                app.image_name,
-                str(app.year or "—"),
-                app.status,
-                app.citations[0].snippet if app.citations else "",
-            )
-        console.print(t_app)
-    if profile.mentions:
-        t_men = Table(title="Document Mentions")
-        t_men.add_column("Document", style="bold")
-        t_men.add_column("Locator", style="dim")
-        t_men.add_column("Snippet")
-        for men in profile.mentions:
-            t_men.add_row(men.document_name, str(men.locator), men.snippet)
-        console.print(t_men)
-    if profile.co_occurrences:
-        t_co = Table(title="Co-occurring Entities")
-        t_co.add_column("Entity", style="bold")
-        t_co.add_column("Type")
-        for co in profile.co_occurrences:
-            t_co.add_row(str(co["entity_name"]), str(co["entity_type"]))
-        console.print(t_co)
-
-
-def register_graph_commands(app: typer.Typer) -> None:
-    """Register graph commands on root CLI app."""
-    app.add_typer(graph_app, name="graph")
