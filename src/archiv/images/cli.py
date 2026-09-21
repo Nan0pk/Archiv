@@ -12,6 +12,7 @@ from rich.table import Table
 
 from archiv.images.index import (
     connect_image_index,
+    count_image_objects,
     image_index_path,
     rebuild_image_index,
 )
@@ -85,10 +86,6 @@ def find_similar_command(
         return
 
     if not results:
-        # Two different situations, and saying the wrong one is a false statement about
-        # the archive. An unbuilt index also returns nothing, and the earlier wording
-        # reported that as "nothing looks like this" -- for an image that is in the
-        # archive and matches itself exactly.
         if not image_index_path(ArchivLayout.resolve(home)).is_file():
             console.print(
                 "[yellow]This archive has no image index yet, so nothing can be "
@@ -112,9 +109,6 @@ def find_similar_command(
     for rank, res in enumerate(results, 1):
         table.add_row(
             str(rank),
-            # Two decimals, not four. Four implied a calibrated confidence that does not
-            # exist: this is a raw cosine similarity over colour and edge features, and
-            # nothing has ever established what a given value means.
             f"{res.score:.2f}",
             res.source_name,
             f"{res.width}x{res.height}",
@@ -142,9 +136,6 @@ def duplicates_command(
     json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
 ) -> None:
     """Refuse duplicate grouping until an evidence-backed replacement is available."""
-    # Keep the existing arguments during the transition so callers receive an explicit
-    # refusal instead of an unrelated command-parsing failure. Neither value is used to
-    # make a duplicate claim.
     _ = (threshold, home)
 
     if json_output:
@@ -169,12 +160,18 @@ def status_command(
     home: Annotated[Path | None, typer.Option("--home", file_okay=False)] = None,
     json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
 ) -> None:
-    """Show the status of the image embedding index."""
+    """Show the status of the image embedding index against canonical image objects."""
     layout = ArchivLayout.resolve(home)
     index_file = image_index_path(layout)
+    total = count_image_objects(layout)
 
     if not index_file.is_file():
-        status = {"status": "missing", "path": str(index_file), "images_indexed": 0}
+        status = {
+            "status": "missing",
+            "path": str(index_file),
+            "images_indexed": 0,
+            "images_total": total,
+        }
     else:
         try:
             with connect_image_index(index_file) as conn:
@@ -182,33 +179,41 @@ def status_command(
                     "SELECT COUNT(*), model_name, dimensions "
                     "FROM image_embeddings GROUP BY model_name, dimensions"
                 ).fetchone()
-                count = row[0] if row else 0
-                model_name = row[1] if row else "none"
-                dimensions = row[2] if row else 0
+                count = int(row[0]) if row else 0
+                model_name = str(row[1]) if row else "none"
+                dimensions = int(row[2]) if row else 0
             status = {
-                "status": "ready",
+                "status": "ready" if count == total else "stale",
                 "path": str(index_file),
                 "images_indexed": count,
+                "images_total": total,
                 "model_name": model_name,
                 "dimensions": dimensions,
                 "size_bytes": index_file.stat().st_size,
             }
         except Exception as error:
-            status = {"status": "error", "path": str(index_file), "error": str(error)}
+            status = {
+                "status": "error",
+                "path": str(index_file),
+                "images_total": total,
+                "error": str(error),
+            }
 
     if json_output:
         typer.echo(json.dumps(status, indent=2))
     else:
-        if status["status"] == "ready":
+        if status["status"] in {"ready", "stale"}:
             size_kb = float(status.get("size_bytes", 0)) / 1024.0
+            label = "ready" if status["status"] == "ready" else "stale"
             console.print(
-                f"[green]Image index ready:[/green] {status['images_indexed']} images indexed "
+                f"Image index {label}: {status['images_indexed']} of "
+                f"{status['images_total']} images indexed "
                 f"(model: {status['model_name']}, {status['dimensions']} dims, {size_kb:.1f} KB)"
             )
         elif status["status"] == "missing":
             console.print(
-                f"[yellow]Image index missing:[/yellow] {status['path']}. "
-                f"Run 'archiv images rebuild-index' to create it."
+                f"[yellow]Image index missing:[/yellow] 0 of {status['images_total']} images indexed. "
+                f"Run 'archiv images rebuild-index' to create {status['path']}."
             )
         else:
             console.print(f"[red]Image index error:[/red] {status.get('error')}")
