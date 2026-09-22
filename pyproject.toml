@@ -45,7 +45,7 @@ remote-evaluation = [
   "tiktoken>=0.8",
 ]
 ocr-benchmark = [
-  "onnxruntime==1.29.0",
+  "onnxruntime==1.30.0",
   "python-bidi==0.6.11",
   "rapidocr==3.9.2",
 ]
