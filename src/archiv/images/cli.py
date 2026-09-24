@@ -12,6 +12,7 @@ from rich.table import Table
 
 from archiv.images.index import (
     connect_image_index,
+    count_image_objects,
     image_index_path,
     rebuild_image_index,
 )
@@ -172,9 +173,15 @@ def status_command(
     """Show the status of the image embedding index."""
     layout = ArchivLayout.resolve(home)
     index_file = image_index_path(layout)
+    total = count_image_objects(home=home)
 
     if not index_file.is_file():
-        status = {"status": "missing", "path": str(index_file), "images_indexed": 0}
+        status = {
+            "status": "missing",
+            "path": str(index_file),
+            "images_indexed": 0,
+            "images_total": total,
+        }
     else:
         try:
             with connect_image_index(index_file) as conn:
@@ -189,6 +196,7 @@ def status_command(
                 "status": "ready",
                 "path": str(index_file),
                 "images_indexed": count,
+                "images_total": total,
                 "model_name": model_name,
                 "dimensions": dimensions,
                 "size_bytes": index_file.stat().st_size,
@@ -201,13 +209,25 @@ def status_command(
     else:
         if status["status"] == "ready":
             size_kb = float(status.get("size_bytes", 0)) / 1024.0
-            console.print(
-                f"[green]Image index ready:[/green] {status['images_indexed']} images indexed "
-                f"(model: {status['model_name']}, {status['dimensions']} dims, {size_kb:.1f} KB)"
-            )
+            indexed = int(status["images_indexed"])
+            total_count = int(status["images_total"])
+            if indexed < total_count:
+                console.print(
+                    f"[yellow]Image index stale:[/yellow] {indexed} of {total_count} "
+                    f"images indexed (model: {status['model_name']}, "
+                    f"{status['dimensions']} dims, {size_kb:.1f} KB). "
+                    f"Run 'archiv images rebuild-index' to catch up."
+                )
+            else:
+                console.print(
+                    f"[green]Image index ready:[/green] {indexed} of {total_count} "
+                    f"images indexed (model: {status['model_name']}, "
+                    f"{status['dimensions']} dims, {size_kb:.1f} KB)"
+                )
         elif status["status"] == "missing":
             console.print(
                 f"[yellow]Image index missing:[/yellow] {status['path']}. "
+                f"{status['images_total']} image object(s) in the archive are not indexed. "
                 f"Run 'archiv images rebuild-index' to create it."
             )
         else:

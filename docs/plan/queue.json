@@ -393,7 +393,7 @@
       "phase": "B",
       "title": "Index staleness: refresh on add, report N of M, incremental image index",
       "doc": "docs/plan/steps/S13.md",
-      "detail": "stub",
+      "detail": "full",
       "depends_on": [
         "S00"
       ],
