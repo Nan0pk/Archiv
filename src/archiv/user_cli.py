@@ -25,7 +25,9 @@ from archiv.contracts import (
 )
 from archiv.cost_control import SpendLedgerUnreadableError, load_ledger, load_spend_policy
 from archiv.evaluation_config import ENV_OVERRIDE as EVALUATION_ENV_OVERRIDE
+from archiv.graph.builder import rebuild_graph
 from archiv.grounding import AskEvidenceUnwritableError, run_grounded_ask
+from archiv.images.index import update_image_index
 from archiv.ingestion import (
     PreparedCandidate,
     commit_candidate,
@@ -173,6 +175,10 @@ def _add_sources(
             if full_index
             else update_search_index([r.object_sha256 for r in results], home=home)
         )
+        image_digests = [r.object_sha256 for r in results if r.media_type.startswith("image/")]
+        if image_digests or full_index:
+            update_image_index(image_digests or None, home=home, full=full_index)
+        rebuild_graph(home=home)
     else:
         index = None
 
