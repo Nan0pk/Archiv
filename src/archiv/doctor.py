@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import platform
+import shutil
 import sqlite3
 import sys
 import tempfile
@@ -47,11 +48,29 @@ class CheckPayload(TypedDict):
     detail: str
 
 
+@dataclass(frozen=True)
+class Advisory:
+    """An optional dependency that is missing without failing the deterministic minimum."""
+
+    name: str
+    available: bool
+    unblocks: str
+
+
+class AdvisoryPayload(TypedDict):
+    """Serializable advisory row."""
+
+    name: str
+    available: bool
+    unblocks: str
+
+
 class DoctorReport(TypedDict):
     """Serializable environment report."""
 
     status: Literal["ok", "failed"]
     checks: list[CheckPayload]
+    advisories: list[AdvisoryPayload]
 
 
 def _python_check() -> CheckResult:
@@ -85,6 +104,51 @@ def _writable_workspace_check() -> CheckResult:
         return CheckResult("writable_workspace", False, str(error))
 
 
+# ``import tkinter`` fails with ``name="tkinter"`` when the Python-level package is
+# absent, but with ``name="_tkinter"`` when only the compiled extension is missing
+# (Debian/Ubuntu without ``python3-tk``, source builds without Tcl/Tk headers). Both
+# must be treated as "unavailable" instead of propagating an unrelated ImportError.
+_TKINTER_MODULE_NAMES = frozenset({"tkinter", "_tkinter"})
+
+
+def _tkinter_available() -> bool:
+    try:
+        import tkinter  # noqa: F401  # pyright: ignore[reportUnusedImport]
+    except ModuleNotFoundError as error:
+        if error.name not in _TKINTER_MODULE_NAMES:
+            raise
+        return False
+    return True
+
+
+def _libreoffice_advisory() -> Advisory:
+    available = shutil.which("libreoffice") is not None or shutil.which("soffice") is not None
+    return Advisory("libreoffice", available, "archiv report cannot complete its verification step")
+
+
+def _tesseract_advisory() -> Advisory:
+    available = shutil.which("tesseract") is not None
+    return Advisory("tesseract", available, "images ingest and are preserved, but produce no text")
+
+
+def _tkinter_advisory() -> Advisory:
+    return Advisory(
+        "tkinter",
+        _tkinter_available(),
+        "archiv ui won't open; every command still works in the terminal",
+    )
+
+
+def collect_advisories() -> list[Advisory]:
+    """Report optional dependencies the deterministic minimum does not require.
+
+    These never affect ``doctor``'s overall pass/fail status: a user without
+    LibreOffice, Tesseract, or tkinter has a working install, just a narrower one.
+    """
+
+    return [_libreoffice_advisory(), _tesseract_advisory(), _tkinter_advisory()]
+
+
 def collect_checks(home: Path | None = None) -> list[CheckResult]:
     """Return all checks without mutating persistent user state."""
 
@@ -108,9 +172,14 @@ def doctor_report(home: Path | None = None) -> DoctorReport:
     payload: list[CheckPayload] = [
         {"name": check.name, "passed": check.passed, "detail": check.detail} for check in checks
     ]
+    advisories: list[AdvisoryPayload] = [
+        {"name": item.name, "available": item.available, "unblocks": item.unblocks}
+        for item in collect_advisories()
+    ]
     return {
         "status": "ok" if all(check.passed for check in checks) else "failed",
         "checks": payload,
+        "advisories": advisories,
     }
 
 
