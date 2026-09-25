@@ -31,4 +31,6 @@ Local-model, desktop, hardware, and strict offline tests are manual or trusted-b
 
 ## Licensing
 
-Public visibility is not itself an open-source licence. Until a licence is deliberately selected and added, reuse rights are not granted.
+Archiv is licensed under the Apache License, Version 2.0 (see `LICENSE` and
+`pyproject.toml`). The decision record is
+[`docs/decisions/license-apache-2-0.md`](decisions/license-apache-2-0.md).

@@ -411,7 +411,7 @@
       "phase": "B",
       "title": "Doctor probes, README command coverage test, and status-line honesty",
       "doc": "docs/plan/steps/S14.md",
-      "detail": "stub",
+      "detail": "full",
       "depends_on": [
         "S13"
       ],
