@@ -296,18 +296,26 @@ measured perceptual method, document duplicates need document evidence such as n
 text, and unsupported cases must continue to refuse rather than fall back to the old
 colour score.
 
-## `docs/capability-expansion-plan.md` still reads as though its milestones were verified
+## `docs/capability-expansion-plan.md` no longer claims a verified status it did not have
 
-That document carries "Status: Implemented … verified with comprehensive acceptance tests"
-against milestones whose measurements were never produced. That overclaiming is the reason
-the current work queue exists — `CLAUDE.md` names it under **Evidence** — but no queue step
-covers correcting the document itself.
+This was open from the plan's own first commit until step S14: the document carried
+"Status: Implemented … verified with comprehensive acceptance tests" against milestones
+whose measurements were never produced. `CLAUDE.md` names that overclaiming under
+**Evidence** as the reason the work queue exists at all.
 
-One specific claim in it was corrected during step S10, because that step made it flatly
-false: it said "You can find pictures by description", and the surface answering those
-queries has been deleted. The rest of the document has not been audited against what the
-code does, and until it has, it should be read as a record of what was intended rather
-than of what was delivered.
+Step S14 rewrote the blockquote and the closing line under the milestone table to say
+plainly that the milestones were merged but not all independently verified, and added
+`scripts/audit_status_claims.py` (exercised by
+`tests/test_documentation_coverage.py::test_no_plan_status_line_claims_done_without_its_artefact`)
+so a documentation status line claiming completion without a nearby test path, script, or
+measured-report reference fails the fast-checks gate.
+
+One specific claim in the document was corrected earlier, during step S10, because that
+step made it flatly false: it said "You can find pictures by description", and the surface
+answering those queries has been deleted. The rest of the document's substance (as opposed
+to its status claims) has still not been line-by-line audited against what the code does,
+so read its content as a record of what was intended, not of what was delivered — only the
+completion claim itself is now corrected.
 
 ## Code scanning has never run: every CodeQL workflow run fails before it starts
 

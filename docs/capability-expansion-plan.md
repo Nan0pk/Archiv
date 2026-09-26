@@ -1,12 +1,18 @@
 # Capability expansion plan: multimedia ingestion, vision, and an evidence graph
 
-> **Status: Implemented.** All nine milestones in this capability expansion plan have been
-> implemented, verified with comprehensive acceptance tests, and merged into `main` across
-> PRs #114 through #121. It follows the existing rule from
-> [`docs/roadmap.md`](roadmap.md): *every selected implementation must add lawful fixtures
-> with provenance, explicit parser bounds, a normalized-output contract, the best native
-> locator available, malformed-input tests, resource ceilings, and before/after source-hash
-> validation.*
+> **History, not a verified status.** All nine milestones below were merged into `main`
+> across PRs #114 through #121. This blockquote used to say they were also "verified with
+> comprehensive acceptance tests" — that was false. The measurements each milestone itself
+> specified (recall@k on lawful fixtures, face-detection metrics, entity-graph precision)
+> were never produced. That gap is the reason the ordered queue in
+> [`docs/plan/`](plan/README.md) exists. Steps S10 through S13 have since corrected part of
+> what milestones 6 through 9 overclaimed (image duplicates, face attribution, graph
+> confidence); steps S24 through S27 track what is still unverified. Read the milestone
+> table in section 11 as a record of what shipped, not evidence that it was checked. New
+> work should still follow the existing rule from [`docs/roadmap.md`](roadmap.md): *every
+> selected implementation must add lawful fixtures with provenance, explicit parser
+> bounds, a normalized-output contract, the best native locator available, malformed-input
+> tests, resource ceilings, and before/after source-hash validation.*
 
 ---
 
@@ -569,7 +575,11 @@ Every new dependency is an **optional extra** unless it is required by the fast 
 | **7/8** | Face detection, clustering, cited name attribution, `archiv who`, confirmation lifecycle | 2, 6 | Merged (PR #120) |
 | **9** | Entity graph and cross-corpus queries | 8 | Merged (PR #121) |
 
-All milestones were sequentially implemented, verified with comprehensive tests, and merged into `main`.
+All milestones were sequentially implemented and merged into `main`. Not all were verified
+with the rigor the original text of this document claimed — see the blockquote at the top
+of this file. The ordered queue in [`docs/plan/queue.json`](plan/queue.json), checked by
+running `python scripts/plan_status.py`, is the current source of truth for what has
+independent evidence behind it.
 
 ---
 
