@@ -11,7 +11,7 @@ import tempfile
 from collections.abc import Iterable, Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 from archiv.search import retrieve_evidence
 from field_trial.common import (
@@ -22,17 +22,17 @@ from field_trial.common import (
     load_benchmark,
     sha256_file,
 )
-from field_trial.fixtures import FakeModelServer, _source_maps, generate_public_corpus
+from field_trial.fixtures import FakeModelServer, generate_public_corpus, source_maps
 from field_trial.scoring import (
-    _aggregate,
-    _copy_report_artifacts,
-    _defects,
-    _facts_exist,
-    _failure_category,
-    _json_output,
-    _markdown,
-    _normalized_text,
+    aggregate_results,
     calculate_retrieval_metrics,
+    copy_report_artifacts,
+    facts_exist,
+    failure_category,
+    json_output,
+    list_defects,
+    normalized_text,
+    render_markdown,
     run_command,
     scan_safe_artifacts,
     score_answer,
@@ -50,7 +50,7 @@ def run_public_trial(args: argparse.Namespace) -> dict[str, object]:
     home = workspace / "archiv-home"
     manifest = generate_public_corpus(benchmark, corpus)
     before = {str(item["filename"]): str(item["sha256"]) for item in manifest}
-    source_files, by_filename = _source_maps(benchmark)
+    source_files, by_filename = source_maps(benchmark)
     command = args.archiv_command.split()
     add = run_command([*command, "add", str(corpus), "--home", str(home), "--json"])
     if add["returncode"] != 0:
@@ -78,8 +78,8 @@ def run_public_trial(args: argparse.Namespace) -> dict[str, object]:
         model_test = run_command([*command, "model", "test", "--home", str(home), "--json"])
         if model_test["returncode"] != 0:
             raise RuntimeError(f"fake model test failed: {model_test['stderr']}")
-        normalized = _normalized_text(home)
-        limit = int(benchmark["evidence_limit"])
+        normalized = normalized_text(home)
+        limit = int(cast(int, benchmark["evidence_limit"]))
         for question in cast(Sequence[Mapping[str, object]], benchmark["questions"]):
             text = str(question["question"])
             package = retrieve_evidence(text, home=home, evidence_limit=limit)
@@ -104,7 +104,7 @@ def run_public_trial(args: argparse.Namespace) -> dict[str, object]:
                     "selection_scores": [
                         round(selection.score, 6) for selection in package.diagnostics.selections
                     ],
-                    "normalized_evidence_contains_required_facts": _facts_exist(
+                    "normalized_evidence_contains_required_facts": facts_exist(
                         question, normalized, source_files
                     ),
                     "duplicate_passage_count": len(selected)
@@ -123,11 +123,11 @@ def run_public_trial(args: argparse.Namespace) -> dict[str, object]:
                     "--json",
                 ]
             )
-            payload = _json_output(ask)
+            payload = json_output(ask)
             grounded = payload.get("grounded_response")
-            response = grounded if isinstance(grounded, dict) else None
+            response = cast(dict[str, object], grounded) if isinstance(grounded, dict) else None
             citations_raw = payload.get("retrieved_citations", [])
-            count = len(citations_raw) if isinstance(citations_raw, list) else 0
+            count = len(cast(list[object], citations_raw)) if isinstance(citations_raw, list) else 0
             citations = validate_structural_citations(
                 response, {f"CIT-{index}" for index in range(1, count + 1)}
             )
@@ -141,7 +141,7 @@ def run_public_trial(args: argparse.Namespace) -> dict[str, object]:
                     "citation_integrity": citations,
                     "answer_quality": answer,
                     "duration_ms": ask["duration_ms"],
-                    "failure_category": _failure_category(retrieval, citations, answer),
+                    "failure_category": failure_category(retrieval, citations, answer),
                 }
             )
         report = run_command(
@@ -158,10 +158,10 @@ def run_public_trial(args: argparse.Namespace) -> dict[str, object]:
                 "--render" if args.render_report else "--no-render",
             ]
         )
-        report_payload = _json_output(report) if report["returncode"] == 0 else {"status": "failed"}
+        report_payload = json_output(report) if report["returncode"] == 0 else {"status": "failed"}
     after = {path.name: sha256_file(path) for path in corpus.iterdir() if path.is_file()}
-    aggregate = _aggregate(results, float(add["duration_ms"]))
-    artifacts = _copy_report_artifacts(report_payload, home, output)
+    aggregate = aggregate_results(results, float(cast(float, add["duration_ms"])))
+    artifacts = copy_report_artifacts(report_payload, home, output)
     summary: dict[str, object] = {
         "schema_version": SCHEMA_VERSION,
         "mode": "public",
@@ -175,7 +175,7 @@ def run_public_trial(args: argparse.Namespace) -> dict[str, object]:
             "purpose": "isolate retrieval and deterministic validators",
         },
         "aggregate": aggregate,
-        "defects": _defects(aggregate),
+        "defects": list_defects(aggregate),
         "source_navigation": {
             "source_name_available": True,
             "native_locator_available": True,
@@ -203,7 +203,7 @@ def run_public_trial(args: argparse.Namespace) -> dict[str, object]:
     (output / "public-results.json").write_text(
         json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
-    (output / "public-report.md").write_text(_markdown(summary), encoding="utf-8")
+    (output / "public-report.md").write_text(render_markdown(summary), encoding="utf-8")
     safety = scan_safe_artifacts(output, [str(workspace), str(Path.home())])
     if safety:
         raise RuntimeError("public artifact safety scan failed: " + "; ".join(safety))
@@ -214,6 +214,7 @@ def run_public_trial(args: argparse.Namespace) -> dict[str, object]:
 def redact_private(value: object, private_values: Iterable[str] = ()) -> object:
     forbidden = [item for item in private_values if item]
     if isinstance(value, dict):
+        value = cast(dict[str, object], value)
         return {
             key: "[redacted]"
             if key.casefold() in PRIVATE_KEYS
@@ -221,6 +222,7 @@ def redact_private(value: object, private_values: Iterable[str] = ()) -> object:
             for key, child in value.items()
         }
     if isinstance(value, list):
+        value = cast(list[object], value)
         return [redact_private(item, forbidden) for item in value]
     if isinstance(value, str):
         result = value
@@ -235,7 +237,7 @@ def validate_private_request(corpus: Path | None, local_only: bool) -> None:
         raise ValueError("private corpus processing requires explicit --local-only opt-in")
 
 
-def _copy_private_corpus(source: Path, destination: Path) -> tuple[list[Path], dict[str, str]]:
+def copy_private_corpus(source: Path, destination: Path) -> tuple[list[Path], dict[str, str]]:
     candidates = [source] if source.is_file() else sorted(source.rglob("*"))
     files = [
         path
@@ -283,8 +285,10 @@ def _private_questions(path: Path | None) -> list[str]:
             ),
         ]
     value = json.loads(path.read_text(encoding="utf-8"))
-    if isinstance(value, list) and all(isinstance(item, str) and item.strip() for item in value):
-        return cast(list[str], value)
+    if isinstance(value, list):
+        value = cast(list[Any], value)
+        if all(isinstance(item, str) and item.strip() for item in value):
+            return cast(list[str], value)
     raise ValueError("private questions must be a JSON list of non-empty strings")
 
 
@@ -303,7 +307,7 @@ def run_private_trial(args: argparse.Namespace) -> dict[str, object]:
     output.mkdir(parents=True, exist_ok=False)
     disposable = output / "disposable-corpus"
     home = output / "archiv-home"
-    copied, hashes = _copy_private_corpus(corpus, disposable)
+    copied, hashes = copy_private_corpus(corpus, disposable)
     questions = _private_questions(args.questions)
     command = args.archiv_command.split()
     add = run_command([*command, "add", str(disposable), "--home", str(home), "--json"])
@@ -360,9 +364,9 @@ def run_private_trial(args: argparse.Namespace) -> dict[str, object]:
                     "--json",
                 ]
             )
-            item["ask"] = _json_output(ask) if ask["stdout"] else {"status": "failed"}
+            item["ask"] = json_output(ask) if ask["stdout"] else {"status": "failed"}
             item["duration_ms"] = ask["duration_ms"]
-            durations.append(float(ask["duration_ms"]))
+            durations.append(float(cast(float, ask["duration_ms"])))
         details.append(item)
     unchanged = all(sha256_file(Path(path)) == digest for path, digest in hashes.items())
     (output / "private-details.json").write_text(

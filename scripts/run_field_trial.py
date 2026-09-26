@@ -5,14 +5,14 @@ from field_trial.cli import main
 from field_trial.common import BenchmarkError, load_benchmark, sha256_file
 from field_trial.fixtures import FakeModelServer, generate_public_corpus
 from field_trial.runner import (
-    _copy_private_corpus,
+    copy_private_corpus,
     redact_private,
     run_public_trial,
     validate_private_request,
 )
 from field_trial.scoring import (
-    _markdown,
     calculate_retrieval_metrics,
+    render_markdown,
     scan_safe_artifacts,
     score_answer,
     validate_structural_citations,
@@ -21,8 +21,8 @@ from field_trial.scoring import (
 __all__ = [
     "BenchmarkError",
     "FakeModelServer",
-    "_copy_private_corpus",
-    "_markdown",
+    "copy_private_corpus",
+    "render_markdown",
     "calculate_retrieval_metrics",
     "generate_public_corpus",
     "load_benchmark",

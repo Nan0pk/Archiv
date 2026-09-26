@@ -24,7 +24,7 @@ import tempfile
 import xml.etree.ElementTree as ElementTree
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 ROOT = Path(__file__).resolve().parents[1]
 QUEUE_PATH = ROOT / "docs" / "plan" / "queue.json"
@@ -77,13 +77,15 @@ def load_queue(path: Path = QUEUE_PATH) -> tuple[dict[str, Any], list[Step]]:
     raw_steps = payload.get("steps")
     if not isinstance(raw_steps, list) or not raw_steps:
         raise PlanError("queue file declares no steps")
+    raw_steps = cast(list[Any], raw_steps)
 
     known_kinds = set(payload.get("acceptance_kinds", {}))
     steps: list[Step] = []
     seen: set[str] = set()
-    for entry in raw_steps:
-        if not isinstance(entry, dict):
+    for raw_entry in raw_steps:
+        if not isinstance(raw_entry, dict):
             raise PlanError("every step must be an object")
+        entry = cast(dict[str, Any], raw_entry)
         step_id = str(entry.get("id", ""))
         if not step_id:
             raise PlanError("every step needs an id")
@@ -91,19 +93,22 @@ def load_queue(path: Path = QUEUE_PATH) -> tuple[dict[str, Any], list[Step]]:
             raise PlanError(f"duplicate step id: {step_id}")
         seen.add(step_id)
 
-        acceptance = entry.get("acceptance")
-        if not isinstance(acceptance, dict):
+        raw_acceptance = entry.get("acceptance")
+        if not isinstance(raw_acceptance, dict):
             raise PlanError(f"{step_id}: missing acceptance block")
+        acceptance = cast(dict[str, Any], raw_acceptance)
         kind = str(acceptance.get("kind", ""))
         if known_kinds and kind not in known_kinds:
             raise PlanError(f"{step_id}: unknown acceptance kind {kind!r}")
         targets = acceptance.get("targets")
         if not isinstance(targets, list) or not targets:
             raise PlanError(f"{step_id}: acceptance declares no targets")
+        targets = cast(list[Any], targets)
 
         depends = entry.get("depends_on", [])
         if not isinstance(depends, list):
             raise PlanError(f"{step_id}: depends_on must be a list")
+        depends = cast(list[Any], depends)
 
         steps.append(
             Step(
@@ -299,8 +304,9 @@ def _payload(queue: dict[str, Any], results: list[StepResult]) -> dict[str, Any]
 
 def _phase_titles(queue: dict[str, Any]) -> dict[str, str]:
     titles: dict[str, str] = {}
-    for phase in queue.get("phases", []):
-        if isinstance(phase, dict):
+    for raw_phase in cast(list[Any], queue.get("phases", [])):
+        if isinstance(raw_phase, dict):
+            phase = cast(dict[str, Any], raw_phase)
             titles[str(phase.get("id", ""))] = str(phase.get("title", ""))
     return titles
 

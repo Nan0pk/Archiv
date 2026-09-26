@@ -28,7 +28,7 @@ def run_command(command: Sequence[str]) -> dict[str, object]:
     }
 
 
-def _json_output(result: Mapping[str, object]) -> dict[str, object]:
+def json_output(result: Mapping[str, object]) -> dict[str, object]:
     try:
         value = json.loads(str(result["stdout"]))
     except json.JSONDecodeError as error:
@@ -72,14 +72,17 @@ def validate_structural_citations(
         if not isinstance(group, list):
             errors.append(f"{group_name} is not a list")
             continue
+        group = cast(list[object], group)
         for item in group:
             if not isinstance(item, dict):
                 errors.append(f"{group_name} contains non-object")
                 continue
+            item = cast(dict[str, object], item)
             citation_ids = item.get("citation_ids")
             if not isinstance(citation_ids, list) or not citation_ids:
                 errors.append(f"{group_name} item has no citation_ids")
                 continue
+            citation_ids = cast(list[object], citation_ids)
             for raw in citation_ids:
                 citation_id = str(raw)
                 used.append(citation_id)
@@ -118,10 +121,12 @@ def score_answer(
         for item in cast(Sequence[str], question.get("forbidden_claims", []))
         if item.casefold() in text
     ]
-    insufficient = (
+    insufficient: Sequence[object] = (
         cast(Sequence[object], response.get("insufficient_evidence", [])) if response else []
     )
-    contradictions = cast(Sequence[object], response.get("contradictions", [])) if response else []
+    contradictions: Sequence[object] = (
+        cast(Sequence[object], response.get("contradictions", [])) if response else []
+    )
     covered = sum(bool(item["covered"]) for item in facts)
     completeness = 1.0 if not facts else covered / len(facts)
     return {
@@ -142,7 +147,7 @@ def score_answer(
     }
 
 
-def _normalized_text(home: Path) -> dict[str, str]:
+def normalized_text(home: Path) -> dict[str, str]:
     result: dict[str, str] = {}
     for path in (home / "derived").glob("*/normalized/document.json"):
         document = json.loads(path.read_text(encoding="utf-8"))
@@ -152,7 +157,7 @@ def _normalized_text(home: Path) -> dict[str, str]:
     return result
 
 
-def _facts_exist(
+def facts_exist(
     question: Mapping[str, object], normalized: Mapping[str, str], source_files: Mapping[str, str]
 ) -> bool:
     text = "\n".join(
@@ -167,10 +172,10 @@ def _facts_exist(
     )
 
 
-def _failure_category(
+def failure_category(
     retrieval: Mapping[str, object], citations: Mapping[str, object], answer: Mapping[str, object]
 ) -> str | None:
-    if float(retrieval["recall_at_evidence_limit"]) < 1:
+    if float(cast(float, retrieval["recall_at_evidence_limit"])) < 1:
         return "query construction failure"
     if not citations["valid"]:
         return "citation validation failure"
@@ -178,12 +183,12 @@ def _failure_category(
         return "unsupported claim"
     if not answer["contradiction_ok"]:
         return "contradiction handling failure"
-    if not answer["honesty_ok"] or float(answer["completeness_score"]) < 1:
+    if not answer["honesty_ok"] or float(cast(float, answer["completeness_score"])) < 1:
         return "model synthesis failure"
     return None
 
 
-def _copy_report_artifacts(payload: Mapping[str, object], home: Path, output: Path) -> list[str]:
+def copy_report_artifacts(payload: Mapping[str, object], home: Path, output: Path) -> list[str]:
     del payload
     copied: list[str] = []
     for suffix in (".docx", ".pdf"):
@@ -203,13 +208,17 @@ def _copy_report_artifacts(payload: Mapping[str, object], home: Path, output: Pa
     return copied
 
 
-def _aggregate(results: Sequence[Mapping[str, object]], indexing_ms: float) -> dict[str, object]:
+def aggregate_results(
+    results: Sequence[Mapping[str, object]], indexing_ms: float
+) -> dict[str, object]:
     recalls = [
-        float(cast(Mapping[str, object], item["retrieval"])["recall_at_evidence_limit"])
+        float(
+            cast(float, cast(Mapping[str, object], item["retrieval"])["recall_at_evidence_limit"])
+        )
         for item in results
     ]
     completeness = [
-        float(cast(Mapping[str, object], item["answer_quality"])["completeness_score"])
+        float(cast(float, cast(Mapping[str, object], item["answer_quality"])["completeness_score"]))
         for item in results
     ]
     citation_valid = [
@@ -218,7 +227,7 @@ def _aggregate(results: Sequence[Mapping[str, object]], indexing_ms: float) -> d
     honesty = [
         bool(cast(Mapping[str, object], item["answer_quality"])["honesty_ok"]) for item in results
     ]
-    durations = sorted(float(item["duration_ms"]) for item in results)
+    durations = sorted(float(cast(float, item["duration_ms"])) for item in results)
     failures = Counter(
         str(item["failure_category"]) for item in results if item["failure_category"]
     )
@@ -232,7 +241,12 @@ def _aggregate(results: Sequence[Mapping[str, object]], indexing_ms: float) -> d
             "structurally_valid_questions": sum(citation_valid),
             "structural_failures": len(citation_valid) - sum(citation_valid),
             "fabricated_identifier_count": sum(
-                len(cast(Mapping[str, object], item["citation_integrity"])["errors"])
+                len(
+                    cast(
+                        list[object],
+                        cast(Mapping[str, object], item["citation_integrity"])["errors"],
+                    )
+                )
                 for item in results
             ),
         },
@@ -241,7 +255,12 @@ def _aggregate(results: Sequence[Mapping[str, object]], indexing_ms: float) -> d
             "fully_complete_questions": sum(value == 1 for value in completeness),
             "honesty_checks_passed": sum(honesty),
             "unsupported_claim_count": sum(
-                len(cast(Mapping[str, object], item["answer_quality"])["unsupported_claims"])
+                len(
+                    cast(
+                        list[object],
+                        cast(Mapping[str, object], item["answer_quality"])["unsupported_claims"],
+                    )
+                )
                 for item in results
             ),
         },
@@ -255,9 +274,9 @@ def _aggregate(results: Sequence[Mapping[str, object]], indexing_ms: float) -> d
     }
 
 
-def _defects(aggregate: Mapping[str, object]) -> list[dict[str, object]]:
+def list_defects(aggregate: Mapping[str, object]) -> list[dict[str, object]]:
     retrieval = cast(Mapping[str, object], aggregate["retrieval"])
-    misses = int(retrieval["questions_with_retrieval_miss"])
+    misses = int(cast(int, retrieval["questions_with_retrieval_miss"]))
     defects: list[dict[str, object]] = []
     if misses:
         defects.append(
@@ -295,7 +314,7 @@ def _defects(aggregate: Mapping[str, object]) -> list[dict[str, object]]:
     return defects
 
 
-def _markdown(summary: Mapping[str, object]) -> str:
+def render_markdown(summary: Mapping[str, object]) -> str:
     aggregate = cast(Mapping[str, object], summary["aggregate"])
     retrieval = cast(Mapping[str, object], aggregate["retrieval"])
     citations = cast(Mapping[str, object], aggregate["citation_integrity"])

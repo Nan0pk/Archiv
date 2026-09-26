@@ -10,7 +10,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import cast
 
-from field_trial.scoring import _markdown, scan_safe_artifacts
+from field_trial.scoring import render_markdown, scan_safe_artifacts
 
 _MARKER = "ARCHIV-SOURCE-LOCATION-PROBE-2026"
 
@@ -84,7 +84,7 @@ def apply_source_location_probe(
         json.dumps(summary, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
-    (output / "public-report.md").write_text(_markdown(summary), encoding="utf-8")
+    (output / "public-report.md").write_text(render_markdown(summary), encoding="utf-8")
     errors = scan_safe_artifacts(output)
     if errors:
         raise RuntimeError("source-location artifact safety check failed: " + "; ".join(errors))
