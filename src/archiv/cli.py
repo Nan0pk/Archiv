@@ -74,6 +74,18 @@ def doctor(
             )
         console.print(table)
 
+        advisories = Table(title="Optional dependencies")
+        advisories.add_column("Dependency")
+        advisories.add_column("Found")
+        advisories.add_column("If missing")
+        for advisory in report["advisories"]:
+            advisories.add_row(
+                advisory["name"],
+                "yes" if advisory["available"] else "no",
+                advisory["unblocks"],
+            )
+        console.print(advisories)
+
     if report["status"] != "ok":
         raise typer.Exit(code=1)
 
