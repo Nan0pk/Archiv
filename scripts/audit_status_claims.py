@@ -35,7 +35,7 @@ class Violation:
 
 
 def _markdown_files(root: Path) -> list[Path]:
-    files = set((root / "docs").rglob("*.md")) if (root / "docs").is_dir() else set()
+    files: set[Path] = set((root / "docs").rglob("*.md")) if (root / "docs").is_dir() else set()
     readme = root / "README.md"
     if readme.is_file():
         files.add(readme)

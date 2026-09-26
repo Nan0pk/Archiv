@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 from typing import cast
 
 ROOT = Path(__file__).parents[1]
 AUDITOR = ROOT / "scripts" / "audit_ci_trust.py"
+PYTHON_SCRIPT_INVOCATION = re.compile(r"python3?\s+(scripts/[\w./-]+\.py)")
 
 
 def _run_audit(root: Path) -> subprocess.CompletedProcess[str]:
@@ -78,6 +81,46 @@ def test_governance_document_records_solo_maintainer_safe_settings() -> None:
         "manual owner action",
     ):
         assert required in governance
+
+
+def _scripts_ci_runs() -> set[str]:
+    """Every ``scripts/*.py`` path a workflow's own ``run:`` step invokes directly."""
+
+    workflows_dir = ROOT / ".github" / "workflows"
+    referenced: set[str] = set()
+    for workflow in sorted({*workflows_dir.glob("*.yml"), *workflows_dir.glob("*.yaml")}):
+        text = workflow.read_text(encoding="utf-8")
+        referenced.update(PYTHON_SCRIPT_INVOCATION.findall(text))
+    return referenced
+
+
+def test_every_script_ci_runs_is_type_checked() -> None:
+    """A script a workflow invokes must fall under pyright's own `include` list.
+
+    `scripts/build_office_validation_artifacts.py` once called `generate_report` with
+    its old signature after that function gained two required parameters. Every local
+    check passed because `pyright`'s `include` list only covered `src` and `tests`;
+    `scripts` was merely on `extraPaths`, which makes it importable but not checked.
+    The failure would only have surfaced in a job that needs LibreOffice and Poppler
+    and cannot run in the standard container. This test keeps that gap from reopening:
+    it fails the moment a workflow gains a script invocation `pyright` does not cover.
+    """
+
+    referenced = _scripts_ci_runs()
+    assert referenced, "expected at least one workflow to invoke a scripts/*.py file"
+
+    pyright_config = tomllib.loads(ROOT.joinpath("pyproject.toml").read_text(encoding="utf-8"))
+    include = cast(list[str], pyright_config["tool"]["pyright"]["include"])
+
+    uncovered = {
+        path
+        for path in referenced
+        if not any(path == prefix or path.startswith(f"{prefix}/") for prefix in include)
+    }
+    assert not uncovered, (
+        "these scripts are invoked by CI but not covered by pyright's include list "
+        f"in pyproject.toml: {sorted(uncovered)}"
+    )
 
 
 def test_security_workflows_use_trusted_events_and_pinned_actions() -> None:

@@ -14,13 +14,14 @@ from typing import cast
 from docx import Document
 from openpyxl import Workbook
 from pptx import Presentation
+from pptx.shapes.placeholder import SlidePlaceholder
 from reportlab.pdfgen.canvas import Canvas
 
 from field_trial.common import (
     FIXED_DATETIME,
     SCHEMA_VERSION,
     BenchmarkError,
-    _normalize_zip,
+    normalize_zip,
     sha256_file,
 )
 
@@ -38,11 +39,12 @@ def _write_fixture(path: Path, source: Mapping[str, object]) -> None:
             document.add_paragraph(str(paragraph))
         raw = BytesIO()
         document.save(raw)
-        path.write_bytes(_normalize_zip(raw.getvalue()))
+        path.write_bytes(normalize_zip(raw.getvalue()))
         return
     if file_format == "xlsx":
         workbook = Workbook()
         sheet = workbook.active
+        assert sheet is not None, "a freshly created Workbook always has an active sheet"
         sheet.title = "Evidence"
         for row in cast(Sequence[Sequence[object]], source["rows"]):
             sheet.append(list(row))
@@ -50,7 +52,7 @@ def _write_fixture(path: Path, source: Mapping[str, object]) -> None:
         workbook.properties.modified = FIXED_DATETIME
         raw = BytesIO()
         workbook.save(raw)
-        path.write_bytes(_normalize_zip(raw.getvalue()))
+        path.write_bytes(normalize_zip(raw.getvalue()))
         return
     if file_format == "pptx":
         presentation = Presentation()
@@ -58,7 +60,8 @@ def _write_fixture(path: Path, source: Mapping[str, object]) -> None:
             slide = presentation.slides.add_slide(presentation.slide_layouts[1])
             if slide.shapes.title is not None:
                 slide.shapes.title.text = str(slide_spec["title"])
-            frame = slide.placeholders[1].text_frame
+            placeholder = cast(SlidePlaceholder, slide.placeholders[1])
+            frame = placeholder.text_frame
             frame.clear()
             for index, bullet in enumerate(cast(Sequence[object], slide_spec["bullets"])):
                 paragraph = frame.paragraphs[0] if index == 0 else frame.add_paragraph()
@@ -67,7 +70,7 @@ def _write_fixture(path: Path, source: Mapping[str, object]) -> None:
         presentation.core_properties.modified = FIXED_DATETIME
         raw = BytesIO()
         presentation.save(raw)
-        path.write_bytes(_normalize_zip(raw.getvalue()))
+        path.write_bytes(normalize_zip(raw.getvalue()))
         return
     if file_format == "pdf":
         raw = BytesIO()
@@ -103,7 +106,7 @@ def generate_public_corpus(
     return sorted(manifest, key=lambda item: str(item["source_id"]))
 
 
-def _source_maps(
+def source_maps(
     benchmark: Mapping[str, object],
 ) -> tuple[dict[str, str], dict[str, str]]:
     by_id: dict[str, str] = {}
@@ -140,7 +143,7 @@ def _fake_response(benchmark: Mapping[str, object], prompt: str) -> str:
             "contradictions": [],
         }
         return json.dumps(payload)
-    _, by_filename = _source_maps(benchmark)
+    _, by_filename = source_maps(benchmark)
     citations: dict[str, str] = {}
     for citation_id, filename in re.findall(
         r"^\[(CIT-\d+)\] Source: (.+?) \(", prompt, re.MULTILINE

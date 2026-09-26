@@ -246,7 +246,7 @@ def test_public_report_markdown_contains_measured_fields() -> None:
             }
         ],
     }
-    markdown = FIELD_TRIAL._markdown(summary)
+    markdown = FIELD_TRIAL.render_markdown(summary)
     assert "Retrieval misses: 12" in markdown
     assert "Dominant failure: query construction failure" in markdown
 
@@ -263,7 +263,7 @@ def test_private_copy_preserves_source_hashes(tmp_path: Path) -> None:
     source.mkdir()
     original = source / "private.md"
     original.write_text("private fixture", encoding="utf-8")
-    copied, hashes = FIELD_TRIAL._copy_private_corpus(source, tmp_path / "copy")
+    copied, hashes = FIELD_TRIAL.copy_private_corpus(source, tmp_path / "copy")
     assert len(copied) == 1
     assert FIELD_TRIAL.sha256_file(original) == hashes[str(original)]
     assert original.read_text(encoding="utf-8") == "private fixture"

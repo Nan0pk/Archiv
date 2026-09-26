@@ -6,7 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import cast
+from typing import Literal, cast
 
 from archiv.cowork_contracts import (
     CoworkFaultDomain,
@@ -135,7 +135,7 @@ def main() -> None:
         and all(stage.status is not CoworkStageStatus.FAILED for stage in stages)
     )
     report = CoworkRegressionReport(
-        mode=cast(str, arguments.mode),
+        mode=cast(Literal["pinned", "current"], arguments.mode),
         cowork_revision=cast(str, source_report["cowork_revision"]),
         locked_revision=cast(str, lock["revision"]),
         cowork_version=cast(str, source_report["cowork_version"]),

@@ -12,6 +12,7 @@ from docx import Document
 from openpyxl import Workbook
 from PIL import Image, ImageDraw, ImageFont
 from pptx import Presentation
+from pptx.util import Emu
 from reportlab.pdfgen.canvas import Canvas
 
 from fixture_corpus.specs import FIXED_DATETIME, FIXED_TIME
@@ -61,6 +62,7 @@ def build_docx() -> bytes:
 def build_xlsx() -> bytes:
     workbook = Workbook()
     sheet = workbook.active
+    assert sheet is not None, "a freshly created Workbook always has an active sheet"
     sheet.title = "Evidence"
     sheet["A1"] = "Archiv XLSX Fixture"
     sheet["B2"] = "ARCHIV-XLSX-MARKER-2026"
@@ -77,9 +79,9 @@ def build_xlsx() -> bytes:
 def build_pptx() -> bytes:
     presentation = Presentation()
     slide = presentation.slides.add_slide(presentation.slide_layouts[6])
-    title = slide.shapes.add_textbox(457200, 457200, 8229600, 914400)
+    title = slide.shapes.add_textbox(Emu(457200), Emu(457200), Emu(8229600), Emu(914400))
     title.text_frame.text = "Archiv PPTX Fixture"
-    marker = slide.shapes.add_textbox(457200, 1828800, 8229600, 914400)
+    marker = slide.shapes.add_textbox(Emu(457200), Emu(1828800), Emu(8229600), Emu(914400))
     marker.text_frame.text = "ARCHIV-PPTX-MARKER-2026"
     presentation.core_properties.title = "Archiv PPTX Fixture"
     presentation.core_properties.author = "Archiv fixture generator"
