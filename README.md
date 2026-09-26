@@ -439,20 +439,50 @@ readable table.
 | `archiv rebuild-derived` | Rebuild one object's derived data from its original |
 | `archiv rebuild-search-index` | Atomically rebuild the replaceable FTS5 index |
 | `archiv search TEXT` | Search normalized text and emit validated exact citations |
+| `archiv process` | Drain pending deep-tier background jobs (such as OCR) that `add` queued |
+
+#### Images, faces, and the entity graph
+
+These read the same immutable originals and derived text everything else does; none of
+them can create, edit, or replace a canonical original.
+
+| Command | What it does |
+| --- | --- |
+| `archiv images rebuild-index` | Fully rebuild the SQLite image embedding index from canonical objects |
+| `archiv images find-similar IMAGE` | Find indexed images that look like the given image |
+| `archiv images duplicates` | Refused: no evidence-backed duplicate-grouping method exists yet ([known issue](docs/known-issues.md)) |
+| `archiv images status` | Show images indexed against the true total of image objects in the store |
+| `archiv faces opt-in` | Enable biometric face analysis (GDPR Art. 9 / BIPA-aware) |
+| `archiv faces opt-out` | Disable biometric face analysis |
+| `archiv faces status` | Show face-analysis configuration and database statistics |
+| `archiv faces scan` | Scan ingested image objects for faces and update person clusters |
+| `archiv faces list` | List detected face clusters and their attribution status |
+| `archiv faces forget CLUSTER_ID` | First-class erasure: permanently purge biometric vectors and detections |
+| `archiv who TARGET` | Attribution and identity lifecycle for a face cluster; never auto-asserts a name |
+| `archiv graph rebuild` | Rebuild the SQLite entity graph from canonical objects, derived segments, and faces |
+| `archiv graph stats` | Show summary statistics of entities, relationships, and evidence edges |
+| `archiv graph query` | Query across photographs and the documents that mention a person |
+| `archiv graph entity TARGET` | Inspect one entity's full graph profile and evidence citations |
 
 #### Local model
 
 | Command | What it does |
 | --- | --- |
 | `archiv model configure` | Configure a loopback-only OpenAI-compatible endpoint |
+| `archiv model configure-loopback` | The same, without the plain-text summary — JSON output only |
 | `archiv model status` | Show the configured adapter's status |
 | `archiv model show` | Show the exact persisted policy — absence means disabled |
 | `archiv model test` | Test connectivity to the configured local server |
 | `archiv model disable` | Turn local model integration off |
+| `archiv model profiles` | List the hardware a runtime prediction can be made for, and where each figure came from |
+| `archiv model calibrate` | Measure what a question costs here, and how the configured model answers it |
 | `archiv model evaluation status` | Show whether this archive may use a model off this machine |
 | `archiv model evaluation enable` | Mark this archive for evaluation — needs an explicit acknowledgement |
 | `archiv model evaluation disable` | Remove the mark |
 | `archiv model configure-remote-evaluation` | Point at a model off this machine, for evaluation only |
+| `archiv model spend set` | Record a spend ceiling and the provider prices behind it |
+| `archiv model spend status` | Show the ceiling, what has been spent against it, and whether prompts can be counted |
+| `archiv model spend reset` | Clear the recorded spend, once you acknowledge that record is evidence being discarded |
 
 ##### Evaluation archives
 
