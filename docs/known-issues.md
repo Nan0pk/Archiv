@@ -366,3 +366,22 @@ Confirming it takes one look, at **Settings → Code security → Code scanning*
 
 Until one of those is done, treat this repository as having **no static security analysis**,
 whatever the workflow list suggests.
+
+## OpenDocument and InPage XML entity check can be bypassed with UTF-16
+
+- `parse_odf_xml` in `src/archiv/ingestion/normalize_odf.py` refuses XML declarations
+  and entities by searching the raw bytes for `<!DOCTYPE` and `<!ENTITY`. A part encoded
+  as UTF-16 does not contain those bytes, but the standard-library parser still decodes
+  it and expands its entities. The same byte search is used in
+  `src/archiv/research/inpage_legacy.py`.
+- Found by the reviewer of pull request #177 (step S15), who confirmed on `main` that a
+  UTF-16 OpenDocument part with two nested entities was accepted and expanded. The
+  remaining bound is the XML library's own expansion-ratio protection (about 100 times
+  the part's size) plus each reader's member-size limit.
+- The Word reader added in S15 does not have this gap: `_refuse_declarations` in
+  `src/archiv/ingestion/normalize_docx.py` has the XML parser itself stop at the first
+  declaration, whatever the encoding, and
+  `tests/test_ooxml_recovery.py::test_docx_entity_declaration_in_utf16_footnotes_refuses_the_document`
+  covers it.
+- Next action: move that check into a shared helper, use it in both readers, and add a
+  UTF-16 test for each. Not yet scheduled as a queue step.

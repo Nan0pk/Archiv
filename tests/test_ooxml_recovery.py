@@ -395,6 +395,28 @@ def test_docx_entity_declaration_in_footnotes_refuses_the_document(tmp_path: Pat
         normalize(path, DIGEST)
 
 
+def test_docx_entity_declaration_in_utf16_footnotes_refuses_the_document(
+    tmp_path: Path,
+) -> None:
+    """A byte search misses UTF-16; the refusal must not depend on the encoding."""
+
+    document = Document()
+    document.add_paragraph("Body")
+    path = _save(document, tmp_path / "entity-utf16.docx")
+    _add_notes(path, footnotes={1: "&big;"}, endnotes={})
+    with ZipFile(path) as archive:
+        footnotes = archive.read("word/footnotes.xml").decode("utf-8")
+    declaration = '<!DOCTYPE w:footnotes [<!ENTITY big "' + "A" * 64 + '">]>'
+    footnotes = footnotes.replace('encoding="UTF-8"', 'encoding="UTF-16"', 1)
+    footnotes = footnotes.replace("?>", "?>" + declaration, 1)
+    encoded = footnotes.encode("utf-16")
+    assert b"<!DOCTYPE" not in encoded.upper()
+    _rewrite(path, {"word/footnotes.xml": encoded}, {})
+
+    with pytest.raises(MalformedInputError, match="declarations and entities"):
+        normalize(path, DIGEST)
+
+
 def test_docx_malformed_note_identifier_is_kept_not_refused(tmp_path: Path) -> None:
     document = Document()
     document.add_paragraph("Body")
