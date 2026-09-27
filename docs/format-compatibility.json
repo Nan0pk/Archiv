@@ -118,11 +118,161 @@
       "immutable_ingestion": true,
       "text_extraction": "native",
       "structure": [
-        "paragraphs"
+        "paragraphs",
+        "headings",
+        "tables",
+        "headers",
+        "footers",
+        "footnotes",
+        "endnotes",
+        "comments",
+        "hyperlink targets"
       ],
       "locator_shapes": [
         [
           "paragraph"
+        ],
+        [
+          "paragraph",
+          "hyperlink"
+        ],
+        [
+          "paragraph",
+          "heading_level"
+        ],
+        [
+          "paragraph",
+          "heading_level",
+          "hyperlink"
+        ],
+        [
+          "table",
+          "row",
+          "column"
+        ],
+        [
+          "table",
+          "row",
+          "column",
+          "hyperlink"
+        ],
+        [
+          "section",
+          "header",
+          "paragraph"
+        ],
+        [
+          "section",
+          "header",
+          "paragraph",
+          "hyperlink"
+        ],
+        [
+          "section",
+          "header",
+          "table",
+          "row",
+          "column"
+        ],
+        [
+          "section",
+          "header",
+          "table",
+          "row",
+          "column",
+          "hyperlink"
+        ],
+        [
+          "section",
+          "footer",
+          "paragraph"
+        ],
+        [
+          "section",
+          "footer",
+          "paragraph",
+          "hyperlink"
+        ],
+        [
+          "section",
+          "footer",
+          "table",
+          "row",
+          "column"
+        ],
+        [
+          "section",
+          "footer",
+          "table",
+          "row",
+          "column",
+          "hyperlink"
+        ],
+        [
+          "footnote",
+          "paragraph"
+        ],
+        [
+          "footnote",
+          "paragraph",
+          "hyperlink"
+        ],
+        [
+          "footnote",
+          "table",
+          "row",
+          "column"
+        ],
+        [
+          "footnote",
+          "table",
+          "row",
+          "column",
+          "hyperlink"
+        ],
+        [
+          "endnote",
+          "paragraph"
+        ],
+        [
+          "endnote",
+          "paragraph",
+          "hyperlink"
+        ],
+        [
+          "endnote",
+          "table",
+          "row",
+          "column"
+        ],
+        [
+          "endnote",
+          "table",
+          "row",
+          "column",
+          "hyperlink"
+        ],
+        [
+          "comment",
+          "paragraph"
+        ],
+        [
+          "comment",
+          "paragraph",
+          "hyperlink"
+        ],
+        [
+          "comment",
+          "table",
+          "row",
+          "column"
+        ],
+        [
+          "comment",
+          "table",
+          "row",
+          "column",
+          "hyperlink"
         ]
       ],
       "grounding": true,
@@ -130,7 +280,11 @@
       "macros": "macros and active content are never executed",
       "encryption": "encrypted packages fail closed during normalization; no password handling is attempted",
       "known_limits": [
-        "comments, tracked changes, and header/footer decorations are not separately surfaced as text segments"
+        "text inside tracked insertions, content controls and field codes is not surfaced, and deleted tracked text is not shown; this matches the paragraph text python-docx reports",
+        "a hyperlink written as a HYPERLINK field code rather than a hyperlink element has no target segment",
+        "footnotes, endnotes and comments are located by the identifier stored in the file, which Word normally, but not always, shows as the displayed number",
+        "text in text boxes, shapes and SmartArt is not surfaced",
+        "a Word document added before this reader existed keeps its older, paragraphs-only derivative until `archiv rebuild-derived <digest>` is run for it"
       ],
       "support_level": "full"
     },
