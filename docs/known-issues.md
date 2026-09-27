@@ -385,3 +385,27 @@ whatever the workflow list suggests.
   covers it.
 - Next action: move that check into a shared helper, use it in both readers, and add a
   UTF-16 test for each. Not yet scheduled as a queue step.
+
+## Current-upstream CoWork check is red after CoWork moved to MCP 2025-06-18
+
+- The `current CoWork compatibility` job in `.github/workflows/field-trial.yml` checks
+  CoWork-OS `main`, and has failed on every run since CoWork commit `eff5d12`
+  (2026-09-26 16:56 UTC). `scripts/check_cowork_source_contract.py` requires the exact
+  text `const PROTOCOL_VERSION = "2024-11-05"` in CoWork's
+  `src/electron/mcp/client/MCPServerConnection.ts`. That line now reads
+  `const PROTOCOL_VERSION = "2025-06-18"`, next to a new list,
+  `SUPPORTED_MCP_PROTOCOL_VERSIONS = ["2025-06-18", "2025-03-26", "2024-11-05"]`.
+- This is the early warning working as designed (see
+  [CoWork integration](cowork-os-integration.md)). The job is not a required check. The
+  `pinned CoWork compatibility` job, which tests the locked revision, still passes.
+- Not yet established: whether Archiv works with CoWork's new default. Archiv's server
+  uses the `mcp` Python library (2.2.0 in the development environment), and CoWork logs a
+  warning and carries on if a server answers with a version outside its list. Both point
+  to it working, but nothing has run it. The job stops at the text check, before the
+  transport probe runs, and `scripts/cowork_stdio_probe.ts` still sends `2024-11-05`
+  itself, so it would not exercise the new default even if it ran.
+- Next action: make the current-mode contract accept CoWork's new protocol declaration,
+  make the probe send the protocol version found in the CoWork source it is testing, and
+  confirm the whole current-mode job passes. Moving the pinned revision in
+  `integrations/cowork-os/upstream-lock.json` is a separate, reviewed decision, and this
+  work does not require it.
