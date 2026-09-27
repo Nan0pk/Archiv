@@ -336,6 +336,96 @@ def test_docx_table_cell_limit_refuses_the_document(
         normalize(path, DIGEST)
 
 
+def test_docx_wide_column_span_counts_against_the_table_budget(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One cell claiming a huge span must not build a huge grid from a tiny file."""
+
+    document = Document()
+    table = document.add_table(rows=3, cols=1)
+    for row in table.rows:
+        row.cells[0].text = "x"
+    path = _save(document, tmp_path / "wide.docx")
+    _rewrite(
+        path,
+        {},
+        {
+            "word/document.xml": lambda xml: xml.replace(
+                "<w:tcPr>", '<w:tcPr><w:gridSpan w:val="900"/>', 1
+            )
+        },
+    )
+    # Three cells, but 900 + 900 + 900 grid positions once the rows are padded.
+    monkeypatch.setattr(normalize_docx_module, "MAX_TABLE_CELLS", 2_000)
+
+    with pytest.raises(MalformedInputError, match="table cell limit"):
+        normalize(path, DIGEST)
+
+
+def test_docx_span_beyond_the_column_ceiling_refuses_the_document(tmp_path: Path) -> None:
+    document = Document()
+    document.add_table(rows=1, cols=1).cell(0, 0).text = "x"
+    path = _save(document, tmp_path / "too-wide.docx")
+    _rewrite(
+        path,
+        {},
+        {
+            "word/document.xml": lambda xml: xml.replace(
+                "<w:tcPr>", '<w:tcPr><w:gridSpan w:val="200000"/>', 1
+            )
+        },
+    )
+
+    with pytest.raises(MalformedInputError, match="gridSpan"):
+        normalize(path, DIGEST)
+
+
+def test_docx_entity_declaration_in_footnotes_refuses_the_document(tmp_path: Path) -> None:
+    document = Document()
+    document.add_paragraph("Body")
+    path = _save(document, tmp_path / "entity.docx")
+    _add_notes(path, footnotes={1: "&big;"}, endnotes={})
+    with ZipFile(path) as archive:
+        footnotes = archive.read("word/footnotes.xml").decode("utf-8")
+    declaration = '<!DOCTYPE w:footnotes [<!ENTITY big "' + "A" * 64 + '">]>'
+    footnotes = footnotes.replace("?>", "?>" + declaration, 1)
+    _rewrite(path, {"word/footnotes.xml": footnotes.encode("utf-8")}, {})
+
+    with pytest.raises(MalformedInputError, match="declarations and entities"):
+        normalize(path, DIGEST)
+
+
+def test_docx_malformed_note_identifier_is_kept_not_refused(tmp_path: Path) -> None:
+    document = Document()
+    document.add_paragraph("Body")
+    path = _save(document, tmp_path / "note-id.docx")
+    _add_notes(path, footnotes={1: "Odd note"}, endnotes={})
+    with ZipFile(path) as archive:
+        footnotes = archive.read("word/footnotes.xml").decode("utf-8")
+    _rewrite(
+        path,
+        {"word/footnotes.xml": footnotes.replace('w:id="1"', 'w:id="--5"').encode("utf-8")},
+        {},
+    )
+
+    located = _by_locator(normalize(path, DIGEST))
+
+    assert located[_key(paragraph=1)] == "Body"
+    assert located[_key(footnote="--5", paragraph=1)] == "Odd note"
+
+
+def test_docx_outline_level_nine_marks_body_text_under_a_heading_style(tmp_path: Path) -> None:
+    document = Document()
+    heading = document.add_heading("Styled as a heading", level=1)
+    properties = heading._p.get_or_add_pPr()  # pyright: ignore[reportPrivateUsage]
+    properties.append(parse_xml(f'<w:outlineLvl xmlns:w="{W}" w:val="9"/>'))  # pyright: ignore[reportUnknownMemberType]
+    path = _save(document, tmp_path / "outline.docx")
+
+    located = _by_locator(normalize(path, DIGEST))
+
+    assert located[_key(paragraph=1)] == "Styled as a heading"
+
+
 def test_docx_invalid_grid_span_refuses_the_document(tmp_path: Path) -> None:
     document = Document()
     document.add_table(rows=1, cols=1).cell(0, 0).text = "x"
@@ -354,7 +444,7 @@ def test_docx_invalid_grid_span_refuses_the_document(tmp_path: Path) -> None:
         normalize(path, DIGEST)
 
 
-def test_docx_table_cell_is_found_and_cited_end_to_end(tmp_path: Path) -> None:
+def test_docx_table_cell_is_found_by_search_with_its_table_locator(tmp_path: Path) -> None:
     document = Document()
     document.add_paragraph("Register")
     document.add_table(rows=1, cols=2).cell(0, 1).text = "ARCHIV-TABLE-MARKER-2026"

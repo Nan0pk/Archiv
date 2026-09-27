@@ -12,8 +12,11 @@ paragraph text follows exactly the rules ``python-docx`` uses for ``Paragraph.te
 so body text is unchanged from the paragraphs-only reader.
 
 Body paragraph numbering is also unchanged: ``paragraph`` is the 1-based position
-among paragraphs directly in the body, counting empty ones. That keeps every
-body-paragraph citation made before this reader existed pointing at the same text.
+among paragraphs directly in the body, counting empty ones, so "paragraph N" still
+names the same text it did under the paragraphs-only reader. A citation saved before
+this reader existed also records the whole derived document's hash and the segment's
+position, so once a document is rebuilt with this reader those saved citations stop
+validating; they fail closed rather than point at the wrong text.
 """
 
 from __future__ import annotations
@@ -29,16 +32,26 @@ from docx.opc.part import Part
 
 from archiv.contracts import NormalizedDocument, NormalizedSegment, NormalizedTable
 
-__all__ = ["MAX_TABLE_CELLS", "normalize_docx"]
+__all__ = ["MAX_TABLE_CELLS", "MAX_TABLE_COLUMNS", "MAX_XML_NODES", "normalize_docx"]
 
 # Word documents are bounded by the ingestion size limit, but a small package can
-# still declare a very large table. Refuse rather than build an unbounded derivative.
+# still declare a very large table: one cell may claim to span any number of grid
+# columns. The budget therefore counts grid positions, including spans, leading gaps
+# and the padding that makes every row as wide as the widest, not just cells. Word
+# itself allows 63 columns; the column ceiling leaves room for other producers.
 MAX_TABLE_CELLS = 200_000
+MAX_TABLE_COLUMNS = 1_000
+# Real Word parts never declare a DTD. Refusing declarations outright rules out entity
+# expansion, and the node ceiling bounds the parsed tree, as parse_odf_xml does for
+# OpenDocument. The ceiling is higher than OpenDocument's because every run, text
+# node and property of a long Word document is its own element.
+MAX_XML_NODES = 5_000_000
 
 W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 
 _HEADING_STYLE = re.compile(r"^Heading ([1-9])$")
+_NOTE_ID = re.compile(r"-?[0-9]{1,9}")
 _NOTE_SKIP_TYPES = {"separator", "continuationSeparator", "continuationNotice"}
 _HEADER_FOOTER_KINDS = (
     ("default", "header", "footer"),
@@ -61,8 +74,8 @@ class _CellBudget:
     def __init__(self) -> None:
         self.used = 0
 
-    def spend(self) -> None:
-        self.used += 1
+    def spend(self, positions: int = 1) -> None:
+        self.used += positions
         if self.used > MAX_TABLE_CELLS:
             raise ValueError("DOCX table cell limit exceeded")
 
@@ -159,7 +172,7 @@ def _grid_value(properties: ElementTree.Element | None, name: str) -> int:
         value = int(raw)
     except ValueError as error:
         raise ValueError(f"DOCX table has an invalid {name} value") from error
-    if value < 0 or value > MAX_TABLE_CELLS:
+    if value < 0 or value > MAX_TABLE_COLUMNS:
         raise ValueError(f"DOCX table has an out-of-range {name} value")
     return value
 
@@ -182,10 +195,13 @@ def _table(
     rows: list[list[object | None]] = []
     for row_number, row in enumerate(table.iterfind(_w("tr")), 1):
         column = _grid_value(row.find(_w("trPr")), "gridBefore") + 1
+        budget.spend(column - 1)
         values: list[object | None] = [None] * (column - 1)
         for cell in row.iterfind(_w("tc")):
-            budget.spend()
             span = max(_grid_value(cell.find(_w("tcPr")), "gridSpan"), 1)
+            if column - 1 + span > MAX_TABLE_COLUMNS:
+                raise ValueError("DOCX table column limit exceeded")
+            budget.spend(span)
             text: str | None = None
             if not _is_vertical_continuation(cell):
                 paragraphs = [_paragraph_text(p) for p in cell.iter(_w("p"))]
@@ -202,6 +218,7 @@ def _table(
     if not any(value is not None for row in rows for value in row):
         return segments, None
     width = max(len(row) for row in rows)
+    budget.spend(sum(width - len(row) for row in rows))
     padded = [row + [None] * (width - len(row)) for row in rows]
     return segments, NormalizedTable(locator=dict(prefix), rows=padded)
 
@@ -215,9 +232,12 @@ def _heading_level(paragraph: ElementTree.Element, style_levels: dict[str, int])
     outline = properties.find(_w("outlineLvl"))
     if outline is not None:
         raw = _attr(outline, "val")
-        # Outline levels 0-8 are headings 1-9; 9 means body text.
+        # Outline levels 0-8 are headings 1-9; 9 means body text, even under a
+        # heading style.
         if raw.isdigit() and int(raw) < 9:
             return int(raw) + 1
+        if raw == "9":
+            return None
     style = properties.find(_w("pStyle"))
     if style is not None:
         return style_levels.get(_attr(style, "val"))
@@ -265,10 +285,17 @@ def _container(
 
 
 def _part_root(part: Part) -> ElementTree.Element:
+    data = part.blob
+    upper = data.upper()
+    if b"<!DOCTYPE" in upper or b"<!ENTITY" in upper:
+        raise ValueError("DOCX XML declarations and entities are not allowed")
     try:
-        return ElementTree.fromstring(part.blob)
+        root = ElementTree.fromstring(data)
     except ElementTree.ParseError as error:
         raise ValueError("DOCX package part is not well-formed XML") from error
+    if sum(1 for _ in root.iter()) > MAX_XML_NODES:
+        raise ValueError("DOCX XML node limit exceeded")
+    return root
 
 
 def _style_heading_levels(document: DocxDocument) -> dict[str, int]:
@@ -334,7 +361,8 @@ def _notes(
         if _attr(note, "type") in _NOTE_SKIP_TYPES:
             continue
         raw_id = _attr(note, "id")
-        note_id: object = int(raw_id) if raw_id.lstrip("-").isdigit() else raw_id
+        # A malformed identifier is kept as written rather than refusing the document.
+        note_id: object = int(raw_id) if _NOTE_ID.fullmatch(raw_id) else raw_id
         note_segments, note_tables, _, _ = _container(note, part, {key: note_id}, budget)
         segments.extend(note_segments)
         tables.extend(note_tables)
