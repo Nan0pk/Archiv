@@ -240,7 +240,7 @@ never quietly accepted and half-read.
 | --- | --- | --- | --- |
 | Plain text | `.txt` `.md` | Natively | a line |
 | PDF | `.pdf` | Natively | a page |
-| Word | `.docx` | Natively | a paragraph |
+| Word | `.docx` | Natively | a paragraph or heading, a table cell, a header or footer, a footnote, endnote or comment, or a link target |
 | Spreadsheet | `.xlsx` | Natively | a sheet, or a cell |
 | Presentation | `.pptx` | Natively | a shape on a slide |
 | OpenDocument text | `.odt` `.ott` `.odm` `.otm` `.fodt` | Natively | a paragraph or heading |

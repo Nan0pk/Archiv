@@ -446,7 +446,7 @@
       "phase": "C",
       "title": "DOCX: tables, headers, footers, footnotes, comments, hyperlinks, headings",
       "doc": "docs/plan/steps/S15.md",
-      "detail": "stub",
+      "detail": "full",
       "depends_on": [
         "S00"
       ],
@@ -455,7 +455,11 @@
         "targets": [
           "tests/test_ooxml_recovery.py::test_docx_table_cells_are_extracted",
           "tests/test_ooxml_recovery.py::test_docx_headers_footers_and_footnotes_are_extracted",
-          "tests/test_ooxml_recovery.py::test_docx_hyperlink_targets_are_preserved"
+          "tests/test_ooxml_recovery.py::test_docx_hyperlink_targets_are_preserved",
+          "tests/test_ooxml_recovery.py::test_docx_comments_are_extracted",
+          "tests/test_ooxml_recovery.py::test_docx_heading_levels_are_recorded",
+          "tests/test_ooxml_recovery.py::test_docx_body_text_and_numbering_are_unchanged_from_python_docx",
+          "tests/test_ooxml_recovery.py::test_docx_table_cell_limit_refuses_the_document"
         ]
       }
     },
