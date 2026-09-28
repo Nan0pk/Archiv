@@ -468,7 +468,7 @@
       "phase": "C",
       "title": "XLSX: computed values and formulas, hyperlinks, merged ranges, hidden markers, charts",
       "doc": "docs/plan/steps/S16.md",
-      "detail": "stub",
+      "detail": "full",
       "depends_on": [
         "S15"
       ],
@@ -478,7 +478,10 @@
           "tests/test_ooxml_recovery.py::test_formula_cell_indexes_the_computed_value",
           "tests/test_ooxml_recovery.py::test_formula_text_is_preserved_in_the_locator",
           "tests/test_ooxml_recovery.py::test_hidden_sheet_content_is_retrievable_and_marked_hidden",
-          "tests/test_ooxml_recovery.py::test_merged_header_reaches_its_whole_span"
+          "tests/test_ooxml_recovery.py::test_merged_header_reaches_its_whole_span",
+          "tests/test_ooxml_recovery.py::test_xlsx_hyperlink_targets_are_preserved",
+          "tests/test_ooxml_recovery.py::test_xlsx_chart_titles_and_series_names_are_extracted",
+          "tests/test_ooxml_recovery.py::test_xlsx_declared_dimension_cannot_force_unbounded_iteration"
         ]
       }
     },
