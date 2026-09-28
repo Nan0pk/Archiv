@@ -364,7 +364,13 @@
       "text_extraction": "native",
       "structure": [
         "sheets",
-        "cells"
+        "cells",
+        "formulas",
+        "stored formula results",
+        "merged ranges",
+        "hidden sheets, rows and columns",
+        "hyperlink targets",
+        "chart titles and series names"
       ],
       "locator_shapes": [
         [
@@ -373,14 +379,107 @@
         [
           "cell",
           "sheet"
+        ],
+        [
+          "cell",
+          "hidden",
+          "sheet"
+        ],
+        [
+          "cell",
+          "merged",
+          "sheet"
+        ],
+        [
+          "cell",
+          "hidden",
+          "merged",
+          "sheet"
+        ],
+        [
+          "cell",
+          "formula",
+          "sheet"
+        ],
+        [
+          "cell",
+          "formula",
+          "hidden",
+          "sheet"
+        ],
+        [
+          "cell",
+          "formula",
+          "merged",
+          "sheet"
+        ],
+        [
+          "cell",
+          "formula",
+          "hidden",
+          "merged",
+          "sheet"
+        ],
+        [
+          "cell",
+          "computed_value",
+          "formula",
+          "sheet"
+        ],
+        [
+          "cell",
+          "computed_value",
+          "formula",
+          "hidden",
+          "sheet"
+        ],
+        [
+          "cell",
+          "computed_value",
+          "formula",
+          "merged",
+          "sheet"
+        ],
+        [
+          "cell",
+          "computed_value",
+          "formula",
+          "hidden",
+          "merged",
+          "sheet"
+        ],
+        [
+          "cell",
+          "hyperlink",
+          "sheet"
+        ],
+        [
+          "cell",
+          "hidden",
+          "hyperlink",
+          "sheet"
+        ],
+        [
+          "chart",
+          "sheet"
+        ],
+        [
+          "chart",
+          "hidden",
+          "sheet"
         ]
       ],
       "grounding": true,
       "preview_render": "LibreOffice render inside the verified report workflow",
-      "macros": "formulas are surfaced as text only and never executed",
+      "macros": "formulas are never calculated or executed; the result the file stored for a formula is indexed and the formula text is kept in the locator",
       "encryption": "encrypted packages fail closed during normalization; no password handling is attempted",
       "known_limits": [
-        "formatting, charts, and pivot state are not reconstructed",
+        "a formula whose result was never saved in the file (for example one written by a library rather than a spreadsheet application) is indexed as its formula text, and its locator says the result was not saved in the file; Archiv does not calculate it",
+        "a data-table formula stores no formula text of its own, so only its stored result is indexed",
+        "the values and category labels a chart plots are not surfaced from the chart; they normally also appear in cells. Images, shapes, text boxes, comments and pivot state are not surfaced",
+        "a chart series named only by a cell reference, with no saved copy of the name, contributes no series name",
+        "hidden content is indexed and marked, not withheld: every segment from a hidden sheet, row or column carries `hidden`",
+        "a workbook added before this reader existed keeps its older derivative, with formula text in place of stored results, until `archiv rebuild-derived` is run for it; rebuilding can make citations already saved for it stop validating",
         "retrieval indexes each normalized cell or row segment independently; phrases split across cells may not match as one literal phrase"
       ],
       "support_level": "partial"

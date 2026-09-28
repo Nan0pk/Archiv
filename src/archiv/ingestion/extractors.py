@@ -20,9 +20,10 @@ from archiv.ingestion.normalize_legacy_office import normalize_doc, normalize_pp
 from archiv.ingestion.normalize_media import normalize_image, normalize_wav
 from archiv.ingestion.normalize_odb import normalize_odb
 from archiv.ingestion.normalize_odf import ODF_MIMETYPES, normalize_odf
-from archiv.ingestion.normalize_office import normalize_pptx, normalize_xlsx
+from archiv.ingestion.normalize_office import normalize_pptx
 from archiv.ingestion.normalize_rtf import normalize_rtf
 from archiv.ingestion.normalize_svg import normalize_svg
+from archiv.ingestion.normalize_xlsx import normalize_xlsx
 
 # Known binary signatures that must never appear in plain-text documents
 KNOWN_BINARY_SIGNATURES: tuple[bytes, ...] = (
@@ -232,7 +233,7 @@ ALL_EXTRACTORS: tuple[Extractor, ...] = (
     ),
     Extractor(
         name="xlsx",
-        version="1",
+        version="2",
         suffixes=frozenset({".xlsx"}),
         media_types=frozenset(
             {"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}

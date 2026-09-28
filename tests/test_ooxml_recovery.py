@@ -1,8 +1,9 @@
-"""Word content that lives outside the body's direct paragraphs must not be dropped.
+"""Office content that lives outside the plain cell or paragraph text must not be dropped.
 
-Every document here is generated at test time with ``python-docx``. Parts that
-``python-docx`` cannot author (footnotes, endnotes, a hyperlink with a missing
-relationship) are added by rewriting the generated package's XML.
+Every document here is generated at test time, with ``python-docx`` or ``openpyxl``.
+Parts those libraries cannot author (footnotes, endnotes, a hyperlink with a missing
+relationship, a formula's stored result) are added by rewriting the generated
+package's XML.
 """
 
 from __future__ import annotations
@@ -21,9 +22,12 @@ from docx.opc.constants import RELATIONSHIP_TYPE as RT
 from docx.oxml import parse_xml
 from docx.shared import Inches
 from docx.text.paragraph import Paragraph
+from openpyxl import Workbook
+from openpyxl.chart import BarChart, Reference
 from typer.testing import CliRunner
 
 import archiv.ingestion.normalize_docx as normalize_docx_module
+import archiv.ingestion.normalize_xlsx as normalize_xlsx_module
 from archiv.cli import app
 from archiv.contracts import NormalizedDocument
 from archiv.ingestion.normalizers import MalformedInputError, normalize
@@ -483,3 +487,309 @@ def test_docx_table_cell_is_found_by_search_with_its_table_locator(tmp_path: Pat
     assert found.exit_code == 0, found.output
     payload = json.loads(found.output)
     assert [hit["citation"]["locator"] for hit in payload] == [{"table": 1, "row": 1, "column": 2}]
+
+
+# --- Excel workbooks -----------------------------------------------------------------
+#
+# ``openpyxl`` writes a formula with an empty result, as if never calculated. A file
+# saved by a spreadsheet application stores the last calculated result beside the
+# formula, so the tests write that result into the generated package's XML.
+
+XLSX_SHEET = "xl/worksheets/sheet1.xml"
+
+
+def _save_workbook(workbook: Workbook, path: Path) -> Path:
+    workbook.save(str(path))
+    return path
+
+
+def _store_result(path: Path, formula: str, result: str, *, part: str = XLSX_SHEET) -> None:
+    written = f"<f>{formula}</f><v></v>"
+
+    def store(xml: str) -> str:
+        assert written in xml, xml
+        return xml.replace(written, f"<f>{formula}</f><v>{result}</v>")
+
+    _rewrite(path, {}, {part: store})
+
+
+def _budget_workbook() -> Workbook:
+    workbook = Workbook()
+    sheet = workbook.active
+    assert sheet is not None
+    sheet.title = "Budget"
+    sheet["A2"] = "Salaries"
+    sheet["B2"] = 750000
+    sheet["A3"] = "Rent"
+    sheet["B3"] = 500000
+    sheet["A4"] = "Total"
+    sheet["B4"] = "=SUM(B2:B3)"
+    return workbook
+
+
+def _search(path: Path, home: Path, query: str) -> list[dict[str, object]]:
+    runner = CliRunner()
+    ingested = runner.invoke(app, ["ingest", str(path), "--home", str(home)])
+    assert ingested.exit_code == 0, ingested.output
+    rebuilt = runner.invoke(app, ["rebuild-search-index", "--home", str(home)])
+    assert rebuilt.exit_code == 0, rebuilt.output
+    found = runner.invoke(app, ["search", query, "--home", str(home)])
+    assert found.exit_code == 0, found.output
+    return json.loads(found.output)
+
+
+def test_formula_cell_indexes_the_computed_value(tmp_path: Path) -> None:
+    path = _save_workbook(_budget_workbook(), tmp_path / "budget.xlsx")
+    _store_result(path, "SUM(B2:B3)", "1250000")
+
+    located = _by_locator(normalize(path, DIGEST))
+
+    assert located[_key(sheet="Budget", cell="B4", formula="=SUM(B2:B3)")] == "1250000"
+    assert "=SUM(B2:B3)" not in located.values()
+
+
+def test_formula_text_is_preserved_in_the_locator(tmp_path: Path) -> None:
+    path = _save_workbook(_budget_workbook(), tmp_path / "budget.xlsx")
+    _store_result(path, "SUM(B2:B3)", "1250000")
+
+    result = normalize(path, DIGEST)
+
+    total = next(segment for segment in result.segments if segment.locator.get("cell") == "B4")
+    assert total.locator["formula"] == "=SUM(B2:B3)"
+    assert "computed_value" not in total.locator
+    # Plain cells gain no formula key, and the table carries the result, not the formula.
+    assert _by_locator(result)[_key(sheet="Budget", cell="B2")] == "750000"
+    assert result.tables[0].rows[-1] == ["Total", 1250000]
+
+
+def test_computed_value_is_found_by_search_with_its_formula(tmp_path: Path) -> None:
+    path = _save_workbook(_budget_workbook(), tmp_path / "budget.xlsx")
+    _store_result(path, "SUM(B2:B3)", "1250000")
+
+    hits = _search(path, tmp_path / "home", "1250000")
+
+    assert [hit["citation"]["locator"] for hit in hits] == [  # pyright: ignore[reportIndexIssue]
+        {"sheet": "Budget", "cell": "B4", "formula": "=SUM(B2:B3)"}
+    ]
+
+
+def test_formula_without_a_stored_result_indexes_its_text_and_says_so(tmp_path: Path) -> None:
+    path = _save_workbook(_budget_workbook(), tmp_path / "never-calculated.xlsx")
+
+    located = _by_locator(normalize(path, DIGEST))
+
+    key = _key(sheet="Budget", cell="B4", formula="=SUM(B2:B3)", computed_value="not saved in file")
+    assert located[key] == "=SUM(B2:B3)"
+    assert "1250000" not in located.values()
+
+
+def test_hidden_sheet_content_is_retrievable_and_marked_hidden(tmp_path: Path) -> None:
+    workbook = Workbook()
+    visible = workbook.active
+    assert visible is not None
+    visible.title = "Summary"
+    visible["A1"] = "Nothing to see"
+    hidden = workbook.create_sheet("Workings")
+    hidden.sheet_state = "hidden"
+    hidden["C3"] = "ARCHIV-HIDDEN-SHEET-MARKER"
+    path = _save_workbook(workbook, tmp_path / "hidden.xlsx")
+
+    result = normalize(path, DIGEST)
+    hits = _search(path, tmp_path / "home", "ARCHIV-HIDDEN-SHEET-MARKER")
+
+    assert _by_locator(result)[_key(sheet="Summary", cell="A1")] == "Nothing to see"
+    assert [hit["citation"]["locator"] for hit in hits] == [  # pyright: ignore[reportIndexIssue]
+        {"sheet": "Workings", "cell": "C3", "hidden": "sheet"}
+    ]
+    assert result.metadata["hidden_sheets"] == ["Workings"]
+
+
+def test_hidden_rows_and_columns_are_marked(tmp_path: Path) -> None:
+    workbook = Workbook()
+    sheet = workbook.active
+    assert sheet is not None
+    sheet.title = "Grid"
+    sheet["A1"] = "shown"
+    sheet["A2"] = "row hidden"
+    sheet["B1"] = "column hidden"
+    sheet["B2"] = "both hidden"
+    sheet.row_dimensions[2].hidden = True
+    sheet.column_dimensions["B"].hidden = True
+    path = _save_workbook(workbook, tmp_path / "grid.xlsx")
+
+    located = _by_locator(normalize(path, DIGEST))
+
+    assert located[_key(sheet="Grid", cell="A1")] == "shown"
+    assert located[_key(sheet="Grid", cell="A2", hidden="row")] == "row hidden"
+    assert located[_key(sheet="Grid", cell="B1", hidden="column")] == "column hidden"
+    assert located[_key(sheet="Grid", cell="B2", hidden="row and column")] == "both hidden"
+
+
+def test_merged_header_reaches_its_whole_span(tmp_path: Path) -> None:
+    workbook = Workbook()
+    sheet = workbook.active
+    assert sheet is not None
+    sheet.title = "Quarters"
+    sheet["A1"] = "Revenue"
+    sheet.merge_cells("A1:C1")
+    for column, amount in zip("ABC", (10, 20, 30), strict=True):
+        sheet[f"{column}2"] = amount
+    path = _save_workbook(workbook, tmp_path / "merged.xlsx")
+
+    result = normalize(path, DIGEST)
+
+    located = _by_locator(result)
+    assert located[_key(sheet="Quarters", cell="A1", merged="A1:C1")] == "Revenue"
+    # One segment for the header, not one per covered cell.
+    assert list(located.values()).count("Revenue") == 1
+    assert result.tables[0].rows == [["Revenue", "Revenue", "Revenue"], [10, 20, 30]]
+
+
+def test_merge_across_a_whole_row_is_clipped_to_the_cells_in_use(tmp_path: Path) -> None:
+    workbook = Workbook()
+    sheet = workbook.active
+    assert sheet is not None
+    sheet["A1"] = "Banner"
+    sheet["A2"] = "x"
+    sheet["B2"] = "y"
+    sheet.merge_cells("A1:XFD1")
+    path = _save_workbook(workbook, tmp_path / "banner.xlsx")
+
+    result = normalize(path, DIGEST)
+
+    assert result.tables[0].rows == [["Banner", "Banner"], ["x", "y"]]
+
+
+def test_xlsx_hyperlink_targets_are_preserved(tmp_path: Path) -> None:
+    workbook = Workbook()
+    sheet = workbook.active
+    assert sheet is not None
+    sheet.title = "Links"
+    sheet["A1"] = "Supplier site"
+    sheet["A1"].hyperlink = "https://example.org/supplier"
+    sheet["A2"] = "Jump to totals"
+    sheet["A2"].hyperlink = "#Links!B9"
+    path = _save_workbook(workbook, tmp_path / "links.xlsx")
+
+    located = _by_locator(normalize(path, DIGEST))
+
+    assert located[_key(sheet="Links", cell="A1")] == "Supplier site"
+    assert located[_key(sheet="Links", cell="A1", hyperlink=1)] == "https://example.org/supplier"
+    assert located[_key(sheet="Links", cell="A2", hyperlink=1)] == "#Links!B9"
+
+
+def test_xlsx_hyperlink_with_a_missing_relationship_is_skipped(tmp_path: Path) -> None:
+    workbook = Workbook()
+    sheet = workbook.active
+    assert sheet is not None
+    sheet["A1"] = "Broken link"
+    sheet["A1"].hyperlink = "https://example.org/gone"
+    path = _save_workbook(workbook, tmp_path / "broken.xlsx")
+    _rewrite(
+        path,
+        {},
+        {
+            "xl/worksheets/_rels/sheet1.xml.rels": lambda xml: re.sub(
+                r"<Relationship [^>]*hyperlink[^>]*/>", "", xml
+            )
+        },
+    )
+
+    result = normalize(path, DIGEST)
+
+    assert [segment.text for segment in result.segments] == ["Broken link"]
+
+
+def test_xlsx_chart_titles_and_series_names_are_extracted(tmp_path: Path) -> None:
+    workbook = _budget_workbook()
+    sheet = workbook.active
+    assert sheet is not None
+    chart = BarChart()
+    chart.title = "Spending by category"
+    chart.y_axis.title = "Euros"
+    chart.add_data(Reference(sheet, min_col=2, min_row=2, max_row=3))  # pyright: ignore[reportUnknownMemberType]
+    chart.anchor = "D2"
+    sheet.add_chart(chart)  # pyright: ignore[reportUnknownMemberType]
+    path = _save_workbook(workbook, tmp_path / "chart.xlsx")
+    _rewrite(
+        path,
+        {},
+        {
+            # openpyxl names a series only by reference; an application also saves
+            # the name it last read from that reference.
+            "xl/charts/chart1.xml": lambda xml: xml.replace(
+                "<ser><idx",
+                "<ser><tx><strRef><f>'Budget'!A1</f><strCache><ptCount val=\"1\"/>"
+                '<pt idx="0"><v>Annual costs</v></pt></strCache></strRef></tx><idx',
+                1,
+            )
+        },
+    )
+
+    result = normalize(path, DIGEST)
+
+    located = _by_locator(result)
+    assert located[_key(sheet="Budget", chart=1)] == "Spending by category\nEuros\nAnnual costs"
+    assert result.metadata["charts"] == 1
+
+
+def test_xlsx_entity_declaration_refuses_the_workbook(tmp_path: Path) -> None:
+    path = _save_workbook(_budget_workbook(), tmp_path / "entity.xlsx")
+    _rewrite(
+        path,
+        {},
+        {
+            XLSX_SHEET: lambda xml: (
+                '<?xml version="1.0"?><!DOCTYPE worksheet [<!ENTITY boom "boom">]>'
+                + xml.split("?>", 1)[-1]
+            )
+        },
+    )
+
+    with pytest.raises(MalformedInputError, match="declarations and entities"):
+        normalize(path, DIGEST)
+
+
+def test_xlsx_declared_dimension_cannot_force_unbounded_iteration(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(normalize_xlsx_module, "MAX_CELL_POSITIONS", 1_000)
+    workbook = Workbook()
+    sheet = workbook.active
+    assert sheet is not None
+    sheet["A1"] = "top"
+    path = _save_workbook(workbook, tmp_path / "dimension.xlsx")
+    _rewrite(
+        path,
+        {},
+        {
+            XLSX_SHEET: lambda xml: re.sub(
+                r'<dimension ref="[^"]*"/>', '<dimension ref="A1:XFD1048576"/>', xml
+            )
+        },
+    )
+
+    with pytest.raises(MalformedInputError, match="cell position limit"):
+        normalize(path, DIGEST)
+
+
+def test_xlsx_chart_sheet_and_very_hidden_sheet_are_read(tmp_path: Path) -> None:
+    workbook = Workbook()
+    data = workbook.active
+    assert data is not None
+    data.title = "Data"
+    data["A1"] = 1
+    chart_sheet = workbook.create_chartsheet("Plot")
+    chart = BarChart()
+    chart.title = "Plotted on its own sheet"
+    chart.add_data(Reference(data, min_col=1, min_row=1, max_row=1))  # pyright: ignore[reportUnknownMemberType]
+    chart_sheet.add_chart(chart)  # pyright: ignore[reportUnknownMemberType]
+    secret = workbook.create_sheet("Secret")
+    secret.sheet_state = "veryHidden"
+    secret["A1"] = "deep"
+    path = _save_workbook(workbook, tmp_path / "chartsheet.xlsx")
+
+    located = _by_locator(normalize(path, DIGEST))
+
+    assert located[_key(sheet="Plot", chart=1)] == "Plotted on its own sheet"
+    assert located[_key(sheet="Secret", cell="A1", hidden="sheet")] == "deep"
