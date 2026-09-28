@@ -413,3 +413,26 @@ whatever the workflow list suggests.
   confirm the whole current-mode job passes. Moving the pinned revision in
   `integrations/cowork-os/upstream-lock.json` is a separate, reviewed decision, and this
   work does not require it.
+
+## Excel reader: silent losses and slow cases the S16 review found
+
+Found by the distinguished review of S16 (#180), on workbooks generated in the review
+container. None of these is new with S16 except where it says so. None is fixed by it.
+
+- **A sheet that declares a smaller size than it holds loses cells silently.** openpyxl's
+  read-only mode trusts the sheet's declared size. A sheet that declares `A1:A1` but
+  holds a cell at `C9` loses `C9`, and nothing records the loss. The reader before S16
+  lost it too. The S16 XML pass already walks every row, so it could detect this and
+  either read past the declared size or say that cells were dropped. That needs a
+  queue step.
+- **Repeated sheet entries are slow.** A 210 KB workbook that lists one sheet 200 times,
+  where that sheet declares 40,000 merged ranges, took 383 seconds. Most of the time is
+  openpyxl parsing the merged ranges again for every entry, and no Archiv budget counts
+  work done inside openpyxl. The reader before S16 had the same weakness: on a 50-entry
+  version it took 22.8 seconds, against about 70 seconds for the S16 reader, which
+  reads each workbook twice.
+- **"Bounded" is not "fast".** The S16 reader was measured at about 2.5 times slower per
+  cell than the reader it replaced: 10.8 seconds against 4.3 seconds for 200,000 cells.
+  A workbook that uses the whole 5,000,000-position budget before being refused takes
+  minutes, not the 60 seconds `MAX_TIMEOUT_SECONDS` in
+  `src/archiv/ingestion/limits.py` might suggest. Nothing in `src/` uses that constant.
