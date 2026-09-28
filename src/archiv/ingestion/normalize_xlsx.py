@@ -12,8 +12,10 @@ and the locator says the result was not saved in the file.
 Merged ranges, hyperlinks, hidden rows and columns and charts are not available from a
 read-only ``openpyxl`` load. Rather than a second, full in-memory load, the package's
 own XML parts are read directly with the standard library, streaming each sheet part
-so memory stays flat. Every part read that way is first checked for DTD and entity
-declarations, which are refused outright, and has a node ceiling.
+so memory stays flat, within one node budget for the whole workbook, and each part is
+read once however often it is referenced. Before any of that, and before openpyxl
+parses anything, every member of the package is checked for DTD and entity
+declarations, which are refused outright.
 
 Hidden sheets, rows and columns are still indexed, so their content can be found, but
 every segment from them carries ``hidden``, so an answer drawn from hidden content says
@@ -45,8 +47,10 @@ __all__ = ["MAX_CELL_POSITIONS", "MAX_XML_NODES", "normalize_xlsx"]
 # across the whole workbook, empty padding included, and refuses the workbook once it
 # is spent. It also counts the positions of the tables built from the cells.
 MAX_CELL_POSITIONS = 5_000_000
-# Per parsed XML part, counted while streaming. Every cell of a sheet is several
-# elements, so this is set well above the cell budget.
+# Every element of every XML part this reader parses itself, counted while streaming
+# across the whole workbook, so a part cannot be made expensive by being referenced
+# many times. Every cell of a sheet is several elements, so this is set well above the
+# cell budget.
 MAX_XML_NODES = 25_000_000
 
 _RELATIONSHIPS = "http://schemas.openxmlformats.org/package/2006/relationships"
@@ -93,6 +97,10 @@ def _refuse_declaration(*_: object) -> None:
     raise _DeclarationRefused
 
 
+class _NotXml(ValueError):
+    pass
+
+
 def _refuse_declarations(data: bytes, *, name: str) -> None:
     """Refuse any DTD or entity declaration, whatever the part's text encoding."""
 
@@ -104,31 +112,7 @@ def _refuse_declarations(data: bytes, *, name: str) -> None:
     except _DeclarationRefused:
         raise ValueError(f"XLSX XML declarations and entities are not allowed ({name})") from None
     except expat.ExpatError as error:
-        raise ValueError(f"XLSX package part is not well-formed XML ({name})") from error
-
-
-def _iterparse(data: bytes, *, name: str) -> Iterator[ElementTree.Element]:
-    """Yield each element of a part as it closes, counting nodes against the ceiling."""
-
-    _refuse_declarations(data, name=name)
-    nodes = 0
-    try:
-        for _, element in ElementTree.iterparse(BytesIO(data), events=("end",)):
-            nodes += 1
-            if nodes > MAX_XML_NODES:
-                raise ValueError(f"XLSX XML node limit exceeded ({name})")
-            yield element
-    except ElementTree.ParseError as error:
-        raise ValueError(f"XLSX package part is not well-formed XML ({name})") from error
-
-
-def _root(data: bytes, *, name: str) -> ElementTree.Element:
-    root: ElementTree.Element | None = None
-    for element in _iterparse(data, name=name):
-        root = element
-    if root is None:
-        raise ValueError(f"XLSX package part is empty ({name})")
-    return root
+        raise _NotXml(f"XLSX package part is not well-formed XML ({name})") from error
 
 
 @dataclass(frozen=True)
@@ -139,25 +123,95 @@ class _Relationship:
 
 
 class _Package:
-    """The parts of an OOXML package, with relationship lookup."""
+    """The parts of an OOXML package, with relationship lookup.
+
+    Every XML part is checked for declarations before anything parses it, openpyxl
+    included, and every element this reader parses is counted against one budget for
+    the whole workbook. Relationships and chart text are read once per part however
+    often the part is referenced.
+    """
 
     def __init__(self, archive: ZipFile) -> None:
         self._archive = archive
         self._names = set(archive.namelist())
+        self._checked: set[str] = set()
+        self._nodes = 0
+        self._relationships: dict[str, dict[str, _Relationship]] = {}
+        self._charts: dict[str, str] = {}
+
+    def refuse_declarations_everywhere(self) -> None:
+        """Check every member, so openpyxl never parses a declaration either.
+
+        A relationship can point openpyxl at a part with any name, so members are
+        not filtered by extension. A member that is not XML at all, such as an image,
+        stops the scanner at its first bytes and is left alone; a declaration can only
+        come before an XML document's first element, so it cannot hide after that.
+        """
+
+        for name in sorted(self._names):
+            data = self._archive.read(name)
+            if name.lower().endswith((".xml", ".rels")):
+                self._check(name, data)
+                continue
+            try:
+                self._check(name, data)
+            except _NotXml:
+                continue
+
+    def _check(self, name: str, data: bytes) -> None:
+        if name not in self._checked:
+            _refuse_declarations(data, name=name)
+            self._checked.add(name)
 
     def read(self, part: str) -> bytes | None:
         if part not in self._names:
             return None
         return self._archive.read(part)
 
+    def iterparse(self, part: str, data: bytes) -> Iterator[ElementTree.Element]:
+        """Yield each element of a part as it closes, counting it against the budget."""
+
+        self._check(part, data)
+        try:
+            for _, element in ElementTree.iterparse(BytesIO(data), events=("end",)):
+                self._nodes += 1
+                if self._nodes > MAX_XML_NODES:
+                    raise ValueError(f"XLSX XML node limit exceeded ({part})")
+                yield element
+        except ElementTree.ParseError as error:
+            raise ValueError(f"XLSX package part is not well-formed XML ({part})") from error
+
+    def root(self, part: str, data: bytes) -> ElementTree.Element:
+        root: ElementTree.Element | None = None
+        for element in self.iterparse(part, data):
+            root = element
+        if root is None:
+            raise ValueError(f"XLSX package part is empty ({part})")
+        return root
+
+    def chart_text(self, part: str) -> str | None:
+        """A chart part's text, parsed once; ``None`` when the part is missing."""
+
+        if part not in self._charts:
+            data = self.read(part)
+            if data is None:
+                return None
+            self._charts[part] = _chart_text(self.root(part, data))
+        return self._charts[part]
+
     def relationships(self, part: str) -> dict[str, _Relationship]:
+        if part not in self._relationships:
+            self._relationships[part] = self._read_relationships(part)
+        return self._relationships[part]
+
+    def _read_relationships(self, part: str) -> dict[str, _Relationship]:
         directory, base = posixpath.split(part)
         rels_part = posixpath.join(directory, "_rels", f"{base}.rels")
         data = self.read(rels_part)
         if data is None:
             return {}
         relationships: dict[str, _Relationship] = {}
-        for element in _root(data, name=rels_part):
+        for element in self.root(rels_part, data):
             if element.tag != f"{{{_RELATIONSHIPS}}}Relationship":
                 continue
             identifier = element.attrib.get("Id")
@@ -236,7 +290,7 @@ def _workbook_sheets(package: _Package) -> list[_Sheet]:
         raise ValueError("XLSX package workbook part is missing")
     relationships = package.relationships(workbook_part)
     sheets: list[_Sheet] = []
-    for element in _root(data, name=workbook_part).iter():
+    for element in package.root(workbook_part, data).iter():
         if _local(element.tag) != "sheet":
             continue
         relationship = relationships.get(_relationship_id(element) or "")
@@ -269,10 +323,9 @@ def _text_of(element: ElementTree.Element) -> str:
     return " ".join(value.text for value in element.iter(f"{{{_C}}}v") if value.text)
 
 
-def _chart_text(data: bytes, *, name: str) -> str:
+def _chart_text(root: ElementTree.Element) -> str:
     """A chart's title, axis titles and series names, in that order, one per line."""
 
-    root = _root(data, name=name)
     chart = root.find(f"{{{_C}}}chart")
     if chart is None:
         return ""
@@ -291,23 +344,20 @@ def _chart_text(data: bytes, *, name: str) -> str:
     return "\n".join(line for line in lines if line)
 
 
-def _drawing_charts(package: _Package, drawing_part: str) -> list[str]:
-    """The text of each chart a drawing part anchors, in anchor order."""
+def _drawing_chart_parts(package: _Package, drawing_part: str) -> list[str]:
+    """The chart parts a drawing part anchors, in anchor order, each named once."""
 
     data = package.read(drawing_part)
     if data is None:
         return []
     relationships = package.relationships(drawing_part)
-    charts: list[str] = []
-    for element in _root(data, name=drawing_part).iter(f"{{{_C}}}chart"):
+    charts: dict[str, None] = {}
+    for element in package.root(drawing_part, data).iter(f"{{{_C}}}chart"):
         relationship = relationships.get(_relationship_id(element) or "")
         if relationship is None or relationship.external or _kind(relationship) != "chart":
             continue
-        chart_data = package.read(relationship.target)
-        if chart_data is None:
-            continue
-        charts.append(_chart_text(chart_data, name=relationship.target))
-    return charts
+        charts.setdefault(relationship.target)
+    return list(charts)
 
 
 def _read_sheet_structure(package: _Package, sheet: _Sheet) -> None:
@@ -319,9 +369,11 @@ def _read_sheet_structure(package: _Package, sheet: _Sheet) -> None:
     if data is None:
         return
     relationships = package.relationships(sheet.part)
-    drawings: list[str] = []
+    # A sheet may name the same drawing, and a drawing the same chart, any number of
+    # times; each is read once, so repeats cannot multiply the work.
+    drawings: dict[str, None] = {}
     row_number = 0
-    for element in _iterparse(data, name=sheet.part):
+    for element in package.iterparse(sheet.part, data):
         local = _local(element.tag)
         if local == "row":
             # A row may omit its number, which then follows the previous row's.
@@ -357,9 +409,15 @@ def _read_sheet_structure(package: _Package, sheet: _Sheet) -> None:
         elif local == "drawing":
             relationship = relationships.get(_relationship_id(element) or "")
             if relationship is not None and not relationship.external:
-                drawings.append(relationship.target)
+                drawings.setdefault(relationship.target)
+    chart_parts: dict[str, None] = {}
     for drawing_part in drawings:
-        sheet.charts.extend(_drawing_charts(package, drawing_part))
+        for chart_part in _drawing_chart_parts(package, drawing_part):
+            chart_parts.setdefault(chart_part)
+    for chart_part in chart_parts:
+        text = package.chart_text(chart_part)
+        if text is not None:
+            sheet.charts.append(text)
 
 
 def _cell_reference(row: int, column: int) -> str:
@@ -470,8 +528,9 @@ def _table(
     return NormalizedTable(locator={"sheet": sheet.name}, rows=rows)
 
 
-def _link_and_chart_segments(sheet: _Sheet) -> list[NormalizedSegment]:
+def _link_and_chart_segments(sheet: _Sheet, budget: _Budget) -> list[NormalizedSegment]:
     segments: list[NormalizedSegment] = []
+    budget.spend(len(sheet.hyperlinks) + len(sheet.charts))
     for reference, target in sheet.hyperlinks:
         locator: Locator = {"sheet": sheet.name, "cell": reference, "hyperlink": 1}
         hidden: str | None = "sheet" if sheet.hidden else None
@@ -503,10 +562,11 @@ def normalize_xlsx(
     media_type: str,
 ) -> NormalizedDocument:
     raw = path.read_bytes()
-    # The package's own parts are read, and refused if hostile, before openpyxl
-    # parses anything.
+    # Every member is checked for declarations, and the parts this reader needs are
+    # read within one budget, before openpyxl parses anything.
     with ZipFile(BytesIO(raw)) as archive:
         package = _Package(archive)
+        package.refuse_declarations_everywhere()
         sheets = _workbook_sheets(package)
         for sheet in sheets:
             _read_sheet_structure(package, sheet)
@@ -531,7 +591,7 @@ def normalize_xlsx(
             table = _table(sheet, grid, budget)
             if table is not None:
                 tables.append(table)
-        segments.extend(_link_and_chart_segments(sheet))
+        segments.extend(_link_and_chart_segments(sheet, budget))
     return NormalizedDocument(
         object_sha256=digest,
         media_type=media_type,

@@ -793,3 +793,68 @@ def test_xlsx_chart_sheet_and_very_hidden_sheet_are_read(tmp_path: Path) -> None
 
     assert located[_key(sheet="Plot", chart=1)] == "Plotted on its own sheet"
     assert located[_key(sheet="Secret", cell="A1", hidden="sheet")] == "deep"
+
+
+def test_xlsx_repeated_drawing_and_chart_references_are_read_once(tmp_path: Path) -> None:
+    # A sheet naming one drawing 300 times, whose drawing anchors one chart 300 times,
+    # must not cost 90,000 chart reads or produce 90,000 segments.
+    workbook = _budget_workbook()
+    sheet = workbook.active
+    assert sheet is not None
+    chart = BarChart()
+    chart.title = "Anchored many times"
+    chart.add_data(Reference(sheet, min_col=2, min_row=2, max_row=3))  # pyright: ignore[reportUnknownMemberType]
+    chart.anchor = "D2"
+    sheet.add_chart(chart)  # pyright: ignore[reportUnknownMemberType]
+    path = _save_workbook(workbook, tmp_path / "repeated.xlsx")
+
+    def repeat_drawing(xml: str) -> str:
+        reference = re.search(r"<drawing [^>]*/>", xml)
+        assert reference is not None, xml
+        return xml.replace(reference.group(0), reference.group(0) * 300)
+
+    def repeat_anchor(xml: str) -> str:
+        anchor = re.search(r"<oneCellAnchor>.*</oneCellAnchor>", xml)
+        assert anchor is not None, xml
+        return xml.replace(anchor.group(0), anchor.group(0) * 300)
+
+    _rewrite(
+        path,
+        {},
+        {XLSX_SHEET: repeat_drawing, "xl/drawings/drawing1.xml": repeat_anchor},
+    )
+
+    result = normalize(path, DIGEST)
+
+    charts = [segment for segment in result.segments if "chart" in segment.locator]
+    assert [segment.text for segment in charts] == ["Anchored many times"]
+    assert result.metadata["charts"] == 1
+
+
+def test_xlsx_entity_in_a_part_only_openpyxl_reads_refuses_the_workbook(tmp_path: Path) -> None:
+    # The styles part is parsed by openpyxl, not by this reader's own XML pass, and
+    # must be checked for declarations all the same.
+    path = _save_workbook(_budget_workbook(), tmp_path / "styles-entity.xlsx")
+    _rewrite(
+        path,
+        {},
+        {
+            "xl/styles.xml": lambda xml: (
+                '<?xml version="1.0"?><!DOCTYPE styleSheet [<!ENTITY boom "boom">]>'
+                + xml.split("?>", 1)[-1]
+            )
+        },
+    )
+
+    with pytest.raises(MalformedInputError, match=r"declarations and entities.*styles\.xml"):
+        normalize(path, DIGEST)
+
+
+def test_xlsx_binary_member_is_not_mistaken_for_a_declaration(tmp_path: Path) -> None:
+    path = _save_workbook(_budget_workbook(), tmp_path / "image.xlsx")
+    image = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16 + b"<!DOCTYPE x [<!ENTITY y 'z'>]>"
+    _rewrite(path, {"xl/media/image1.png": image}, {})
+
+    located = _by_locator(normalize(path, DIGEST))
+
+    assert located[_key(sheet="Budget", cell="A4")] == "Total"
