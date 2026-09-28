@@ -12,10 +12,11 @@ and the locator says the result was not saved in the file.
 Merged ranges, hyperlinks, hidden rows and columns and charts are not available from a
 read-only ``openpyxl`` load. Rather than a second, full in-memory load, the package's
 own XML parts are read directly with the standard library, streaming each sheet part
-so memory stays flat, within one node budget for the whole workbook, and each part is
-read once however often it is referenced. Before any of that, and before openpyxl
-parses anything, every member of the package is checked for DTD and entity
-declarations, which are refused outright.
+so memory stays flat, within one node budget for the whole workbook. Each part this
+reader parses itself is parsed once, however often it is referenced; openpyxl still
+reads a sheet's cells once for every time the workbook lists it. Before any of that,
+and before openpyxl parses anything, every member of the package is checked for DTD
+and entity declarations, which are refused outright.
 
 Hidden sheets, rows and columns are still indexed, so their content can be found, but
 every segment from them carries ``hidden``, so an answer drawn from hidden content says
@@ -127,8 +128,8 @@ class _Package:
 
     Every XML part is checked for declarations before anything parses it, openpyxl
     included, and every element this reader parses is counted against one budget for
-    the whole workbook. Relationships and chart text are read once per part however
-    often the part is referenced.
+    the whole workbook. Each part this reader parses itself (sheet structure,
+    relationships, drawings and charts) is parsed once, however often it is referenced.
     """
 
     def __init__(self, archive: ZipFile) -> None:
@@ -138,6 +139,8 @@ class _Package:
         self._nodes = 0
         self._relationships: dict[str, dict[str, _Relationship]] = {}
         self._charts: dict[str, str] = {}
+        self.drawing_charts: dict[str, list[str]] = {}
+        self.sheet_structures: dict[str, _Sheet] = {}
 
     def refuse_declarations_everywhere(self) -> None:
         """Check every member, so openpyxl never parses a declaration either.
@@ -347,6 +350,12 @@ def _chart_text(root: ElementTree.Element) -> str:
 def _drawing_chart_parts(package: _Package, drawing_part: str) -> list[str]:
     """The chart parts a drawing part anchors, in anchor order, each named once."""
 
+    if drawing_part not in package.drawing_charts:
+        package.drawing_charts[drawing_part] = _read_drawing_chart_parts(package, drawing_part)
+    return package.drawing_charts[drawing_part]
+
+
+def _read_drawing_chart_parts(package: _Package, drawing_part: str) -> list[str]:
     data = package.read(drawing_part)
     if data is None:
         return []
@@ -365,6 +374,18 @@ def _read_sheet_structure(package: _Package, sheet: _Sheet) -> None:
 
     if sheet.part is None:
         return
+    # A workbook may list the same sheet part more than once. Its structure is parsed
+    # the first time and shared after that; openpyxl still reads the cells once per
+    # listing (see docs/known-issues.md).
+    parsed = package.sheet_structures.get(sheet.part)
+    if parsed is not None:
+        sheet.hidden_rows = parsed.hidden_rows
+        sheet.hidden_columns = parsed.hidden_columns
+        sheet.merges = parsed.merges
+        sheet.hyperlinks = parsed.hyperlinks
+        sheet.charts = parsed.charts
+        return
+    package.sheet_structures[sheet.part] = sheet
     data = package.read(sheet.part)
     if data is None:
         return

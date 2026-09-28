@@ -10,9 +10,10 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from io import BytesIO
 from pathlib import Path
+from xml.etree import ElementTree
 from zipfile import ZIP_DEFLATED, ZipFile
 
 import pytest
@@ -858,3 +859,59 @@ def test_xlsx_binary_member_is_not_mistaken_for_a_declaration(tmp_path: Path) ->
     located = _by_locator(normalize(path, DIGEST))
 
     assert located[_key(sheet="Budget", cell="A4")] == "Total"
+
+
+def test_xlsx_sheet_listed_many_times_parses_its_drawing_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # One sheet part listed 150 times, whose drawing anchors a chart 300 times. Each
+    # part this reader parses itself must be parsed once, not once per listing.
+    workbook = _budget_workbook()
+    sheet = workbook.active
+    assert sheet is not None
+    chart = BarChart()
+    chart.title = "Shared drawing"
+    chart.add_data(Reference(sheet, min_col=2, min_row=2, max_row=3))  # pyright: ignore[reportUnknownMemberType]
+    chart.anchor = "D2"
+    sheet.add_chart(chart)  # pyright: ignore[reportUnknownMemberType]
+    path = _save_workbook(workbook, tmp_path / "listed.xlsx")
+
+    def list_many_times(xml: str) -> str:
+        entry = re.search(r"<sheet [^>]*/>", xml)
+        assert entry is not None, xml
+        copies = "".join(
+            entry.group(0)
+            .replace('name="Budget"', f'name="Copy {number}"')
+            .replace('sheetId="1"', f'sheetId="{number + 1}"')
+            for number in range(1, 150)
+        )
+        return xml.replace(entry.group(0), entry.group(0) + copies)
+
+    def repeat_anchor(xml: str) -> str:
+        anchor = re.search(r"<oneCellAnchor>.*</oneCellAnchor>", xml)
+        assert anchor is not None, xml
+        return xml.replace(anchor.group(0), anchor.group(0) * 300)
+
+    _rewrite(
+        path,
+        {},
+        {"xl/workbook.xml": list_many_times, "xl/drawings/drawing1.xml": repeat_anchor},
+    )
+    parsed: list[str] = []
+    real_iterparse = normalize_xlsx_module._Package.iterparse  # pyright: ignore[reportPrivateUsage]
+
+    def counting_iterparse(
+        self: normalize_xlsx_module._Package,  # pyright: ignore[reportPrivateUsage]
+        part: str,
+        data: bytes,
+    ) -> Iterator[ElementTree.Element]:
+        parsed.append(part)
+        return real_iterparse(self, part, data)
+
+    monkeypatch.setattr(normalize_xlsx_module._Package, "iterparse", counting_iterparse)  # pyright: ignore[reportPrivateUsage]
+    result = normalize(path, DIGEST)
+
+    assert len(parsed) == len(set(parsed)), sorted(p for p in set(parsed) if parsed.count(p) > 1)
+    charts = [segment for segment in result.segments if "chart" in segment.locator]
+    assert len(charts) == 150
+    assert {segment.text for segment in charts} == {"Shared drawing"}
