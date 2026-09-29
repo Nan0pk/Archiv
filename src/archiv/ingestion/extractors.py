@@ -255,7 +255,7 @@ ALL_EXTRACTORS: tuple[Extractor, ...] = (
     ),
     Extractor(
         name="pptx",
-        version="1",
+        version="2",
         suffixes=frozenset({".pptx"}),
         media_types=frozenset(
             {"application/vnd.openxmlformats-officedocument.presentationml.presentation"}

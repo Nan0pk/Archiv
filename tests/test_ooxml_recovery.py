@@ -1,9 +1,9 @@
 """Office content that lives outside the plain cell or paragraph text must not be dropped.
 
-Every document here is generated at test time, with ``python-docx`` or ``openpyxl``.
-Parts those libraries cannot author (footnotes, endnotes, a hyperlink with a missing
-relationship, a formula's stored result) are added by rewriting the generated
-package's XML.
+Every document here is generated at test time, with ``python-docx``, ``openpyxl`` or
+``python-pptx``. Parts those libraries cannot author (footnotes, endnotes, a hyperlink
+with a missing relationship, a formula's stored result, a hidden slide) are added by
+rewriting the generated package's XML.
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ import re
 from collections.abc import Callable, Iterator
 from io import BytesIO
 from pathlib import Path
+from typing import cast
 from xml.etree import ElementTree
 from zipfile import ZIP_DEFLATED, ZipFile
 
@@ -25,15 +26,28 @@ from docx.shared import Inches
 from docx.text.paragraph import Paragraph
 from openpyxl import Workbook
 from openpyxl.chart import BarChart, Reference
+from pptx import Presentation
+from pptx.chart.data import CategoryChartData
+from pptx.enum.chart import XL_CHART_TYPE
+from pptx.enum.shapes import MSO_CONNECTOR, PP_PLACEHOLDER
+from pptx.oxml.table import CT_Table, CT_TableRow
+from pptx.presentation import Presentation as PptxPresentation
+from pptx.shapes.base import BaseShape
+from pptx.shapes.graphfrm import GraphicFrame
+from pptx.slide import Slide
+from pptx.util import Inches as SlideInches
 from typer.testing import CliRunner
 
 import archiv.ingestion.normalize_docx as normalize_docx_module
+import archiv.ingestion.normalize_office as normalize_pptx_module
 import archiv.ingestion.normalize_xlsx as normalize_xlsx_module
 from archiv.cli import app
 from archiv.contracts import NormalizedDocument
+from archiv.format_matrix import load_format_matrix
 from archiv.ingestion.normalizers import MalformedInputError, normalize
 
 DIGEST = "0" * 64
+MATRIX = Path(__file__).resolve().parents[1] / "docs" / "format-compatibility.json"
 W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 
@@ -915,3 +929,509 @@ def test_xlsx_sheet_listed_many_times_parses_its_drawing_once(
     charts = [segment for segment in result.segments if "chart" in segment.locator]
     assert len(charts) == 150
     assert {segment.text for segment in charts} == {"Shared drawing"}
+
+
+# --- PowerPoint presentations --------------------------------------------------------
+#
+# ``python-pptx`` cannot mark a slide or a shape hidden, so those tests set the
+# attribute PowerPoint writes on the generated element before saving.
+
+PPTX_SLIDE = "ppt/slides/slide1.xml"
+# Where a generated shape sits does not matter to any test here.
+_PLACE = (SlideInches(1), SlideInches(1), SlideInches(4), SlideInches(1))
+
+
+def _save_deck(presentation: PptxPresentation, path: Path) -> Path:
+    presentation.save(str(path))
+    return path
+
+
+def _blank_slide(presentation: PptxPresentation) -> Slide:
+    return presentation.slides.add_slide(presentation.slide_layouts[6])
+
+
+def _textbox(slide: Slide, text: str) -> BaseShape:
+    box = slide.shapes.add_textbox(*_PLACE)
+    box.text_frame.text = text
+    return box
+
+
+def _set_hidden(shape: BaseShape) -> None:
+    properties = shape.element.xpath("./*[1]/p:cNvPr")  # pyright: ignore[reportUnknownMemberType]
+    properties[0].set("hidden", "1")  # pyright: ignore[reportUnknownMemberType]
+
+
+def _review_deck() -> PptxPresentation:
+    """The reproduced slide: a title, a 3x2 table with six cells, and a speaker note."""
+
+    presentation = Presentation()
+    slide = presentation.slides.add_slide(presentation.slide_layouts[5])
+    title = slide.shapes.title
+    assert title is not None
+    title.text = "Quarterly review"
+    table = slide.shapes.add_table(3, 2, *_PLACE).table
+    for row in range(3):
+        for column in range(2):
+            table.cell(row, column).text = f"Row {row + 1} column {column + 1}"
+    notes = slide.notes_slide.notes_text_frame
+    assert notes is not None
+    notes.text = "Revenue grew because of the Lahore office"
+    return presentation
+
+
+def test_slide_table_cells_are_extracted(tmp_path: Path) -> None:
+    path = _save_deck(_review_deck(), tmp_path / "review.pptx")
+
+    result = normalize(path, DIGEST)
+
+    located = _by_locator(result)
+    assert located[_key(slide=1, shape=1, placeholder="title")] == "Quarterly review"
+    for row in range(1, 4):
+        for column in range(1, 3):
+            assert (
+                located[_key(slide=1, shape=2, row=row, column=column)]
+                == f"Row {row} column {column}"
+            )
+    assert located[_key(slide=1, speaker_notes=1)] == "Revenue grew because of the Lahore office"
+    # Title, six cells and the note: nothing on the slide is dropped.
+    assert len(result.segments) == 8
+    assert [table.locator for table in result.tables] == [{"slide": 1, "shape": 2}]
+    assert result.tables[0].rows[2] == ["Row 3 column 1", "Row 3 column 2"]
+    assert result.metadata["table_cells"] == 6
+
+
+def test_merged_slide_table_cell_yields_its_text_once(tmp_path: Path) -> None:
+    presentation = Presentation()
+    slide = _blank_slide(presentation)
+    table = slide.shapes.add_table(2, 3, *_PLACE).table
+    table.cell(0, 0).merge(table.cell(0, 2))
+    table.cell(0, 0).text = "Merged heading"
+    table.cell(1, 2).text = "Last cell"
+    path = _save_deck(presentation, tmp_path / "merged.pptx")
+
+    result = normalize(path, DIGEST)
+
+    assert [(segment.locator, segment.text) for segment in result.segments] == [
+        ({"slide": 1, "shape": 1, "row": 1, "column": 1}, "Merged heading"),
+        ({"slide": 1, "shape": 1, "row": 2, "column": 3}, "Last cell"),
+    ]
+    assert result.tables[0].rows == [["Merged heading", None, None], [None, None, "Last cell"]]
+
+
+def test_speaker_notes_are_extracted(tmp_path: Path) -> None:
+    presentation = Presentation()
+    first = _blank_slide(presentation)
+    _textbox(first, "Opening")
+    notes = first.notes_slide.notes_text_frame
+    assert notes is not None
+    notes.text = "Thank the hosts first"
+    numbered = 0
+    for shape in first.notes_slide.placeholders:
+        if shape.placeholder_format.type == PP_PLACEHOLDER.SLIDE_NUMBER:
+            # The notes page's slide number is not a note.
+            shape.text_frame.text = "7"  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType]
+            numbered += 1
+    assert numbered == 1
+    second = _blank_slide(presentation)
+    _textbox(second, "No notes here")
+    path = _save_deck(presentation, tmp_path / "notes.pptx")
+
+    result = normalize(path, DIGEST)
+
+    notes_segments = [
+        (segment.locator, segment.text)
+        for segment in result.segments
+        if "speaker_notes" in segment.locator
+    ]
+    assert notes_segments == [({"slide": 1, "speaker_notes": 1}, "Thank the hosts first")]
+    assert "7" not in [segment.text for segment in result.segments]
+
+
+def test_grouped_shapes_are_recursed(tmp_path: Path) -> None:
+    presentation = Presentation()
+    slide = _blank_slide(presentation)
+    _textbox(slide, "Outside the group")
+    group = slide.shapes.add_group_shape()
+    group.shapes.add_textbox(*_PLACE).text_frame.text = "First in group"
+    inner = group.shapes.add_group_shape()
+    inner.shapes.add_textbox(*_PLACE).text_frame.text = "Nested deeper"
+    path = _save_deck(presentation, tmp_path / "groups.pptx")
+
+    result = normalize(path, DIGEST)
+
+    assert [(segment.locator, segment.text) for segment in result.segments] == [
+        ({"slide": 1, "shape": 1}, "Outside the group"),
+        ({"slide": 1, "shape": 2, "grouped_shape": "1"}, "First in group"),
+        ({"slide": 1, "shape": 2, "grouped_shape": "2.1"}, "Nested deeper"),
+    ]
+
+
+def test_groups_nested_past_the_ceiling_refuse_the_presentation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    presentation = Presentation()
+    group = _blank_slide(presentation).shapes.add_group_shape()
+    for _ in range(3):
+        group = group.shapes.add_group_shape()
+    group.shapes.add_textbox(*_PLACE).text_frame.text = "Deep"
+    path = _save_deck(presentation, tmp_path / "deep.pptx")
+    monkeypatch.setattr(normalize_pptx_module, "MAX_GROUP_DEPTH", 3)
+
+    with pytest.raises(MalformedInputError, match="group nesting limit"):
+        normalize(path, DIGEST)
+
+
+def test_hidden_slides_are_flagged(tmp_path: Path) -> None:
+    presentation = Presentation()
+    _textbox(_blank_slide(presentation), "Shown slide")
+    hidden = _blank_slide(presentation)
+    _textbox(hidden, "Backup figures")
+    notes = hidden.notes_slide.notes_text_frame
+    assert notes is not None
+    notes.text = "Only if asked"
+    hidden.element.set("show", "0")  # pyright: ignore[reportUnknownMemberType]
+    path = _save_deck(presentation, tmp_path / "hidden.pptx")
+
+    result = normalize(path, DIGEST)
+
+    assert [(segment.locator, segment.text) for segment in result.segments] == [
+        ({"slide": 1, "shape": 1}, "Shown slide"),
+        ({"slide": 2, "shape": 1, "hidden": "slide"}, "Backup figures"),
+        ({"slide": 2, "speaker_notes": 1, "hidden": "slide"}, "Only if asked"),
+    ]
+    assert result.metadata["hidden_slides"] == 1
+
+
+def test_hidden_shape_and_hidden_group_contents_are_marked(tmp_path: Path) -> None:
+    presentation = Presentation()
+    slide = _blank_slide(presentation)
+    _set_hidden(_textbox(slide, "Hidden box"))
+    group = slide.shapes.add_group_shape()
+    group.shapes.add_textbox(*_PLACE).text_frame.text = "Inside hidden group"
+    _set_hidden(group)
+    _textbox(slide, "Visible box")
+    path = _save_deck(presentation, tmp_path / "hidden-shapes.pptx")
+
+    result = normalize(path, DIGEST)
+
+    assert [(segment.locator, segment.text) for segment in result.segments] == [
+        ({"slide": 1, "shape": 1, "hidden": "shape"}, "Hidden box"),
+        (
+            {"slide": 1, "shape": 2, "grouped_shape": "1", "hidden": "shape"},
+            "Inside hidden group",
+        ),
+        ({"slide": 1, "shape": 3}, "Visible box"),
+    ]
+
+
+def test_slide_placeholder_roles_are_recorded(tmp_path: Path) -> None:
+    presentation = Presentation()
+    slide = presentation.slides.add_slide(presentation.slide_layouts[0])
+    title = slide.shapes.title
+    assert title is not None
+    title.text = "Annual report"
+    slide.placeholders[1].text_frame.text = "Prepared for the board"  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType]
+    body = presentation.slides.add_slide(presentation.slide_layouts[1])
+    body.placeholders[1].text_frame.text = "First point"  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType]
+    _textbox(body, "Free text")
+    path = _save_deck(presentation, tmp_path / "roles.pptx")
+
+    result = normalize(path, DIGEST)
+
+    assert [(segment.locator, segment.text) for segment in result.segments] == [
+        ({"slide": 1, "shape": 1, "placeholder": "title"}, "Annual report"),
+        ({"slide": 1, "shape": 2, "placeholder": "subtitle"}, "Prepared for the board"),
+        ({"slide": 2, "shape": 2, "placeholder": "content"}, "First point"),
+        ({"slide": 2, "shape": 3}, "Free text"),
+    ]
+
+
+def _chart_deck() -> PptxPresentation:
+    presentation = Presentation()
+    slide = _blank_slide(presentation)
+    data = CategoryChartData()
+    data.categories = ["North", "South"]
+    data.add_series("Units sold", (10, 20))  # pyright: ignore[reportUnknownMemberType]
+    # python-pptx annotates add_chart as returning the chart; it returns the frame.
+    frame = cast(
+        GraphicFrame,
+        slide.shapes.add_chart(XL_CHART_TYPE.COLUMN_CLUSTERED, *_PLACE, data),  # pyright: ignore[reportArgumentType]
+    )
+    chart = frame.chart
+    chart.has_title = True
+    chart.chart_title.text_frame.text = "Sales by region"
+    chart.value_axis.has_title = True
+    chart.value_axis.axis_title.text_frame.text = "Units"
+    return presentation
+
+
+def test_pptx_chart_titles_and_series_names_are_extracted(tmp_path: Path) -> None:
+    path = _save_deck(_chart_deck(), tmp_path / "chart.pptx")
+
+    result = normalize(path, DIGEST)
+
+    assert [(segment.locator, segment.text) for segment in result.segments] == [
+        ({"slide": 1, "shape": 1, "chart": 1}, "Sales by region\nUnits\nUnits sold"),
+    ]
+
+
+def test_pptx_chart_with_a_missing_part_is_skipped_not_guessed(tmp_path: Path) -> None:
+    presentation = _chart_deck()
+    _textbox(presentation.slides[0], "Still here")
+    path = _save_deck(presentation, tmp_path / "broken-chart.pptx")
+    _rewrite(
+        path,
+        {},
+        {
+            "ppt/slides/_rels/slide1.xml.rels": lambda xml: re.sub(
+                r'<Relationship [^>]*relationships/chart"[^>]*/>', "", xml
+            )
+        },
+    )
+
+    result = normalize(path, DIGEST)
+
+    assert [segment.text for segment in result.segments] == ["Still here"]
+
+
+def test_pptx_chart_referenced_many_times_spends_the_node_budget(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One chart shown many times is counted every time, so it cannot multiply work."""
+
+    path = _save_deck(_chart_deck(), tmp_path / "chart.pptx")
+    with ZipFile(path) as archive:
+        chart_nodes = sum(
+            1 for _ in ElementTree.fromstring(archive.read("ppt/charts/chart1.xml")).iter()
+        )
+    monkeypatch.setattr(normalize_pptx_module, "MAX_XML_NODES", chart_nodes * 3)
+    assert len(normalize(path, DIGEST).segments) == 1
+
+    def repeat_frame(xml: str) -> str:
+        frame = re.search(r"<p:graphicFrame>.*?</p:graphicFrame>", xml, re.DOTALL)
+        assert frame is not None
+        return xml.replace(frame.group(0), frame.group(0) * 10)
+
+    _rewrite(path, {}, {PPTX_SLIDE: repeat_frame})
+
+    with pytest.raises(MalformedInputError, match="node limit"):
+        normalize(path, DIGEST)
+
+
+def test_pptx_table_cell_limit_refuses_the_presentation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    presentation = Presentation()
+    _blank_slide(presentation).shapes.add_table(2, 2, *_PLACE)
+    path = _save_deck(presentation, tmp_path / "table.pptx")
+    monkeypatch.setattr(normalize_pptx_module, "MAX_TABLE_CELLS", 3)
+
+    with pytest.raises(MalformedInputError, match="table cell limit"):
+        normalize(path, DIGEST)
+
+
+def test_pptx_short_rows_padded_to_a_long_row_spend_the_cell_budget(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Padding counts, so one long row cannot turn many short rows into a huge grid."""
+
+    presentation = Presentation()
+    table = _blank_slide(presentation).shapes.add_table(3, 1, *_PLACE)
+    table.table.cell(0, 0).text = "x"
+    path = _save_deck(presentation, tmp_path / "ragged.pptx")
+
+    def widen_first_row(xml: str) -> str:
+        cell = re.search(r"<a:tc>.*?</a:tc>", xml, re.DOTALL)
+        assert cell is not None
+        return xml.replace(cell.group(0), cell.group(0) * 40, 1)
+
+    _rewrite(path, {}, {PPTX_SLIDE: widen_first_row})
+    # 42 cells, but 3 rows of 40 positions once the short rows are padded.
+    monkeypatch.setattr(normalize_pptx_module, "MAX_TABLE_CELLS", 100)
+
+    with pytest.raises(MalformedInputError, match="table cell limit"):
+        normalize(path, DIGEST)
+
+
+def test_pptx_entity_declaration_in_notes_refuses_the_presentation(tmp_path: Path) -> None:
+    presentation = Presentation()
+    slide = _blank_slide(presentation)
+    notes = slide.notes_slide.notes_text_frame
+    assert notes is not None
+    notes.text = "ENTITY-HERE"
+    path = _save_deck(presentation, tmp_path / "entity.pptx")
+    part = "ppt/notesSlides/notesSlide1.xml"
+    with ZipFile(path) as archive:
+        xml = archive.read(part).decode("utf-8")
+    declaration = '<!DOCTYPE p:notes [<!ENTITY big "' + "A" * 64 + '">]>'
+    xml = xml.replace("?>", "?>" + declaration, 1).replace("ENTITY-HERE", "&big;")
+    _rewrite(path, {part: xml.encode("utf-8")}, {})
+
+    with pytest.raises(MalformedInputError, match="declarations and entities"):
+        normalize(path, DIGEST)
+
+
+def test_pptx_shape_numbering_and_text_are_unchanged(tmp_path: Path) -> None:
+    """Every segment the old top-level reader produced is still produced, unchanged."""
+
+    presentation = _review_deck()
+    slide = _blank_slide(presentation)
+    box = _textbox(slide, "Line one")
+    paragraph = box.text_frame.add_paragraph()  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType, reportUnknownVariableType]
+    paragraph.add_run().text = "Line two"  # pyright: ignore[reportUnknownMemberType]
+    box.text_frame.paragraphs[0].add_line_break()  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType]
+    slide.shapes.add_connector(MSO_CONNECTOR.STRAIGHT, *_PLACE)
+    _textbox(slide, "After the connector")
+    path = _save_deck(presentation, tmp_path / "unchanged.pptx")
+
+    old: list[tuple[int, int, str]] = []
+    for slide_number, old_slide in enumerate(Presentation(str(path)).slides, 1):
+        for shape_number, shape in enumerate(old_slide.shapes, 1):
+            text = getattr(shape, "text", "")
+            if text:
+                old.append((slide_number, shape_number, text))
+
+    result = normalize(path, DIGEST)
+
+    new = {
+        (segment.locator.get("slide"), segment.locator.get("shape"), segment.text)
+        for segment in result.segments
+    }
+    assert old
+    assert set(old) <= new
+    assert (2, 3, "After the connector") in new
+
+
+def test_pptx_table_cell_is_found_by_search_with_its_slide_locator(tmp_path: Path) -> None:
+    presentation = Presentation()
+    slide = _blank_slide(presentation)
+    _textbox(slide, "Register")
+    table = slide.shapes.add_table(1, 2, *_PLACE).table
+    table.cell(0, 1).text = "ARCHIV-SLIDE-TABLE-MARKER-2026"
+    path = _save_deck(presentation, tmp_path / "cited.pptx")
+
+    payload = _search(path, tmp_path / "home", "ARCHIV-SLIDE-TABLE-MARKER-2026")
+
+    assert [hit["citation"]["locator"] for hit in payload] == [  # pyright: ignore[reportIndexIssue]
+        {"slide": 1, "shape": 2, "row": 1, "column": 2}
+    ]
+
+
+def test_pptx_chart_linked_outside_the_package_is_skipped(tmp_path: Path) -> None:
+    presentation = _chart_deck()
+    _textbox(presentation.slides[0], "Still here")
+    path = _save_deck(presentation, tmp_path / "external-chart.pptx")
+
+    def point_outside(xml: str) -> str:
+        link = re.search(r'<Relationship [^>]*relationships/chart"[^>]*/>', xml)
+        assert link is not None
+        outside = re.sub(r'Target="[^"]*"', 'Target="https://example.invalid/chart.xml"', link[0])
+        return xml.replace(link[0], outside.replace("/>", ' TargetMode="External"/>'))
+
+    _rewrite(path, {}, {"ppt/slides/_rels/slide1.xml.rels": point_outside})
+
+    result = normalize(path, DIGEST)
+
+    assert [segment.text for segment in result.segments] == ["Still here"]
+
+
+def test_pptx_table_is_read_in_one_pass(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Each row's cell list is built once, so reading time grows with the table's size.
+
+    python-pptx rebuilds a row's cell list on every indexed lookup; indexing every cell
+    would take time proportional to the square of the table's size.
+    """
+
+    presentation = Presentation()
+    table = _blank_slide(presentation).shapes.add_table(3, 40, *_PLACE).table
+    for row in range(3):
+        for column in range(40):
+            table.cell(row, column).text = f"{row}.{column}"
+    path = _save_deck(presentation, tmp_path / "wide.pptx")
+    lookups = {"rows": 0, "cells": 0}
+    rows_property = CT_Table.tr_lst
+    cells_property = CT_TableRow.tc_lst
+
+    def count_rows(table_element: CT_Table) -> object:
+        lookups["rows"] += 1
+        return rows_property.fget(table_element)  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType, reportUnknownVariableType]
+
+    def count_cells(row_element: CT_TableRow) -> object:
+        lookups["cells"] += 1
+        return cells_property.fget(row_element)  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType, reportUnknownVariableType]
+
+    monkeypatch.setattr(CT_Table, "tr_lst", property(count_rows))
+    monkeypatch.setattr(CT_TableRow, "tc_lst", property(count_cells))
+
+    result = normalize(path, DIGEST)
+
+    assert len(result.segments) == 120
+    assert lookups["rows"] <= 2
+    assert lookups["cells"] <= 3 * 2
+
+
+def test_pptx_locators_are_all_claimed_by_the_format_matrix(tmp_path: Path) -> None:
+    """Every locator shape the reader produces is listed for the presentation family."""
+
+    presentation = Presentation()
+    slide = presentation.slides.add_slide(presentation.slide_layouts[5])
+    title = slide.shapes.title
+    assert title is not None
+    title.text = "Title"
+    slide.shapes.add_table(1, 1, *_PLACE).table.cell(0, 0).text = "Cell"
+    group = slide.shapes.add_group_shape()
+    group.shapes.add_textbox(*_PLACE).text_frame.text = "Grouped"
+    _set_hidden(_textbox(slide, "Hidden"))
+    notes = slide.notes_slide.notes_text_frame
+    assert notes is not None
+    notes.text = "Note"
+    hidden = _blank_slide(presentation)
+    _textbox(hidden, "On a hidden slide")
+    hidden_notes = hidden.notes_slide.notes_text_frame
+    assert hidden_notes is not None
+    hidden_notes.text = "Hidden note"
+    hidden.element.set("show", "0")  # pyright: ignore[reportUnknownMemberType]
+    path = _save_deck(presentation, tmp_path / "labels.pptx")
+    chart_path = _save_deck(_chart_deck(), tmp_path / "chart.pptx")
+
+    produced = {
+        frozenset(segment.locator)
+        for deck in (path, chart_path)
+        for segment in normalize(deck, DIGEST).segments
+    }
+
+    family = load_format_matrix(MATRIX).family_for_suffix(".pptx")
+    claimed = {frozenset(shape) for shape in family.locator_shapes}
+    assert len(produced) >= 7
+    assert produced <= claimed
+
+
+def test_pptx_decoy_table_elsewhere_in_the_frame_does_not_shift_cells(tmp_path: Path) -> None:
+    """Row lengths come from the table that is read, not any table under the frame."""
+
+    presentation = Presentation()
+    table = _blank_slide(presentation).shapes.add_table(2, 2, *_PLACE).table
+    for row in range(2):
+        for column in range(2):
+            table.cell(row, column).text = f"R{row + 1}C{column + 1}"
+    path = _save_deck(presentation, tmp_path / "decoy.pptx")
+    decoy = (
+        '<p:extLst><p:ext uri="{00000000-0000-0000-0000-000000000000}">'
+        "<a:tbl><a:tr><a:tc/><a:tc/><a:tc/></a:tr></a:tbl></p:ext></p:extLst>"
+    )
+
+    def add_decoy(xml: str) -> str:
+        # The frame's own properties, not the slide shape tree's, which come first.
+        frame_properties = "</p:cNvGraphicFramePr><p:nvPr/>"
+        assert frame_properties in xml
+        return xml.replace(frame_properties, f"</p:cNvGraphicFramePr><p:nvPr>{decoy}</p:nvPr>", 1)
+
+    _rewrite(path, {}, {PPTX_SLIDE: add_decoy})
+
+    result = normalize(path, DIGEST)
+
+    assert [(segment.locator, segment.text) for segment in result.segments] == [
+        ({"slide": 1, "shape": 1, "row": row, "column": column}, f"R{row}C{column}")
+        for row in (1, 2)
+        for column in (1, 2)
+    ]

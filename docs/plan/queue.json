@@ -490,7 +490,7 @@
       "phase": "C",
       "title": "PPTX: speaker notes, tables, charts, grouped shapes, placeholder roles, hidden slides",
       "doc": "docs/plan/steps/S17.md",
-      "detail": "stub",
+      "detail": "full",
       "depends_on": [
         "S16"
       ],
@@ -500,7 +500,9 @@
           "tests/test_ooxml_recovery.py::test_slide_table_cells_are_extracted",
           "tests/test_ooxml_recovery.py::test_speaker_notes_are_extracted",
           "tests/test_ooxml_recovery.py::test_grouped_shapes_are_recursed",
-          "tests/test_ooxml_recovery.py::test_hidden_slides_are_flagged"
+          "tests/test_ooxml_recovery.py::test_hidden_slides_are_flagged",
+          "tests/test_ooxml_recovery.py::test_slide_placeholder_roles_are_recorded",
+          "tests/test_ooxml_recovery.py::test_pptx_chart_titles_and_series_names_are_extracted"
         ]
       }
     },
