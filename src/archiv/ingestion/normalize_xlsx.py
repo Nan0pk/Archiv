@@ -39,6 +39,7 @@ from openpyxl.utils.cell import get_column_letter, range_boundaries
 from openpyxl.worksheet.formula import ArrayFormula
 
 from archiv.contracts import NormalizedDocument, NormalizedSegment, NormalizedTable
+from archiv.ingestion.ooxml_charts import CHART_NAMESPACE, chart_text
 
 __all__ = ["MAX_CELL_POSITIONS", "MAX_XML_NODES", "normalize_xlsx"]
 
@@ -55,11 +56,9 @@ MAX_CELL_POSITIONS = 5_000_000
 MAX_XML_NODES = 25_000_000
 
 _RELATIONSHIPS = "http://schemas.openxmlformats.org/package/2006/relationships"
-_A = "http://schemas.openxmlformats.org/drawingml/2006/main"
-_C = "http://schemas.openxmlformats.org/drawingml/2006/chart"
+_C = CHART_NAMESPACE
 _HIDDEN_STATES = {"hidden", "veryHidden"}
 _TRUE = {"1", "true"}
-_AXES = ("catAx", "valAx", "dateAx", "serAx")
 # openpyxl's own marker for a formula whose result it has no value for.
 _FORMULA = "f"
 
@@ -199,7 +198,7 @@ class _Package:
             data = self.read(part)
             if data is None:
                 return None
-            self._charts[part] = _chart_text(self.root(part, data))
+            self._charts[part] = chart_text(self.root(part, data))
         return self._charts[part]
 
     def relationships(self, part: str) -> dict[str, _Relationship]:
@@ -311,40 +310,6 @@ def _workbook_sheets(package: _Package) -> list[_Sheet]:
             )
         )
     return sheets
-
-
-def _text_of(element: ElementTree.Element) -> str:
-    """Text of a chart title or series name: rich text paragraphs, else cached values."""
-
-    paragraphs = [
-        "".join(run.text or "" for run in paragraph.iter(f"{{{_A}}}t"))
-        for paragraph in element.iter(f"{{{_A}}}p")
-    ]
-    text = "\n".join(value for value in paragraphs if value)
-    if text:
-        return text
-    return " ".join(value.text for value in element.iter(f"{{{_C}}}v") if value.text)
-
-
-def _chart_text(root: ElementTree.Element) -> str:
-    """A chart's title, axis titles and series names, in that order, one per line."""
-
-    chart = root.find(f"{{{_C}}}chart")
-    if chart is None:
-        return ""
-    lines: list[str] = []
-    title = chart.find(f"{{{_C}}}title")
-    if title is not None:
-        lines.append(_text_of(title))
-    for axis in (element for element in chart.iter() if _local(element.tag) in _AXES):
-        axis_title = axis.find(f"{{{_C}}}title")
-        if axis_title is not None:
-            lines.append(_text_of(axis_title))
-    for series in chart.iter(f"{{{_C}}}ser"):
-        name_element = series.find(f"{{{_C}}}tx")
-        if name_element is not None:
-            lines.append(_text_of(name_element))
-    return "\n".join(line for line in lines if line)
 
 
 def _drawing_chart_parts(package: _Package, drawing_part: str) -> list[str]:
