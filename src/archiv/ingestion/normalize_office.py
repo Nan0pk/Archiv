@@ -46,6 +46,7 @@ MAX_TABLE_CELLS = 200_000
 # PowerPoint itself nests groups a handful of levels deep.
 MAX_GROUP_DEPTH = 32
 
+_A = "http://schemas.openxmlformats.org/drawingml/2006/main"
 _P = "http://schemas.openxmlformats.org/presentationml/2006/main"
 _R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 _TRUE = {"1", "true"}
@@ -255,15 +256,25 @@ class _SlideReader:
         A cell covered by a merge carries no text of its own and yields nothing.
         """
 
+        # python-pptx rebuilds a row's whole cell list on every indexed lookup, so
+        # indexing rows and cells would take time proportional to the square of the
+        # table's size. Row lengths come from the XML and the cells from one pass.
+        table = _xml(frame.element).find(f".//{{{_A}}}tbl")
+        row_lengths = (
+            []
+            if table is None
+            else [
+                sum(1 for cell in row if cell.tag == f"{{{_A}}}tc")
+                for row in table
+                if row.tag == f"{{{_A}}}tr"
+            ]
+        )
+        cells = frame.table.iter_cells()
         rows: list[list[object | None]] = []
-        table_rows = frame.table.rows
-        for row_index in range(len(table_rows)):
-            row_number = row_index + 1
-            cells = table_rows[row_index].cells
+        for row_number, length in enumerate(row_lengths, 1):
             values: list[object | None] = []
-            for column_index in range(len(cells)):
-                column_number = column_index + 1
-                cell = cells[column_index]
+            for column_number in range(1, length + 1):
+                cell = next(cells)
                 self.budget.spend_cells(1)
                 text = None if cell.is_spanned else cell.text or None
                 if text is not None:
@@ -285,7 +296,8 @@ class _SlideReader:
     def _chart(self, frame: GraphicFrame, locator: Locator) -> None:
         """The chart's title, axis titles and series names, one per line.
 
-        A chart whose part is missing from the package is skipped, not guessed.
+        A chart whose part is missing from the package, or whose link points outside
+        the package, is skipped, not guessed; nothing outside the package is read.
         """
 
         self.chart_number += 1
@@ -293,10 +305,10 @@ class _SlideReader:
         relationship_id = None if reference is None else reference.get(f"{{{_R}}}id")
         if not relationship_id:
             return
-        try:
-            part = frame.part.related_part(str(relationship_id))
-        except KeyError:
+        relationship = frame.part.rels.get(relationship_id)
+        if relationship is None or relationship.is_external:
             return
+        part = relationship.target_part
         name = str(part.partname)
         if name not in self.charts:
             try:

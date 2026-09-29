@@ -436,3 +436,20 @@ container. None of these is new with S16 except where it says so. None is fixed 
   A workbook that uses the whole 5,000,000-position budget before being refused takes
   minutes, not the 60 seconds `MAX_TIMEOUT_SECONDS` in
   `src/archiv/ingestion/limits.py` might suggest. Nothing in `src/` uses that constant.
+
+## PowerPoint reader: gaps the S17 review found
+
+Found by the distinguished review of S17, on decks generated in the review container.
+None of these loses content that the reader before S17 read; each is a place the S17
+reader still does less than a reader could.
+
+- **Notes pages are only partly read.** Only the top-level text shapes on a notes page
+  are read. A group or a table on a notes page is dropped without a record of the loss,
+  and a hidden shape on a notes page is not marked `hidden`. Real notes pages rarely hold
+  either, but nothing detects one. Reading notes pages with the same shape walker as
+  slides would close this; that needs a queue step.
+- **The declaration check exists three times.** The Word, Excel and PowerPoint readers
+  each carry an almost identical copy of the code that refuses DTD and entity
+  declarations. They behave the same today; a fix made to one copy could miss the
+  others. Moving it into one shared module, as S17 did for chart text, would remove the
+  risk.

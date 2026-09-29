@@ -714,8 +714,8 @@
       "known_limits": [
         "hidden content is indexed and marked, not withheld: every segment from a hidden slide carries `hidden` = `slide`, and every segment from a hidden shape or from inside a hidden group carries `hidden` = `shape`",
         "hyperlink targets, picture and shape alternative text, SmartArt diagram text, embedded objects and slide comments are not surfaced",
-        "the values and category labels a chart plots are not surfaced; a chart series named only by a cell reference, with no saved copy of the name, contributes no series name",
-        "speaker notes are read from the text shapes on each slide's notes page; the notes page's slide image, slide number, date, header and footer are skipped. Speaker notes timing, animation and transition order are not surfaced",
+        "the values and category labels a chart plots are not surfaced; a chart series named only by a cell reference, with no saved copy of the name, contributes no series name; a chart whose link points outside the file is skipped, and nothing outside the file is read",
+        "speaker notes are read from the top-level text shapes on each slide's notes page; a group or table on a notes page is not read, and a hidden shape there is not marked. The notes page's slide image, slide number, date, header and footer are skipped. Speaker notes timing, animation and transition order are not surfaced",
         "a presentation added before this reader existed keeps its older derivative, without tables, charts, grouped shapes or speaker notes, until `archiv rebuild-derived` is run for it; rebuilding can make citations already saved for it stop validating",
         "retrieval indexes each shape, table cell and notes segment independently; phrases split across shapes or cells may not match as one literal phrase"
       ],
