@@ -1404,3 +1404,34 @@ def test_pptx_locators_are_all_claimed_by_the_format_matrix(tmp_path: Path) -> N
     claimed = {frozenset(shape) for shape in family.locator_shapes}
     assert len(produced) >= 7
     assert produced <= claimed
+
+
+def test_pptx_decoy_table_elsewhere_in_the_frame_does_not_shift_cells(tmp_path: Path) -> None:
+    """Row lengths come from the table that is read, not any table under the frame."""
+
+    presentation = Presentation()
+    table = _blank_slide(presentation).shapes.add_table(2, 2, *_PLACE).table
+    for row in range(2):
+        for column in range(2):
+            table.cell(row, column).text = f"R{row + 1}C{column + 1}"
+    path = _save_deck(presentation, tmp_path / "decoy.pptx")
+    decoy = (
+        '<p:extLst><p:ext uri="{00000000-0000-0000-0000-000000000000}">'
+        "<a:tbl><a:tr><a:tc/><a:tc/><a:tc/></a:tr></a:tbl></p:ext></p:extLst>"
+    )
+
+    def add_decoy(xml: str) -> str:
+        # The frame's own properties, not the slide shape tree's, which come first.
+        frame_properties = "</p:cNvGraphicFramePr><p:nvPr/>"
+        assert frame_properties in xml
+        return xml.replace(frame_properties, f"</p:cNvGraphicFramePr><p:nvPr>{decoy}</p:nvPr>", 1)
+
+    _rewrite(path, {}, {PPTX_SLIDE: add_decoy})
+
+    result = normalize(path, DIGEST)
+
+    assert [(segment.locator, segment.text) for segment in result.segments] == [
+        ({"slide": 1, "shape": 1, "row": row, "column": column}, f"R{row}C{column}")
+        for row in (1, 2)
+        for column in (1, 2)
+    ]

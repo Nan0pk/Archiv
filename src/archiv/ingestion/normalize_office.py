@@ -258,8 +258,9 @@ class _SlideReader:
 
         # python-pptx rebuilds a row's whole cell list on every indexed lookup, so
         # indexing rows and cells would take time proportional to the square of the
-        # table's size. Row lengths come from the XML and the cells from one pass.
-        table = _xml(frame.element).find(f".//{{{_A}}}tbl")
+        # table's size. Row lengths come from the XML and the cells from one pass,
+        # both from the one table python-pptx reads, at graphic/graphicData/tbl.
+        table = _xml(frame.element).find(f"{{{_A}}}graphic/{{{_A}}}graphicData/{{{_A}}}tbl")
         row_lengths = (
             []
             if table is None
@@ -274,7 +275,9 @@ class _SlideReader:
         for row_number, length in enumerate(row_lengths, 1):
             values: list[object | None] = []
             for column_number in range(1, length + 1):
-                cell = next(cells)
+                cell = next(cells, None)
+                if cell is None:
+                    raise ValueError("PPTX table rows do not match its cells")
                 self.budget.spend_cells(1)
                 text = None if cell.is_spanned else cell.text or None
                 if text is not None:
