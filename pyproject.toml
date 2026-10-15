@@ -47,7 +47,7 @@ remote-evaluation = [
 ocr-benchmark = [
   "onnxruntime==1.30.0",
   "python-bidi==0.6.11",
-  "rapidocr==3.9.2",
+  "rapidocr==3.10.0",
 ]
 
 [project.scripts]
