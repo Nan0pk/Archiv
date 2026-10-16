@@ -31,7 +31,6 @@ from dataclasses import dataclass, field
 from io import BytesIO
 from pathlib import Path
 from xml.etree import ElementTree
-from xml.parsers import expat
 from zipfile import ZipFile
 
 from openpyxl import load_workbook
@@ -39,6 +38,7 @@ from openpyxl.utils.cell import get_column_letter, range_boundaries
 from openpyxl.worksheet.formula import ArrayFormula
 
 from archiv.contracts import NormalizedDocument, NormalizedSegment, NormalizedTable
+from archiv.xml_safety import MalformedXmlError, XmlDeclarationError, refuse_xml_declarations
 
 __all__ = ["MAX_CELL_POSITIONS", "MAX_XML_NODES", "normalize_xlsx"]
 
@@ -90,14 +90,6 @@ class _Budget:
             raise ValueError("XLSX cell position limit exceeded")
 
 
-class _DeclarationRefused(Exception):
-    pass
-
-
-def _refuse_declaration(*_: object) -> None:
-    raise _DeclarationRefused
-
-
 class _NotXml(ValueError):
     pass
 
@@ -105,14 +97,11 @@ class _NotXml(ValueError):
 def _refuse_declarations(data: bytes, *, name: str) -> None:
     """Refuse any DTD or entity declaration, whatever the part's text encoding."""
 
-    scanner = expat.ParserCreate()
-    scanner.StartDoctypeDeclHandler = _refuse_declaration
-    scanner.EntityDeclHandler = _refuse_declaration
     try:
-        scanner.Parse(data, True)
-    except _DeclarationRefused:
+        refuse_xml_declarations(data)
+    except XmlDeclarationError:
         raise ValueError(f"XLSX XML declarations and entities are not allowed ({name})") from None
-    except expat.ExpatError as error:
+    except MalformedXmlError as error:
         raise _NotXml(f"XLSX package part is not well-formed XML ({name})") from error
 
 

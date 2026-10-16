@@ -244,3 +244,22 @@ uncertainties, alternatives, and material pros and cons must be separated clearl
 that the owner can make an informed decision. If the intent or tradeoff is genuinely
 ambiguous, record the unresolved decision in the repository and continue independent work
 rather than guessing.
+
+---
+
+## 12. Repair existing document readers before expanding formats
+
+**Decided 2026-10-16 by the owner.** Insert S16A (encoding-independent XML declaration
+rejection), S16B (Excel cells outside incorrect declared dimensions), and S16C (Excel
+processing limits covering library calls) before S17. PowerPoint recovery and Office
+format comparison remain the next feature work after these repairs.
+
+**Why.** Passing the existing acceptance targets does not cover defects found later.
+The UTF-16 declaration bypass was reproduced, and the S16 review documented silent
+cell loss and excessive processing time. Those affect trust in current document
+handling and take priority over widening supported content.
+
+**After S18.** Reassess readiness with a representative document-to-answer trial using
+an actual model before beginning audio, video or face capabilities. A passing synthetic
+suite alone does not establish answer usefulness or beta readiness. Define that trial
+and its available corpus/model prerequisites explicitly when it becomes the next task.
