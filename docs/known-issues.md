@@ -367,24 +367,24 @@ Confirming it takes one look, at **Settings → Code security → Code scanning*
 Until one of those is done, treat this repository as having **no static security analysis**,
 whatever the workflow list suggests.
 
-## OpenDocument and InPage XML entity check can be bypassed with UTF-16
+## OpenDocument and InPage UTF-16 XML declaration bypass repaired in S16A
 
-- `parse_odf_xml` in `src/archiv/ingestion/normalize_odf.py` refuses XML declarations
-  and entities by searching the raw bytes for `<!DOCTYPE` and `<!ENTITY`. A part encoded
-  as UTF-16 does not contain those bytes, but the standard-library parser still decodes
-  it and expands its entities. The same byte search is used in
-  `src/archiv/research/inpage_legacy.py`.
+- The earlier `parse_odf_xml` and InPage mapping reader searched raw bytes for
+  `<!DOCTYPE` and `<!ENTITY`. UTF-16 bypassed that search while the parser still
+  decoded the input and expanded its entities.
 - Found by the reviewer of pull request #177 (step S15), who confirmed on `main` that a
   UTF-16 OpenDocument part with two nested entities was accepted and expanded. The
   remaining bound is the XML library's own expansion-ratio protection (about 100 times
   the part's size) plus each reader's member-size limit.
-- The Word reader added in S15 does not have this gap: `_refuse_declarations` in
-  `src/archiv/ingestion/normalize_docx.py` has the XML parser itself stop at the first
-  declaration, whatever the encoding, and
-  `tests/test_ooxml_recovery.py::test_docx_entity_declaration_in_utf16_footnotes_refuses_the_document`
-  covers it.
-- Next action: move that check into a shared helper, use it in both readers, and add a
-  UTF-16 test for each. Not yet scheduled as a queue step.
+- S16A moves the encoding-aware check already used by Word and Excel into
+  `src/archiv/xml_safety.py`. All four readers now stop at the start of a DTD or entity
+  declaration. Comments and CDATA containing declaration-like text remain valid.
+- `tests/test_xml_declarations.py` covers UTF-8, UTF-16 with a BOM, and both UTF-16
+  byte orders without a BOM. It exercises content and manifest parts through ODT
+  ingestion, checks that rejected inputs create no stored original or derivative,
+  and verifies ordinary Unicode, predefined entities, and mapping behavior.
+- Existing archives are not automatically revalidated. This repairs the acceptance
+  check for new parsing; it does not impose a new general parser time limit.
 
 ## Current-upstream CoWork check is red after CoWork moved to MCP 2025-06-18
 
@@ -423,8 +423,8 @@ container. None of these is new with S16 except where it says so. None is fixed 
   read-only mode trusts the sheet's declared size. A sheet that declares `A1:A1` but
   holds a cell at `C9` loses `C9`, and nothing records the loss. The reader before S16
   lost it too. The S16 XML pass already walks every row, so it could detect this and
-  either read past the declared size or say that cells were dropped. That needs a
-  queue step.
+  either read past the declared size or say that cells were dropped. This is queued
+  as [S16B](plan/steps/S16B.md).
 - **Repeated sheet entries are slow.** A 210 KB workbook that lists one sheet 200 times,
   where that sheet declares 40,000 merged ranges, took 383 seconds. Most of the time is
   openpyxl parsing the merged ranges again for every entry, and no Archiv budget counts
@@ -436,3 +436,6 @@ container. None of these is new with S16 except where it says so. None is fixed 
   A workbook that uses the whole 5,000,000-position budget before being refused takes
   minutes, not the 60 seconds `MAX_TIMEOUT_SECONDS` in
   `src/archiv/ingestion/limits.py` might suggest. Nothing in `src/` uses that constant.
+
+The repeated-reference and processing-budget gaps are queued as
+[S16C](plan/steps/S16C.md), ahead of PowerPoint work.

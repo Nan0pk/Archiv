@@ -486,13 +486,66 @@
       }
     },
     {
+      "id": "S16A",
+      "phase": "C",
+      "title": "Reject XML declarations regardless of encoding",
+      "doc": "docs/plan/steps/S16A.md",
+      "detail": "full",
+      "depends_on": [
+        "S16"
+      ],
+      "acceptance": {
+        "kind": "command",
+        "targets": [
+          "python -m pytest -q tests/test_xml_declarations.py tests/test_ooxml_recovery.py::test_docx_entity_declaration_in_utf16_footnotes_refuses_the_document tests/test_ooxml_recovery.py::test_xlsx_entity_in_a_part_only_openpyxl_reads_refuses_the_workbook tests/test_ooxml_recovery.py::test_xlsx_binary_member_is_not_mistaken_for_a_declaration"
+        ]
+      }
+    },
+    {
+      "id": "S16B",
+      "phase": "C",
+      "title": "Recover Excel cells beyond incorrect worksheet dimensions",
+      "doc": "docs/plan/steps/S16B.md",
+      "detail": "stub",
+      "depends_on": [
+        "S16A"
+      ],
+      "acceptance": {
+        "kind": "pytest",
+        "targets": [
+          "tests/test_ooxml_recovery.py::test_xlsx_cells_beyond_declared_dimensions_are_recovered",
+          "tests/test_ooxml_recovery.py::test_xlsx_recovered_cells_keep_formula_values_and_locators",
+          "tests/test_ooxml_recovery.py::test_xlsx_declared_dimension_cannot_force_unbounded_iteration"
+        ]
+      }
+    },
+    {
+      "id": "S16C",
+      "phase": "C",
+      "title": "Enforce Excel processing limits across library calls",
+      "doc": "docs/plan/steps/S16C.md",
+      "detail": "stub",
+      "depends_on": [
+        "S16B"
+      ],
+      "acceptance": {
+        "kind": "pytest",
+        "targets": [
+          "tests/test_xlsx_processing_limits.py::test_repeated_sheet_references_cannot_multiply_unbounded_work",
+          "tests/test_xlsx_processing_limits.py::test_processing_budget_covers_library_calls",
+          "tests/test_xlsx_processing_limits.py::test_budget_expiry_preserves_source_and_records_failure",
+          "tests/test_xlsx_processing_limits.py::test_ordinary_workbook_still_ingests_within_budget"
+        ]
+      }
+    },
+    {
       "id": "S17",
       "phase": "C",
       "title": "PPTX: speaker notes, tables, charts, grouped shapes, placeholder roles, hidden slides",
       "doc": "docs/plan/steps/S17.md",
       "detail": "stub",
       "depends_on": [
-        "S16"
+        "S16C"
       ],
       "acceptance": {
         "kind": "pytest",
