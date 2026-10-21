@@ -38,6 +38,7 @@ from openpyxl.utils.cell import coordinate_to_tuple, get_column_letter, range_bo
 from openpyxl.worksheet.formula import ArrayFormula
 
 from archiv.contracts import NormalizedDocument, NormalizedSegment, NormalizedTable
+from archiv.ingestion.xlsx_process import read_in_worker
 from archiv.xml_safety import MalformedXmlError, XmlDeclarationError, refuse_xml_declarations
 
 __all__ = ["MAX_CELL_POSITIONS", "MAX_XML_NODES", "normalize_xlsx"]
@@ -594,7 +595,7 @@ def _link_and_chart_segments(sheet: _Sheet, budget: _Budget) -> list[NormalizedS
     return segments
 
 
-def normalize_xlsx(
+def read_xlsx(
     path: Path,
     digest: str,
     *,
@@ -608,7 +609,12 @@ def normalize_xlsx(
         package = _Package(archive)
         package.refuse_declarations_everywhere()
         sheets = _workbook_sheets(package)
+        seen_worksheets: set[str] = set()
         for sheet in sheets:
+            if sheet.part is not None and not sheet.chartsheet:
+                if sheet.part in seen_worksheets:
+                    raise ValueError("XLSX repeated worksheet part references are not supported")
+                seen_worksheets.add(sheet.part)
             _read_sheet_structure(package, sheet)
 
     # Do this before openpyxl can allocate a padded row or walk a long empty gap.
@@ -653,4 +659,21 @@ def normalize_xlsx(
             "hidden_sheets": [sheet.name for sheet in sheets if sheet.hidden],
             "charts": sum(len(sheet.charts) for sheet in sheets),
         },
+    )
+
+
+def normalize_xlsx(
+    path: Path,
+    digest: str,
+    *,
+    source_name: str,
+    media_type: str,
+) -> NormalizedDocument:
+    return read_in_worker(
+        path,
+        digest,
+        source_name=source_name,
+        media_type=media_type,
+        cell_limit=MAX_CELL_POSITIONS,
+        node_limit=MAX_XML_NODES,
     )

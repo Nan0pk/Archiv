@@ -891,8 +891,15 @@ def test_xlsx_sparse_actual_coordinates_are_bounded_before_iteration(
             {},
             {XLSX_SHEET: replace_cells},
         )
-        with pytest.raises(MalformedInputError, match="cell position limit"):
-            normalize(path, DIGEST)
+        # The iterator spy belongs in this process, so exercise the internal reader
+        # directly. Public-process refusal is covered by the storage test below.
+        with pytest.raises(ValueError, match="cell position limit"):
+            normalize_xlsx_module.read_xlsx(
+                path,
+                DIGEST,
+                source_name=path.name,
+                media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
 
 
 def test_xlsx_oversized_actual_bounds_refuse_before_storage(
@@ -1120,9 +1127,17 @@ def test_xlsx_sheet_listed_many_times_parses_its_drawing_once(
         return real_iterparse(self, part, data)
 
     monkeypatch.setattr(normalize_xlsx_module._Package, "iterparse", counting_iterparse)  # pyright: ignore[reportPrivateUsage]
-    result = normalize(path, DIGEST)
+    # This is a unit check of the package cache. Public normalization now refuses
+    # repeated worksheet parts before handing the workbook to openpyxl.
+    charts: list[str] = []
+    with ZipFile(path) as archive:
+        package = normalize_xlsx_module._Package(archive)  # pyright: ignore[reportPrivateUsage]
+        package.refuse_declarations_everywhere()
+        sheets = normalize_xlsx_module._workbook_sheets(package)  # pyright: ignore[reportPrivateUsage]
+        for listed_sheet in sheets:
+            normalize_xlsx_module._read_sheet_structure(package, listed_sheet)  # pyright: ignore[reportPrivateUsage]
+            charts.extend(listed_sheet.charts)
 
     assert len(parsed) == len(set(parsed)), sorted(p for p in set(parsed) if parsed.count(p) > 1)
-    charts = [segment for segment in result.segments if "chart" in segment.locator]
     assert len(charts) == 150
-    assert {segment.text for segment in charts} == {"Shared drawing"}
+    assert set(charts) == {"Shared drawing"}
