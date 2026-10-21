@@ -173,7 +173,7 @@ def test_docx_table_cells_are_extracted(tmp_path: Path) -> None:
     document.add_paragraph("After the table")
     path = _save(document, tmp_path / "register.docx")
 
-    result = normalize(path, DIGEST)
+    result = normalize(path, sha256_file(path))
     located = _by_locator(result)
 
     assert located[_key(paragraph=1)] == "Staff register"
@@ -207,7 +207,7 @@ def test_docx_nested_table_and_vertical_merge_keep_every_word(tmp_path: Path) ->
     inner.cell(0, 0).text = "Inside a nested table"
     path = _save(document, tmp_path / "nested.docx")
 
-    located = _by_locator(normalize(path, DIGEST))
+    located = _by_locator(normalize(path, sha256_file(path)))
 
     assert located[_key(table=1, row=1, column=1)] == "Spans two rows"
     assert _key(table=1, row=2, column=1) not in located, "vertical merge reported twice"
@@ -234,7 +234,7 @@ def test_docx_headers_footers_and_footnotes_are_extracted(tmp_path: Path) -> Non
         endnotes={1: "Closing endnote"},
     )
 
-    result = normalize(path, DIGEST)
+    result = normalize(path, sha256_file(path))
     located = _by_locator(result)
 
     assert located[_key(section=1, header="default", paragraph=1)] == "Confidential header"
@@ -259,7 +259,7 @@ def test_docx_hyperlink_targets_are_preserved(tmp_path: Path) -> None:
     _add_hyperlink(cell_paragraph, "https://example.org/cell", "cell link")
     path = _save(document, tmp_path / "links.docx")
 
-    result = normalize(path, DIGEST)
+    result = normalize(path, sha256_file(path))
     located = _by_locator(result)
 
     # The visible link text stays in the paragraph, as before.
@@ -288,7 +288,7 @@ def test_docx_hyperlink_with_missing_relationship_is_skipped_not_guessed(
         },
     )
 
-    located = _by_locator(normalize(path, DIGEST))
+    located = _by_locator(normalize(path, sha256_file(path)))
 
     assert located[_key(paragraph=1)] == "See here"
     assert not any("hyperlink" in key for key in located)
@@ -300,7 +300,7 @@ def test_docx_comments_are_extracted(tmp_path: Path) -> None:
     document.add_comment(paragraph.runs, text="Check against the 2019 audit", author="Reviewer")
     path = _save(document, tmp_path / "comments.docx")
 
-    located = _by_locator(normalize(path, DIGEST))
+    located = _by_locator(normalize(path, sha256_file(path)))
 
     assert located[_key(paragraph=1)] == "Disputed figure: 4,200"
     comment_keys = [key for key in located if '"comment"' in key]
@@ -315,7 +315,7 @@ def test_docx_heading_levels_are_recorded(tmp_path: Path) -> None:
     document.add_heading("Method", level=2)
     path = _save(document, tmp_path / "headings.docx")
 
-    located = _by_locator(normalize(path, DIGEST))
+    located = _by_locator(normalize(path, sha256_file(path)))
 
     assert located[_key(paragraph=1, heading_level=1)] == "Findings"
     assert located[_key(paragraph=2)] == "Plain body"
@@ -335,7 +335,7 @@ def test_docx_body_text_and_numbering_are_unchanged_from_python_docx(tmp_path: P
     document.add_paragraph("Last")
     path = _save(document, tmp_path / "compat.docx")
 
-    result = normalize(path, DIGEST)
+    result = normalize(path, sha256_file(path))
     reopened = Document(str(path))
     expected = {
         _key(paragraph=index): paragraph.text
@@ -357,7 +357,7 @@ def test_docx_table_cell_limit_refuses_the_document(
     monkeypatch.setattr(normalize_docx_module, "MAX_TABLE_CELLS", 3)
 
     with pytest.raises(MalformedInputError, match="table cell limit"):
-        normalize(path, DIGEST)
+        normalize(path, sha256_file(path))
 
 
 def test_docx_wide_column_span_counts_against_the_table_budget(
@@ -383,7 +383,7 @@ def test_docx_wide_column_span_counts_against_the_table_budget(
     monkeypatch.setattr(normalize_docx_module, "MAX_TABLE_CELLS", 2_000)
 
     with pytest.raises(MalformedInputError, match="table cell limit"):
-        normalize(path, DIGEST)
+        normalize(path, sha256_file(path))
 
 
 def test_docx_span_beyond_the_column_ceiling_refuses_the_document(tmp_path: Path) -> None:
@@ -401,7 +401,7 @@ def test_docx_span_beyond_the_column_ceiling_refuses_the_document(tmp_path: Path
     )
 
     with pytest.raises(MalformedInputError, match="gridSpan"):
-        normalize(path, DIGEST)
+        normalize(path, sha256_file(path))
 
 
 def test_docx_entity_declaration_in_footnotes_refuses_the_document(tmp_path: Path) -> None:
@@ -416,7 +416,7 @@ def test_docx_entity_declaration_in_footnotes_refuses_the_document(tmp_path: Pat
     _rewrite(path, {"word/footnotes.xml": footnotes.encode("utf-8")}, {})
 
     with pytest.raises(MalformedInputError, match="declarations and entities"):
-        normalize(path, DIGEST)
+        normalize(path, sha256_file(path))
 
 
 def test_docx_entity_declaration_in_utf16_footnotes_refuses_the_document(
@@ -438,7 +438,7 @@ def test_docx_entity_declaration_in_utf16_footnotes_refuses_the_document(
     _rewrite(path, {"word/footnotes.xml": encoded}, {})
 
     with pytest.raises(MalformedInputError, match="declarations and entities"):
-        normalize(path, DIGEST)
+        normalize(path, sha256_file(path))
 
 
 def test_docx_malformed_note_identifier_is_kept_not_refused(tmp_path: Path) -> None:
@@ -454,7 +454,7 @@ def test_docx_malformed_note_identifier_is_kept_not_refused(tmp_path: Path) -> N
         {},
     )
 
-    located = _by_locator(normalize(path, DIGEST))
+    located = _by_locator(normalize(path, sha256_file(path)))
 
     assert located[_key(paragraph=1)] == "Body"
     assert located[_key(footnote="--5", paragraph=1)] == "Odd note"
@@ -467,7 +467,7 @@ def test_docx_outline_level_nine_marks_body_text_under_a_heading_style(tmp_path:
     properties.append(parse_xml(f'<w:outlineLvl xmlns:w="{W}" w:val="9"/>'))  # pyright: ignore[reportUnknownMemberType]
     path = _save(document, tmp_path / "outline.docx")
 
-    located = _by_locator(normalize(path, DIGEST))
+    located = _by_locator(normalize(path, sha256_file(path)))
 
     assert located[_key(paragraph=1)] == "Styled as a heading"
 
@@ -487,7 +487,7 @@ def test_docx_invalid_grid_span_refuses_the_document(tmp_path: Path) -> None:
     )
 
     with pytest.raises(MalformedInputError, match="gridSpan"):
-        normalize(path, DIGEST)
+        normalize(path, sha256_file(path))
 
 
 def test_docx_table_cell_is_found_by_search_with_its_table_locator(tmp_path: Path) -> None:
@@ -562,7 +562,7 @@ def test_formula_cell_indexes_the_computed_value(tmp_path: Path) -> None:
     path = _save_workbook(_budget_workbook(), tmp_path / "budget.xlsx")
     _store_result(path, "SUM(B2:B3)", "1250000")
 
-    located = _by_locator(normalize(path, DIGEST))
+    located = _by_locator(normalize(path, sha256_file(path)))
 
     assert located[_key(sheet="Budget", cell="B4", formula="=SUM(B2:B3)")] == "1250000"
     assert "=SUM(B2:B3)" not in located.values()
@@ -572,7 +572,7 @@ def test_formula_text_is_preserved_in_the_locator(tmp_path: Path) -> None:
     path = _save_workbook(_budget_workbook(), tmp_path / "budget.xlsx")
     _store_result(path, "SUM(B2:B3)", "1250000")
 
-    result = normalize(path, DIGEST)
+    result = normalize(path, sha256_file(path))
 
     total = next(segment for segment in result.segments if segment.locator.get("cell") == "B4")
     assert total.locator["formula"] == "=SUM(B2:B3)"
@@ -596,7 +596,7 @@ def test_computed_value_is_found_by_search_with_its_formula(tmp_path: Path) -> N
 def test_formula_without_a_stored_result_indexes_its_text_and_says_so(tmp_path: Path) -> None:
     path = _save_workbook(_budget_workbook(), tmp_path / "never-calculated.xlsx")
 
-    located = _by_locator(normalize(path, DIGEST))
+    located = _by_locator(normalize(path, sha256_file(path)))
 
     key = _key(sheet="Budget", cell="B4", formula="=SUM(B2:B3)", computed_value="not saved in file")
     assert located[key] == "=SUM(B2:B3)"
@@ -614,7 +614,7 @@ def test_hidden_sheet_content_is_retrievable_and_marked_hidden(tmp_path: Path) -
     hidden["C3"] = "ARCHIV-HIDDEN-SHEET-MARKER"
     path = _save_workbook(workbook, tmp_path / "hidden.xlsx")
 
-    result = normalize(path, DIGEST)
+    result = normalize(path, sha256_file(path))
     hits = _search(path, tmp_path / "home", "ARCHIV-HIDDEN-SHEET-MARKER")
 
     assert _by_locator(result)[_key(sheet="Summary", cell="A1")] == "Nothing to see"
@@ -637,7 +637,7 @@ def test_hidden_rows_and_columns_are_marked(tmp_path: Path) -> None:
     sheet.column_dimensions["B"].hidden = True
     path = _save_workbook(workbook, tmp_path / "grid.xlsx")
 
-    located = _by_locator(normalize(path, DIGEST))
+    located = _by_locator(normalize(path, sha256_file(path)))
 
     assert located[_key(sheet="Grid", cell="A1")] == "shown"
     assert located[_key(sheet="Grid", cell="A2", hidden="row")] == "row hidden"
@@ -656,7 +656,7 @@ def test_merged_header_reaches_its_whole_span(tmp_path: Path) -> None:
         sheet[f"{column}2"] = amount
     path = _save_workbook(workbook, tmp_path / "merged.xlsx")
 
-    result = normalize(path, DIGEST)
+    result = normalize(path, sha256_file(path))
 
     located = _by_locator(result)
     assert located[_key(sheet="Quarters", cell="A1", merged="A1:C1")] == "Revenue"
@@ -675,7 +675,7 @@ def test_merge_across_a_whole_row_is_clipped_to_the_cells_in_use(tmp_path: Path)
     sheet.merge_cells("A1:XFD1")
     path = _save_workbook(workbook, tmp_path / "banner.xlsx")
 
-    result = normalize(path, DIGEST)
+    result = normalize(path, sha256_file(path))
 
     assert result.tables[0].rows == [["Banner", "Banner"], ["x", "y"]]
 
@@ -691,7 +691,7 @@ def test_xlsx_hyperlink_targets_are_preserved(tmp_path: Path) -> None:
     sheet["A2"].hyperlink = "#Links!B9"
     path = _save_workbook(workbook, tmp_path / "links.xlsx")
 
-    located = _by_locator(normalize(path, DIGEST))
+    located = _by_locator(normalize(path, sha256_file(path)))
 
     assert located[_key(sheet="Links", cell="A1")] == "Supplier site"
     assert located[_key(sheet="Links", cell="A1", hyperlink=1)] == "https://example.org/supplier"
@@ -715,7 +715,7 @@ def test_xlsx_hyperlink_with_a_missing_relationship_is_skipped(tmp_path: Path) -
         },
     )
 
-    result = normalize(path, DIGEST)
+    result = normalize(path, sha256_file(path))
 
     assert [segment.text for segment in result.segments] == ["Broken link"]
 
@@ -746,7 +746,7 @@ def test_xlsx_chart_titles_and_series_names_are_extracted(tmp_path: Path) -> Non
         },
     )
 
-    result = normalize(path, DIGEST)
+    result = normalize(path, sha256_file(path))
 
     located = _by_locator(result)
     assert located[_key(sheet="Budget", chart=1)] == "Spending by category\nEuros\nAnnual costs"
@@ -767,7 +767,7 @@ def test_xlsx_entity_declaration_refuses_the_workbook(tmp_path: Path) -> None:
     )
 
     with pytest.raises(MalformedInputError, match="declarations and entities"):
-        normalize(path, DIGEST)
+        normalize(path, sha256_file(path))
 
 
 def test_xlsx_declared_dimension_cannot_force_unbounded_iteration(
@@ -790,7 +790,7 @@ def test_xlsx_declared_dimension_cannot_force_unbounded_iteration(
     )
 
     with pytest.raises(MalformedInputError, match="cell position limit"):
-        normalize(path, DIGEST)
+        normalize(path, sha256_file(path))
 
 
 def _declare_dimensions(path: Path, reference: str | None) -> None:
@@ -812,7 +812,7 @@ def test_xlsx_cells_beyond_declared_dimensions_are_recovered(tmp_path: Path) -> 
         path = _save_workbook(workbook, tmp_path / f"dimensions-{number}.xlsx")
         _declare_dimensions(path, reference)
 
-        result = normalize(path, DIGEST)
+        result = normalize(path, sha256_file(path))
 
         assert _by_locator(result) == {
             _key(sheet="Sheet", cell="A1"): "first",
@@ -838,7 +838,7 @@ def test_xlsx_recovered_cells_keep_formula_values_and_locators(tmp_path: Path) -
     _store_result(path, "B4*2", "2500000")
     _declare_dimensions(path, "A1:A1")
 
-    result = normalize(path, DIGEST)
+    result = normalize(path, sha256_file(path))
     located = _by_locator(result)
 
     assert (
@@ -905,8 +905,15 @@ def test_xlsx_sparse_actual_coordinates_are_bounded_before_iteration(
             {},
             {XLSX_SHEET: replace_cells},
         )
-        with pytest.raises(MalformedInputError, match="cell position limit"):
-            normalize(path, DIGEST)
+        # The iterator spy belongs in this process, so exercise the internal reader
+        # directly. Public-process refusal is covered by the storage test below.
+        with pytest.raises(ValueError, match="cell position limit"):
+            normalize_xlsx_module.read_xlsx(
+                path,
+                DIGEST,
+                source_name=path.name,
+                media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
 
 
 def test_xlsx_oversized_actual_bounds_refuse_before_storage(
@@ -954,7 +961,7 @@ def test_xlsx_missing_coordinates_use_sequential_positions(tmp_path: Path) -> No
         },
     )
 
-    located = _by_locator(normalize(path, DIGEST))
+    located = _by_locator(normalize(path, sha256_file(path)))
 
     assert located[_key(sheet="Sheet", cell="A1")] == "first"
     assert located[_key(sheet="Sheet", cell="B2")] == "second"
@@ -979,7 +986,7 @@ def test_xlsx_inconsistent_coordinates_refuse_instead_of_dropping_cells(tmp_path
             {XLSX_SHEET: replace_cells},
         )
         with pytest.raises(MalformedInputError, match="coordinate|increasing"):
-            normalize(path, DIGEST)
+            normalize(path, sha256_file(path))
 
 
 def test_xlsx_empty_sparse_rows_are_bounded(tmp_path: Path) -> None:
@@ -996,7 +1003,7 @@ def test_xlsx_empty_sparse_rows_are_bounded(tmp_path: Path) -> None:
     )
 
     with pytest.raises(MalformedInputError, match="cell position limit"):
-        normalize(path, DIGEST)
+        normalize(path, sha256_file(path))
 
 
 def test_xlsx_chart_sheet_and_very_hidden_sheet_are_read(tmp_path: Path) -> None:
@@ -1015,7 +1022,7 @@ def test_xlsx_chart_sheet_and_very_hidden_sheet_are_read(tmp_path: Path) -> None
     secret["A1"] = "deep"
     path = _save_workbook(workbook, tmp_path / "chartsheet.xlsx")
 
-    located = _by_locator(normalize(path, DIGEST))
+    located = _by_locator(normalize(path, sha256_file(path)))
 
     assert located[_key(sheet="Plot", chart=1)] == "Plotted on its own sheet"
     assert located[_key(sheet="Secret", cell="A1", hidden="sheet")] == "deep"
@@ -1050,7 +1057,7 @@ def test_xlsx_repeated_drawing_and_chart_references_are_read_once(tmp_path: Path
         {XLSX_SHEET: repeat_drawing, "xl/drawings/drawing1.xml": repeat_anchor},
     )
 
-    result = normalize(path, DIGEST)
+    result = normalize(path, sha256_file(path))
 
     charts = [segment for segment in result.segments if "chart" in segment.locator]
     assert [segment.text for segment in charts] == ["Anchored many times"]
@@ -1073,7 +1080,7 @@ def test_xlsx_entity_in_a_part_only_openpyxl_reads_refuses_the_workbook(tmp_path
     )
 
     with pytest.raises(MalformedInputError, match=r"declarations and entities.*styles\.xml"):
-        normalize(path, DIGEST)
+        normalize(path, sha256_file(path))
 
 
 def test_xlsx_binary_member_is_not_mistaken_for_a_declaration(tmp_path: Path) -> None:
@@ -1081,7 +1088,7 @@ def test_xlsx_binary_member_is_not_mistaken_for_a_declaration(tmp_path: Path) ->
     image = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16 + b"<!DOCTYPE x [<!ENTITY y 'z'>]>"
     _rewrite(path, {"xl/media/image1.png": image}, {})
 
-    located = _by_locator(normalize(path, DIGEST))
+    located = _by_locator(normalize(path, sha256_file(path)))
 
     assert located[_key(sheet="Budget", cell="A4")] == "Total"
 
@@ -1134,12 +1141,20 @@ def test_xlsx_sheet_listed_many_times_parses_its_drawing_once(
         return real_iterparse(self, part, data)
 
     monkeypatch.setattr(normalize_xlsx_module._Package, "iterparse", counting_iterparse)  # pyright: ignore[reportPrivateUsage]
-    result = normalize(path, DIGEST)
+    # This is a unit check of the package cache. Public normalization now refuses
+    # repeated worksheet parts before handing the workbook to openpyxl.
+    charts: list[str] = []
+    with ZipFile(path) as archive:
+        package = normalize_xlsx_module._Package(archive)  # pyright: ignore[reportPrivateUsage]
+        package.refuse_declarations_everywhere()
+        sheets = normalize_xlsx_module._workbook_sheets(package)  # pyright: ignore[reportPrivateUsage]
+        for listed_sheet in sheets:
+            normalize_xlsx_module._read_sheet_structure(package, listed_sheet)  # pyright: ignore[reportPrivateUsage]
+            charts.extend(listed_sheet.charts)
 
     assert len(parsed) == len(set(parsed)), sorted(p for p in set(parsed) if parsed.count(p) > 1)
-    charts = [segment for segment in result.segments if "chart" in segment.locator]
     assert len(charts) == 150
-    assert {segment.text for segment in charts} == {"Shared drawing"}
+    assert set(charts) == {"Shared drawing"}
 
 
 # --- PowerPoint presentations --------------------------------------------------------
@@ -1193,7 +1208,7 @@ def _review_deck() -> PptxPresentation:
 def test_slide_table_cells_are_extracted(tmp_path: Path) -> None:
     path = _save_deck(_review_deck(), tmp_path / "review.pptx")
 
-    result = normalize(path, DIGEST)
+    result = normalize(path, sha256_file(path))
 
     located = _by_locator(result)
     assert located[_key(slide=1, shape=1, placeholder="title")] == "Quarterly review"
@@ -1220,7 +1235,7 @@ def test_merged_slide_table_cell_yields_its_text_once(tmp_path: Path) -> None:
     table.cell(1, 2).text = "Last cell"
     path = _save_deck(presentation, tmp_path / "merged.pptx")
 
-    result = normalize(path, DIGEST)
+    result = normalize(path, sha256_file(path))
 
     assert [(segment.locator, segment.text) for segment in result.segments] == [
         ({"slide": 1, "shape": 1, "row": 1, "column": 1}, "Merged heading"),
@@ -1247,7 +1262,7 @@ def test_speaker_notes_are_extracted(tmp_path: Path) -> None:
     _textbox(second, "No notes here")
     path = _save_deck(presentation, tmp_path / "notes.pptx")
 
-    result = normalize(path, DIGEST)
+    result = normalize(path, sha256_file(path))
 
     notes_segments = [
         (segment.locator, segment.text)
@@ -1268,7 +1283,7 @@ def test_grouped_shapes_are_recursed(tmp_path: Path) -> None:
     inner.shapes.add_textbox(*_PLACE).text_frame.text = "Nested deeper"
     path = _save_deck(presentation, tmp_path / "groups.pptx")
 
-    result = normalize(path, DIGEST)
+    result = normalize(path, sha256_file(path))
 
     assert [(segment.locator, segment.text) for segment in result.segments] == [
         ({"slide": 1, "shape": 1}, "Outside the group"),
@@ -1289,7 +1304,7 @@ def test_groups_nested_past_the_ceiling_refuse_the_presentation(
     monkeypatch.setattr(normalize_pptx_module, "MAX_GROUP_DEPTH", 3)
 
     with pytest.raises(MalformedInputError, match="group nesting limit"):
-        normalize(path, DIGEST)
+        normalize(path, sha256_file(path))
 
 
 def test_hidden_slides_are_flagged(tmp_path: Path) -> None:
@@ -1303,7 +1318,7 @@ def test_hidden_slides_are_flagged(tmp_path: Path) -> None:
     hidden.element.set("show", "0")  # pyright: ignore[reportUnknownMemberType]
     path = _save_deck(presentation, tmp_path / "hidden.pptx")
 
-    result = normalize(path, DIGEST)
+    result = normalize(path, sha256_file(path))
 
     assert [(segment.locator, segment.text) for segment in result.segments] == [
         ({"slide": 1, "shape": 1}, "Shown slide"),
@@ -1323,7 +1338,7 @@ def test_hidden_shape_and_hidden_group_contents_are_marked(tmp_path: Path) -> No
     _textbox(slide, "Visible box")
     path = _save_deck(presentation, tmp_path / "hidden-shapes.pptx")
 
-    result = normalize(path, DIGEST)
+    result = normalize(path, sha256_file(path))
 
     assert [(segment.locator, segment.text) for segment in result.segments] == [
         ({"slide": 1, "shape": 1, "hidden": "shape"}, "Hidden box"),
@@ -1347,7 +1362,7 @@ def test_slide_placeholder_roles_are_recorded(tmp_path: Path) -> None:
     _textbox(body, "Free text")
     path = _save_deck(presentation, tmp_path / "roles.pptx")
 
-    result = normalize(path, DIGEST)
+    result = normalize(path, sha256_file(path))
 
     assert [(segment.locator, segment.text) for segment in result.segments] == [
         ({"slide": 1, "shape": 1, "placeholder": "title"}, "Annual report"),
@@ -1379,7 +1394,7 @@ def _chart_deck() -> PptxPresentation:
 def test_pptx_chart_titles_and_series_names_are_extracted(tmp_path: Path) -> None:
     path = _save_deck(_chart_deck(), tmp_path / "chart.pptx")
 
-    result = normalize(path, DIGEST)
+    result = normalize(path, sha256_file(path))
 
     assert [(segment.locator, segment.text) for segment in result.segments] == [
         ({"slide": 1, "shape": 1, "chart": 1}, "Sales by region\nUnits\nUnits sold"),
@@ -1400,7 +1415,7 @@ def test_pptx_chart_with_a_missing_part_is_skipped_not_guessed(tmp_path: Path) -
         },
     )
 
-    result = normalize(path, DIGEST)
+    result = normalize(path, sha256_file(path))
 
     assert [segment.text for segment in result.segments] == ["Still here"]
 
@@ -1416,7 +1431,7 @@ def test_pptx_chart_referenced_many_times_spends_the_node_budget(
             1 for _ in ElementTree.fromstring(archive.read("ppt/charts/chart1.xml")).iter()
         )
     monkeypatch.setattr(normalize_pptx_module, "MAX_XML_NODES", chart_nodes * 3)
-    assert len(normalize(path, DIGEST).segments) == 1
+    assert len(normalize(path, sha256_file(path)).segments) == 1
 
     def repeat_frame(xml: str) -> str:
         frame = re.search(r"<p:graphicFrame>.*?</p:graphicFrame>", xml, re.DOTALL)
@@ -1426,7 +1441,7 @@ def test_pptx_chart_referenced_many_times_spends_the_node_budget(
     _rewrite(path, {}, {PPTX_SLIDE: repeat_frame})
 
     with pytest.raises(MalformedInputError, match="node limit"):
-        normalize(path, DIGEST)
+        normalize(path, sha256_file(path))
 
 
 def test_pptx_table_cell_limit_refuses_the_presentation(
@@ -1438,7 +1453,7 @@ def test_pptx_table_cell_limit_refuses_the_presentation(
     monkeypatch.setattr(normalize_pptx_module, "MAX_TABLE_CELLS", 3)
 
     with pytest.raises(MalformedInputError, match="table cell limit"):
-        normalize(path, DIGEST)
+        normalize(path, sha256_file(path))
 
 
 def test_pptx_short_rows_padded_to_a_long_row_spend_the_cell_budget(
@@ -1461,7 +1476,7 @@ def test_pptx_short_rows_padded_to_a_long_row_spend_the_cell_budget(
     monkeypatch.setattr(normalize_pptx_module, "MAX_TABLE_CELLS", 100)
 
     with pytest.raises(MalformedInputError, match="table cell limit"):
-        normalize(path, DIGEST)
+        normalize(path, sha256_file(path))
 
 
 def test_pptx_entity_declaration_in_notes_refuses_the_presentation(tmp_path: Path) -> None:
@@ -1479,7 +1494,7 @@ def test_pptx_entity_declaration_in_notes_refuses_the_presentation(tmp_path: Pat
     _rewrite(path, {part: xml.encode("utf-8")}, {})
 
     with pytest.raises(MalformedInputError, match="declarations and entities"):
-        normalize(path, DIGEST)
+        normalize(path, sha256_file(path))
 
 
 def test_pptx_shape_numbering_and_text_are_unchanged(tmp_path: Path) -> None:
@@ -1502,7 +1517,7 @@ def test_pptx_shape_numbering_and_text_are_unchanged(tmp_path: Path) -> None:
             if text:
                 old.append((slide_number, shape_number, text))
 
-    result = normalize(path, DIGEST)
+    result = normalize(path, sha256_file(path))
 
     new = {
         (segment.locator.get("slide"), segment.locator.get("shape"), segment.text)
@@ -1541,7 +1556,7 @@ def test_pptx_chart_linked_outside_the_package_is_skipped(tmp_path: Path) -> Non
 
     _rewrite(path, {}, {"ppt/slides/_rels/slide1.xml.rels": point_outside})
 
-    result = normalize(path, DIGEST)
+    result = normalize(path, sha256_file(path))
 
     assert [segment.text for segment in result.segments] == ["Still here"]
 
@@ -1574,7 +1589,7 @@ def test_pptx_table_is_read_in_one_pass(tmp_path: Path, monkeypatch: pytest.Monk
     monkeypatch.setattr(CT_Table, "tr_lst", property(count_rows))
     monkeypatch.setattr(CT_TableRow, "tc_lst", property(count_cells))
 
-    result = normalize(path, DIGEST)
+    result = normalize(path, sha256_file(path))
 
     assert len(result.segments) == 120
     assert lookups["rows"] <= 2
@@ -1608,7 +1623,7 @@ def test_pptx_locators_are_all_claimed_by_the_format_matrix(tmp_path: Path) -> N
     produced = {
         frozenset(segment.locator)
         for deck in (path, chart_path)
-        for segment in normalize(deck, DIGEST).segments
+        for segment in normalize(deck, sha256_file(deck)).segments
     }
 
     family = load_format_matrix(MATRIX).family_for_suffix(".pptx")
@@ -1639,7 +1654,7 @@ def test_pptx_decoy_table_elsewhere_in_the_frame_does_not_shift_cells(tmp_path: 
 
     _rewrite(path, {}, {PPTX_SLIDE: add_decoy})
 
-    result = normalize(path, DIGEST)
+    result = normalize(path, sha256_file(path))
 
     assert [(segment.locator, segment.text) for segment in result.segments] == [
         ({"slide": 1, "shape": 1, "row": row, "column": column}, f"R{row}C{column}")

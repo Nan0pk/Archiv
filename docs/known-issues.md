@@ -429,22 +429,34 @@ container. None of these is new with S16 except where it says so. None is fixed 
   check recovery, formulas, hidden markers, source hashes, search citations and refusal
   before storage when padding exceeds the position budget. Existing derivatives are
   not automatically rebuilt; run `archiv rebuild-derived` to recover their missing cells.
-- **Repeated sheet entries are slow.** A 210 KB workbook that lists one sheet 200 times,
-  where that sheet declares 40,000 merged ranges, took 383 seconds. Most of the time is
-  openpyxl parsing the merged ranges again for every entry, and no Archiv budget counts
-  work done inside openpyxl. The reader before S16 had the same weakness: on a 50-entry
-  version it took 22.8 seconds, against about 70 seconds for the S16 reader, which
-  reads each workbook twice.
-- **"Bounded" is not "fast".** The S16 reader was measured at about 2.5 times slower per
-  cell than the reader it replaced: 10.8 seconds against 4.3 seconds for 200,000 cells.
-  A workbook that uses the whole 5,000,000-position budget before being refused takes
-  minutes, not the 60 seconds `MAX_TIMEOUT_SECONDS` in
-  `src/archiv/ingestion/limits.py` might suggest. Nothing in `src/` uses that constant.
-  S16B refuses oversized declared or actual rectangles before cell iteration, but does
-  not add a deadline around library calls or repair repeated-sheet processing.
+- **Repeated sheet entries are refused.** A 210 KB workbook that lists one sheet 200
+  times, where that sheet declares 40,000 merged ranges, took 383 seconds, because
+  openpyxl parsed the merged ranges again for every entry. S16C refuses a workbook that
+  points more than one worksheet entry at the same sheet part, before openpyxl loads it.
+  Normal spreadsheet applications give each worksheet its own part, so this affects
+  malformed or hand-built files only. Repeated chart and drawing references are still
+  allowed and cached.
+- **"Bounded" is not "fast", and the budget is now a deadline.** The S16 reader was
+  measured at about 2.5 times slower per cell than the reader it replaced: 10.8 seconds
+  against 4.3 seconds for 200,000 cells. A workbook that uses the whole 5,000,000-position
+  budget before being refused can take minutes. S16C runs the complete Excel read in a
+  disposable process and stops it after the existing 60 seconds
+  (`MAX_TIMEOUT_SECONDS` in `src/archiv/ingestion/limits.py`, which now has a caller).
+  The child also carries the existing 60 CPU-second, 1 GiB address-space and 128 MiB
+  output-file limits. A timed-out or killed worker leaves no original, no derived data
+  and no searchable content; the failure is recorded.
 
-The repeated-reference and processing-budget gaps are queued as
-[S16C](plan/steps/S16C.md), ahead of PowerPoint work.
+S16C raises the Excel extractor version from 3 to 4. That field is recorded by the
+compatibility export and nothing reads it to mark derivatives stale, so existing Excel
+derived data is left as it is. Do not run `archiv rebuild-derived` on a workbook this
+change now refuses: it deletes the existing derived root before normalizing, so the old
+derived evidence is destroyed and the rebuild then fails. Rebuild only a workbook that
+still ingests.
+
+What this does not do: it is process isolation with resource limits, not a sandbox
+against hostile code. The worker inherits the application environment and installed
+packages, and it adds no network calls of its own. It requires a POSIX system, so Excel
+ingestion now fails with a clear limit error on Windows, which Archiv does not support.
 
 ## PowerPoint reader: gaps the S17 review found
 

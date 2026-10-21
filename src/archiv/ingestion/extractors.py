@@ -61,7 +61,7 @@ class NormalizeFunc(Protocol):
 @dataclass(frozen=True)
 class Extractor:
     name: str
-    version: str  # bumped => derived data is stale => rebuild
+    version: str  # recorded by the compatibility export; does not mark data stale
     suffixes: frozenset[str]
     media_types: frozenset[str]
     magic: tuple[bytes, ...]  # content signatures, checked before suffix
@@ -233,7 +233,7 @@ ALL_EXTRACTORS: tuple[Extractor, ...] = (
     ),
     Extractor(
         name="xlsx",
-        version="3",
+        version="4",
         suffixes=frozenset({".xlsx"}),
         media_types=frozenset(
             {"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}

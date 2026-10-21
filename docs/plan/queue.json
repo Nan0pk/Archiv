@@ -527,7 +527,7 @@
       "phase": "C",
       "title": "Enforce Excel processing limits across library calls",
       "doc": "docs/plan/steps/S16C.md",
-      "detail": "stub",
+      "detail": "full",
       "depends_on": [
         "S16B"
       ],
