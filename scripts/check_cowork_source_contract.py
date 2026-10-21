@@ -140,11 +140,12 @@ def main() -> None:
     # Current CoWork can map a displayed tool name back to its server name and
     # pass a third options argument. Keep requiring that the result is returned
     # and the caller's arguments are forwarded, rather than one exact spelling.
+    primary_tool_method = re.search(r"(?ms)^([ \t]*)async\s+callTool\s*\(.*?^\1\}", manager_source)
     forwards_tool_call = re.search(
         r"return\s+await\s+connection\.callTool\(\s*"
         r"(?:toolName|this\.toolServerNames\.get\(toolName\)\s*\?\?\s*toolName)"
         r"\s*,\s*args\s*[,)]",
-        manager_source,
+        primary_tool_method.group(0) if primary_tool_method else "",
     )
     record(
         "mcp_manager:returns_tool_call_with_args",

@@ -73,7 +73,9 @@ def _snapshot(tmp_path: Path) -> tuple[Path, Path]:
             )
         ),
         MANAGER: (
-            "return await connection.callTool(toolName, args)\nasync testServer(\ntools: toolCount"
+            "class Manager {\n  async callTool(toolName, args) {\n"
+            "    return await connection.callTool(toolName, args)\n  }\n"
+            "  async testServer() {\n    return { tools: toolCount };\n  }\n}\n"
         ),
         "docs/cli.md": (
             "cowork mcp list|add|remove|enable|disable|test\ndo not require a Control Plane token"
@@ -231,5 +233,33 @@ def test_manager_must_return_the_tool_result_and_forward_arguments(
     manager.write_text(
         manager.read_text().replace("return await connection.callTool(toolName, args)", call)
     )
+    code, report = _check(root, lock, "current")
+    assert code != 0 and report["compatible"] is False
+
+
+@pytest.mark.parametrize(
+    "broken_call",
+    (
+        "await connection.callTool(toolName, args)",
+        "return await connection.callTool(toolName, {})",
+    ),
+)
+def test_secondary_method_cannot_hide_broken_primary_tool_forwarding(
+    tmp_path: Path, broken_call: str
+) -> None:
+    root, lock = _snapshot(tmp_path)
+    manager = root / MANAGER
+    source = manager.read_text().replace(
+        "return await connection.callTool(toolName, args)", broken_call
+    )
+    source = source.replace(
+        "  async testServer()",
+        (
+            "  async callServerTool(serverId, toolName, args) {\n"
+            "    return await connection.callTool(toolName, args, { signal });\n  }\n"
+            "  async testServer()"
+        ),
+    )
+    manager.write_text(source)
     code, report = _check(root, lock, "current")
     assert code != 0 and report["compatible"] is False
