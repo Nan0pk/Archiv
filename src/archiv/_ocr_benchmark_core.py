@@ -273,9 +273,9 @@ URD_NAW_EVIDENCE: dict[str, object] = {
 RAPIDOCR_EVIDENCE: dict[str, object] = {
     "project": "RapidAI/RapidOCR",
     "package": "rapidocr",
-    "expected_version": "3.9.2",
+    "reference_version": "3.9.2",
     "runtime_package": "onnxruntime",
-    "expected_runtime_version": "1.27.0",
+    "reference_runtime_version": "1.27.0",
     "configuration": "PP-OCRv5 Arabic mobile recognition with ONNX Runtime CPU",
     "code_license": "Apache-2.0",
     "model_notice": (

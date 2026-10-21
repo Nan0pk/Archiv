@@ -386,13 +386,13 @@ whatever the workflow list suggests.
 - Existing archives are not automatically revalidated. This repairs the acceptance
   check for new parsing; it does not impose a new general parser time limit.
 
-## Current-upstream CoWork check is red after CoWork moved to MCP 2025-06-18
+## CoWork source-contract drift and the limits of the transport check
 
 - The `current CoWork compatibility` job in `.github/workflows/field-trial.yml` checks
-  CoWork-OS `main`, and has failed on every run since the change reached CoWork's `main`
+  CoWork-OS `main`, and began failing after the change reached CoWork's `main`
   at `dcba08b` (the merge of their pull request #239, 2026-09-26 13:29 UTC). The text
   quoted below is as of CoWork `main` at `eff5d12`, the revision inspected.
-  `scripts/check_cowork_source_contract.py` requires the exact
+  `scripts/check_cowork_source_contract.py` required the exact
   text `const PROTOCOL_VERSION = "2024-11-05"` in CoWork's
   `src/electron/mcp/client/MCPServerConnection.ts`. That line now reads
   `const PROTOCOL_VERSION = "2025-06-18"`, next to a new list,
@@ -400,19 +400,22 @@ whatever the workflow list suggests.
 - This is the early warning working as designed (see
   [CoWork integration](cowork-os-integration.md)). The job is not a required check. The
   `pinned CoWork compatibility` job, which tests the locked revision, still passes.
-- Not yet established: whether Archiv works with CoWork's new default. Archiv's server
-  uses the `mcp` Python library (2.2.0 in the development environment; `pyproject.toml`
-  allows any 2.x), whose list of supported handshake versions includes `2025-06-18`, and
-  CoWork logs a
-  warning and carries on if a server answers with a version outside its list. Both point
-  to it working, but nothing has run it. The job stops at the text check, before the
-  transport probe runs, and `scripts/cowork_stdio_probe.ts` still sends `2024-11-05`
-  itself, so it would not exercise the new default even if it ran.
-- Next action: make the current-mode contract accept CoWork's new protocol declaration,
-  make the probe send the protocol version found in the CoWork source it is testing, and
-  confirm the whole current-mode job passes. Moving the pinned revision in
-  `integrations/cowork-os/upstream-lock.json` is a separate, reviewed decision, and this
-  work does not require it.
+- The source checker now reads the inspected revision's classic protocol declaration
+  instead of requiring the old spelling. It accepts tool-name mapping and options in
+  the manager's call, while still requiring returned results and forwarded arguments.
+  The probe sends the version it finds, requires agreement, and records both versions.
+  The independent verifier checks them against the source report and the pinned lock.
+- Local transport and outside-workbench verification passed on current CoWork revision
+  `a7c9956eb48a69722ef8787133968739f3411a68`, requesting and negotiating `2025-06-18`,
+  and on pinned revision `8c01f1271722a5bb5b8d68ee76b8c68353a564bd`, requesting and
+  negotiating `2024-11-05`. These runs used generated documents and the real upstream
+  transport. The lock was not changed.
+- Current CoWork also tries optional `server/discover` negotiation before the classic
+  handshake in its connection manager. The probe does not instantiate that manager and
+  does not exercise discovery or its restart fallback. A passing classic-handshake test
+  does not establish compatibility of those paths or the complete desktop workbench.
+- Future upstream drift can still fail this early-warning check; investigate it rather
+  than skipping the job. Changing the pinned revision remains a separate manual decision.
 
 ## Excel reader: silent losses and slow cases the S16 review found
 
