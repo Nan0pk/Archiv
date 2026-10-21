@@ -506,7 +506,7 @@
       "phase": "C",
       "title": "Recover Excel cells beyond incorrect worksheet dimensions",
       "doc": "docs/plan/steps/S16B.md",
-      "detail": "stub",
+      "detail": "full",
       "depends_on": [
         "S16A"
       ],
@@ -515,7 +515,10 @@
         "targets": [
           "tests/test_ooxml_recovery.py::test_xlsx_cells_beyond_declared_dimensions_are_recovered",
           "tests/test_ooxml_recovery.py::test_xlsx_recovered_cells_keep_formula_values_and_locators",
-          "tests/test_ooxml_recovery.py::test_xlsx_declared_dimension_cannot_force_unbounded_iteration"
+          "tests/test_ooxml_recovery.py::test_xlsx_declared_dimension_cannot_force_unbounded_iteration",
+          "tests/test_ooxml_recovery.py::test_xlsx_sparse_actual_coordinates_are_bounded_before_iteration",
+          "tests/test_ooxml_recovery.py::test_xlsx_dimension_recovery_preserves_search_citations_and_source",
+          "tests/test_ooxml_recovery.py::test_xlsx_oversized_actual_bounds_refuse_before_storage"
         ]
       }
     },

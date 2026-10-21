@@ -419,12 +419,13 @@ whatever the workflow list suggests.
 Found by the distinguished review of S16 (#180), on workbooks generated in the review
 container. None of these is new with S16 except where it says so. None is fixed by it.
 
-- **A sheet that declares a smaller size than it holds loses cells silently.** openpyxl's
-  read-only mode trusts the sheet's declared size. A sheet that declares `A1:A1` but
-  holds a cell at `C9` loses `C9`, and nothing records the loss. The reader before S16
-  lost it too. The S16 XML pass already walks every row, so it could detect this and
-  either read past the declared size or say that cells were dropped. This is queued
-  as [S16B](plan/steps/S16B.md).
+- **Incorrect worksheet dimensions used to silently drop cells.** A sheet declaring
+  `A1:A1` but holding a cell at `C9` lost `C9` because openpyxl trusted the declared
+  bounds. S16B records actual cell bounds in the existing XML pass and gives both
+  workbook views the same explicit bounds. The tests in `tests/test_ooxml_recovery.py`
+  check recovery, formulas, hidden markers, source hashes, search citations and refusal
+  before storage when padding exceeds the position budget. Existing derivatives are
+  not automatically rebuilt; run `archiv rebuild-derived` to recover their missing cells.
 - **Repeated sheet entries are slow.** A 210 KB workbook that lists one sheet 200 times,
   where that sheet declares 40,000 merged ranges, took 383 seconds. Most of the time is
   openpyxl parsing the merged ranges again for every entry, and no Archiv budget counts
@@ -436,6 +437,8 @@ container. None of these is new with S16 except where it says so. None is fixed 
   A workbook that uses the whole 5,000,000-position budget before being refused takes
   minutes, not the 60 seconds `MAX_TIMEOUT_SECONDS` in
   `src/archiv/ingestion/limits.py` might suggest. Nothing in `src/` uses that constant.
+  S16B refuses oversized declared or actual rectangles before cell iteration, but does
+  not add a deadline around library calls or repair repeated-sheet processing.
 
 The repeated-reference and processing-budget gaps are queued as
 [S16C](plan/steps/S16C.md), ahead of PowerPoint work.

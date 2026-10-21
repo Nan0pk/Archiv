@@ -25,13 +25,18 @@ from docx.shared import Inches
 from docx.text.paragraph import Paragraph
 from openpyxl import Workbook
 from openpyxl.chart import BarChart, Reference
+from openpyxl.worksheet._read_only import ReadOnlyWorksheet
 from typer.testing import CliRunner
 
 import archiv.ingestion.normalize_docx as normalize_docx_module
 import archiv.ingestion.normalize_xlsx as normalize_xlsx_module
 from archiv.cli import app
 from archiv.contracts import NormalizedDocument
+from archiv.hashing import sha256_file
+from archiv.ingestion import ingest_file
 from archiv.ingestion.normalizers import MalformedInputError, normalize
+from archiv.storage.database import ArchivDatabase
+from archiv.storage.layout import ArchivLayout
 
 DIGEST = "0" * 64
 W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
@@ -766,6 +771,212 @@ def test_xlsx_declared_dimension_cannot_force_unbounded_iteration(
         {
             XLSX_SHEET: lambda xml: re.sub(
                 r'<dimension ref="[^"]*"/>', '<dimension ref="A1:XFD1048576"/>', xml
+            )
+        },
+    )
+
+    with pytest.raises(MalformedInputError, match="cell position limit"):
+        normalize(path, DIGEST)
+
+
+def _declare_dimensions(path: Path, reference: str | None) -> None:
+    replacement = "" if reference is None else f'<dimension ref="{reference}"/>'
+    _rewrite(
+        path,
+        {},
+        {XLSX_SHEET: lambda xml: re.sub(r'<dimension ref="[^"]*"/>', replacement, xml)},
+    )
+
+
+def test_xlsx_cells_beyond_declared_dimensions_are_recovered(tmp_path: Path) -> None:
+    for number, reference in enumerate(("A1:A1", "A1:A9", "C9:C9", None)):
+        workbook = Workbook()
+        sheet = workbook.active
+        assert sheet is not None
+        sheet["A1"] = "first"
+        sheet["C9"] = "ARCHIV-OUTSIDE-DIMENSION"
+        path = _save_workbook(workbook, tmp_path / f"dimensions-{number}.xlsx")
+        _declare_dimensions(path, reference)
+
+        result = normalize(path, DIGEST)
+
+        assert _by_locator(result) == {
+            _key(sheet="Sheet", cell="A1"): "first",
+            _key(sheet="Sheet", cell="C9"): "ARCHIV-OUTSIDE-DIMENSION",
+        }
+        assert result.tables[0].rows == [
+            ["first", None, None],
+            [None, None, "ARCHIV-OUTSIDE-DIMENSION"],
+        ]
+
+
+def test_xlsx_recovered_cells_keep_formula_values_and_locators(tmp_path: Path) -> None:
+    workbook = _budget_workbook()
+    sheet = workbook.active
+    assert sheet is not None
+    sheet.row_dimensions[4].hidden = True
+    sheet.column_dimensions["B"].hidden = True
+    sheet["C9"] = "=B4*2"
+    sheet.merge_cells("A2:A3")
+    sheet["C10"] = "=B4*3"
+    path = _save_workbook(workbook, tmp_path / "formula-dimensions.xlsx")
+    _store_result(path, "SUM(B2:B3)", "1250000")
+    _store_result(path, "B4*2", "2500000")
+    _declare_dimensions(path, "A1:A1")
+
+    result = normalize(path, DIGEST)
+    located = _by_locator(result)
+
+    assert (
+        located[_key(sheet="Budget", cell="B4", formula="=SUM(B2:B3)", hidden="row and column")]
+        == "1250000"
+    )
+    assert located[_key(sheet="Budget", cell="C9", formula="=B4*2")] == "2500000"
+    assert (
+        located[
+            _key(sheet="Budget", cell="C10", formula="=B4*3", computed_value="not saved in file")
+        ]
+        == "=B4*3"
+    )
+    assert located[_key(sheet="Budget", cell="A2", merged="A2:A3")] == "Salaries"
+    assert result.tables[0].rows[-2:] == [[None, None, 2500000], [None, None, "=B4*3"]]
+
+
+def test_xlsx_dimension_recovery_preserves_search_citations_and_source(tmp_path: Path) -> None:
+    workbook = Workbook()
+    sheet = workbook.active
+    assert sheet is not None
+    sheet["C9"] = "ARCHIV-DIMENSION-CITATION"
+    path = _save_workbook(workbook, tmp_path / "search-dimensions.xlsx")
+    _declare_dimensions(path, "A1:A1")
+    digest = sha256_file(path)
+    home = tmp_path / "home"
+
+    hits = _search(path, home, "ARCHIV-DIMENSION-CITATION")
+
+    assert [hit["citation"]["locator"] for hit in hits] == [{"sheet": "Sheet", "cell": "C9"}]  # pyright: ignore[reportIndexIssue]
+    assert sha256_file(path) == digest
+    assert sha256_file(ArchivLayout.resolve(home).original_path(digest)) == digest
+
+
+def test_xlsx_sparse_actual_coordinates_are_bounded_before_iteration(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(normalize_xlsx_module, "MAX_CELL_POSITIONS", 1_000)
+    workbook = Workbook()
+    sheet = workbook.active
+    assert sheet is not None
+    sheet["A1"] = "first"
+    path = _save_workbook(workbook, tmp_path / "sparse.xlsx")
+    _declare_dimensions(path, "A1:A1")
+
+    # A tiny XML part must not allocate an oversized padded row or iterate a billion
+    # missing rows. Refusal must happen before openpyxl gets an iterator.
+    def no_iteration(*_: object, **__: object) -> None:
+        pytest.fail("oversized bounds reached openpyxl iteration")
+
+    monkeypatch.setattr(ReadOnlyWorksheet, "iter_rows", no_iteration)
+    for coordinate, row in (("A1000000000", "1000000000"), ("XFD1", "1")):
+
+        def replace_cells(xml: str, coordinate: str = coordinate, row: str = row) -> str:
+            return re.sub(
+                r"<sheetData>.*?</sheetData>",
+                f'<sheetData><row r="{row}"><c r="{coordinate}" t="inlineStr">'
+                "<is><t>x</t></is></c></row></sheetData>",
+                xml,
+            )
+
+        _rewrite(
+            path,
+            {},
+            {XLSX_SHEET: replace_cells},
+        )
+        with pytest.raises(MalformedInputError, match="cell position limit"):
+            normalize(path, DIGEST)
+
+
+def test_xlsx_oversized_actual_bounds_refuse_before_storage(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(normalize_xlsx_module, "MAX_CELL_POSITIONS", 50)
+    workbook = Workbook()
+    sheet = workbook.active
+    assert sheet is not None
+    sheet["C99"] = "too sparse"
+    path = _save_workbook(workbook, tmp_path / "refused-dimensions.xlsx")
+    _declare_dimensions(path, "A1:A1")
+    digest = sha256_file(path)
+    home = tmp_path / "home"
+    layout = ArchivLayout.resolve(home)
+    layout.ensure()
+    ArchivDatabase(layout.database).initialize()
+
+    with pytest.raises(MalformedInputError, match="cell position limit"):
+        ingest_file(path, home=home)
+
+    assert sha256_file(path) == digest
+    assert not layout.original_path(digest).exists()
+    assert not layout.derived_root(digest).exists()
+    with ArchivDatabase(layout.database).connect() as connection:
+        failure = connection.execute("SELECT error FROM ingestion_failures").fetchone()
+    assert failure is not None and "cell position limit" in failure[0]
+
+
+def test_xlsx_missing_coordinates_use_sequential_positions(tmp_path: Path) -> None:
+    workbook = Workbook()
+    sheet = workbook.active
+    assert sheet is not None
+    sheet["A1"] = "first"
+    sheet["B2"] = "second"
+    path = _save_workbook(workbook, tmp_path / "implicit.xlsx")
+    _declare_dimensions(path, None)
+    _rewrite(
+        path,
+        {},
+        {
+            XLSX_SHEET: lambda xml: xml.replace('<row r="2">', "<row>").replace(
+                '<c r="B2"', '<c t="n"><v></v></c><c'
+            )
+        },
+    )
+
+    located = _by_locator(normalize(path, DIGEST))
+
+    assert located[_key(sheet="Sheet", cell="A1")] == "first"
+    assert located[_key(sheet="Sheet", cell="B2")] == "second"
+
+
+def test_xlsx_inconsistent_coordinates_refuse_instead_of_dropping_cells(tmp_path: Path) -> None:
+    for number, cell_data in enumerate(
+        (
+            '<row r="1"><c r="C9"><v>1</v></c></row>',
+            '<row r="2"><c r="A2"><v>1</v></c></row><row r="1"><c r="A1"><v>2</v></c></row>',
+            '<row r="1"><c r="B1"><v>1</v></c><c r="A1"><v>2</v></c></row>',
+        )
+    ):
+        path = _save_workbook(Workbook(), tmp_path / f"inconsistent-{number}.xlsx")
+
+        def replace_cells(xml: str, data: str = cell_data) -> str:
+            return re.sub(r"<sheetData>.*?</sheetData>", f"<sheetData>{data}</sheetData>", xml)
+
+        _rewrite(
+            path,
+            {},
+            {XLSX_SHEET: replace_cells},
+        )
+        with pytest.raises(MalformedInputError, match="coordinate|increasing"):
+            normalize(path, DIGEST)
+
+
+def test_xlsx_empty_sparse_rows_are_bounded(tmp_path: Path) -> None:
+    path = _save_workbook(Workbook(), tmp_path / "empty-sparse.xlsx")
+    _declare_dimensions(path, None)
+    _rewrite(
+        path,
+        {},
+        {
+            XLSX_SHEET: lambda xml: xml.replace(
+                "<sheetData></sheetData>", '<sheetData><row r="1000000000"/></sheetData>'
             )
         },
     )
