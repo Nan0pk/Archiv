@@ -186,21 +186,35 @@ def test_timeout_does_not_leak_worker_descriptors(
     assert len(list(Path("/proc/self/fd").iterdir())) <= before
 
 
+@pytest.mark.parametrize("shape", ("decoy", "no-leading-slash", "duplicate-first-wins"))
 def test_manifest_and_relationship_workbook_parts_must_agree(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, shape: str
 ) -> None:
-    # openpyxl picks the workbook part from [Content_Types].xml; this reader picks it
-    # from the package relationships. A file where those disagree would let the
-    # budgets describe one workbook while openpyxl parses another.
+    # openpyxl picks the workbook part from [Content_Types].xml, using the first
+    # matching Override and PartName[1:] literally; this reader picks it from the
+    # package relationships. A file where those disagree would let the budgets
+    # describe one workbook while openpyxl parses another.
     path = _workbook(tmp_path / "decoy.xlsx")
     with ZipFile(path) as archive:
         members = {name: archive.read(name) for name in archive.namelist()}
     members["xl/decoy.xml"] = members["xl/workbook.xml"]
     content_types = members["[Content_Types].xml"].decode("utf-8")
-    assert "/xl/workbook.xml" in content_types
-    members["[Content_Types].xml"] = content_types.replace(
-        "/xl/workbook.xml", "/xl/decoy.xml"
-    ).encode("utf-8")
+    found = re.search(r'<Override PartName="/xl/workbook\.xml"[^>]*/>', content_types)
+    assert found is not None
+    element = found.group(0)
+    if shape == "decoy":
+        content_types = content_types.replace(
+            element, element.replace("/xl/workbook.xml", "/xl/decoy.xml")
+        )
+    elif shape == "no-leading-slash":
+        content_types = content_types.replace(
+            element, element.replace('"/xl/workbook.xml"', '"xl/decoy.xml"')
+        )
+    else:
+        # openpyxl takes the first matching Override, not the last.
+        decoy = element.replace("/xl/workbook.xml", "/xl/decoy.xml")
+        content_types = content_types.replace(element, decoy + element)
+    members["[Content_Types].xml"] = content_types.encode("utf-8")
     with ZipFile(path, "w", ZIP_STORED) as archive:
         for name, data in members.items():
             archive.writestr(name, data)

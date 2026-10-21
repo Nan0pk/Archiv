@@ -290,19 +290,26 @@ def _manifest_workbook_part(package: _Package) -> str | None:
     if data is None:
         return None
     root = package.root(content_types, data)
-    overrides: dict[str, str] = {}
+    overrides: list[tuple[str, str]] = []
     defaults: set[str] = set()
     for element in root:
         local = _local(element.tag)
         if local == "Override":
-            part_name = element.attrib.get("PartName", "").lstrip("/")
-            overrides[part_name] = element.attrib.get("ContentType", "")
+            # openpyxl uses ``PartName[1:]`` unconditionally, so reproduce that
+            # exactly rather than normalising a missing leading slash away.
+            overrides.append(
+                (
+                    element.attrib.get("PartName", "")[1:],
+                    element.attrib.get("ContentType", ""),
+                )
+            )
         elif local == "Default":
             defaults.add(element.attrib.get("ContentType", ""))
     for content_type in _WORKBOOK_CONTENT_TYPES:
-        for part, declared in overrides.items():
-            if declared == content_type:
-                return part
+        # openpyxl takes the first matching Override in document order.
+        match = next((part for part, declared in overrides if declared == content_type), None)
+        if match is not None:
+            return match
     if defaults.intersection(_WORKBOOK_CONTENT_TYPES):
         return "xl/workbook.xml"
     return None
