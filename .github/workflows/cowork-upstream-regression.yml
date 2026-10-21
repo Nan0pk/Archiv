@@ -81,7 +81,7 @@ jobs:
           cache: pip
 
       - name: Set up Node
-        uses: actions/setup-node@680d1e489b82f1243de15bc7665c0007e3c9a860
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version: "24"
 
