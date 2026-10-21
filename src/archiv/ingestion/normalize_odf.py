@@ -11,6 +11,7 @@ from xml.etree import ElementTree
 from zipfile import ZIP_DEFLATED, ZIP_STORED, BadZipFile, ZipFile
 
 from archiv.contracts import NormalizedDocument, NormalizedSegment, NormalizedTable
+from archiv.xml_safety import MalformedXmlError, XmlDeclarationError, refuse_xml_declarations
 
 ODF_MIMETYPES = {
     "odt": "application/vnd.oasis.opendocument.text",
@@ -136,9 +137,12 @@ def _odf_text(element: ElementTree.Element) -> str:
 def parse_odf_xml(data: bytes, *, label: str) -> ElementTree.Element:
     """Parse bounded ODF XML while rejecting declarations, entities, and node floods."""
 
-    upper = data.upper()
-    if b"<!DOCTYPE" in upper or b"<!ENTITY" in upper:
-        raise ValueError(f"ODF {label} declarations and entities are not allowed")
+    try:
+        refuse_xml_declarations(data)
+    except XmlDeclarationError:
+        raise ValueError(f"ODF {label} declarations and entities are not allowed") from None
+    except MalformedXmlError as error:
+        raise ValueError(f"ODF {label} is not well-formed XML") from error
     root = ElementTree.fromstring(data)
     if sum(1 for _ in root.iter()) > MAX_XML_NODES:
         raise ValueError(f"ODF {label} node limit exceeded")
