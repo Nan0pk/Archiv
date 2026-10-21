@@ -31,6 +31,7 @@ archiv ask and archiv report can be exercised end to end against a clearly-label
 | **S07B** | A run refused part-way through must not record itself as allowed | `S07A` | [full](steps/S07B.md) |
 | **S08** | archiv model calibrate — measure the workload and the remote model | `S07` | [full](steps/S08.md) |
 | **S09** | Predict local runtime from cited hardware profiles, labelled estimated or measured | `S08` | [full](steps/S09.md) |
+
 ---
 
 ## Phase B — Stop the tool overclaiming
@@ -47,6 +48,7 @@ Every name, score and confidence value shown to a user is backed by a measuremen
 | **S13** | Index staleness: refresh on add, report N of M, incremental image index | `S00` | [full](steps/S13.md) |
 | **S14** | Doctor probes, README command coverage test, and status-line honesty | `S13` | [full](steps/S14.md) |
 | **S14A** | Type-check the scripts that CI actually runs | `S14` | [full](steps/S14A.md) |
+
 ---
 
 ## Phase C — Recover the content being silently dropped
@@ -57,8 +59,12 @@ Word, Excel and PowerPoint files yield their tables, notes, computed values and 
 |---|---|---|---|
 | **S15** | DOCX: tables, headers, footers, footnotes, comments, hyperlinks, headings | `S00` | [full](steps/S15.md) |
 | **S16** | XLSX: computed values and formulas, hyperlinks, merged ranges, hidden markers, charts | `S15` | [full](steps/S16.md) |
-| **S17** | PPTX: speaker notes, tables, charts, grouped shapes, placeholder roles, hidden slides | `S16` | [**stub**](steps/S17.md) |
+| **S16A** | Reject XML declarations regardless of encoding | `S16` | [full](steps/S16A.md) |
+| **S16B** | Recover Excel cells beyond incorrect worksheet dimensions | `S16A` | [full](steps/S16B.md) |
+| **S16C** | Enforce Excel processing limits across library calls | `S16B` | [**stub**](steps/S16C.md) |
+| **S17** | PPTX: speaker notes, tables, charts, grouped shapes, placeholder roles, hidden slides | `S16C` | [**stub**](steps/S17.md) |
 | **S18** | OpenDocument to OOXML parity fixtures and format-matrix update | `S17` | [**stub**](steps/S18.md) |
+
 ---
 
 ## Phase D — Audio and video
@@ -72,6 +78,7 @@ Recordings from phones and dictaphones are ingested and transcribed with timesta
 | **S21** | Measured word error rate per language on generated fixtures | `S20` | [**stub**](steps/S21.md) |
 | **S22** | Video container metadata and audio-track extraction | `S20` | [**stub**](steps/S22.md) |
 | **S23** | Keyframes as contained objects, with declared ceilings and clean degradation | `S22` | [**stub**](steps/S23.md) |
+
 ---
 
 ## Phase E — Faces and identity, properly
@@ -87,6 +94,6 @@ A real detector, name candidates only from evidence a user can open, and entity 
 
 ---
 
-30 steps across 5 phases. Every step must be completable
-in one session; if one turns out not to be, split it in `queue.json` and say so in the
-pull request.
+38 steps across 5 phases. Every step must be completable
+in one session; if one turns out not to be, split it in `queue.json`, note the
+split in the PR, and carry on.

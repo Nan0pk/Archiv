@@ -114,7 +114,9 @@ def test_probe_uses_actual_cowork_transport_and_checks_false_success() -> None:
     probe = ROOT.joinpath("scripts", "cowork_stdio_probe.ts").read_text(encoding="utf-8")
 
     assert "src/electron/mcp/client/transports/StdioTransport.ts" in probe
-    assert 'protocolVersion: "2024-11-05"' in probe
+    assert "protocolVersion: requestedProtocol" in probe
+    assert "negotiatedProtocol !== requestedProtocol" in probe
+    assert "MCPServerConnection.ts" in probe
     assert 'transport.sendRequest("tools/list")' in probe
     assert "failed_validation_cannot_succeed" in probe
     assert "result.isError !== true" in probe
