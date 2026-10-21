@@ -117,7 +117,7 @@ The upstream README links a training dataset but does not enumerate the rights o
 
 ### RapidOCR
 
-The bounded optional candidate is RapidOCR with ONNX Runtime on CPU, using the PP-OCRv5 Arabic mobile recognizer. The reference measurements in this document were taken with RapidOCR 3.9.2 and ONNX Runtime 1.27.0. The `ocr-benchmark` extra pins exact versions in `pyproject.toml`; those pins change through reviewed dependency updates, and the numbers here have not been re-measured on newer pins. The Arabic-script recognizer is the relevant family for Urdu/Arabic comparison; PP-OCRv6 is not substituted silently.
+The bounded optional candidate is RapidOCR with ONNX Runtime on CPU, using the PP-OCRv5 Arabic mobile recognizer. The reference measurements in `docs/ocr-engine-comparison.md` were taken with RapidOCR 3.9.2 and ONNX Runtime 1.27.0. The `ocr-benchmark` extra pins exact versions in `pyproject.toml`; those pins change through reviewed dependency updates, and the numbers here have not been re-measured on newer pins. The Arabic-script recognizer is the relevant family for Urdu/Arabic comparison; PP-OCRv6 is not substituted silently.
 
 RapidOCR code is Apache-2.0. Its project notice says OCR model copyright is held by Baidu. Archiv downloads no weight during normal installation, does not redistribute weights, hashes materialized model files and records the notice in the report.
 
