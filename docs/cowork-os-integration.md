@@ -73,6 +73,14 @@ The `CoWork upstream regression` workflow has two independent jobs:
 
 Both jobs use CoWork's actual `StdioTransport.ts` through a pinned `tsx` runner. They do not install or build the Electron application. This isolates the boundary that Archiv depends on while avoiding unrelated desktop dependencies.
 
+The source check reads the classic `PROTOCOL_VERSION` declaration from the inspected
+CoWork revision. The transport probe sends that version, requires the server to agree,
+and records the requested and negotiated versions in its JSON evidence. Pinned mode
+also requires the version and source hashes in the lock. Current mode accepts the
+current manager's tool-name mapping and options argument, but still requires argument
+forwarding and a returned tool result. This tests the classic stdio handshake, not the
+newer optional `server/discover` path or the complete workbench connection manager.
+
 Each job proves:
 
 - CoWork spawns `archiv-mcp` with environment and working directory;
