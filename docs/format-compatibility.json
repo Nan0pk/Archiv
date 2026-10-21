@@ -479,6 +479,7 @@
         "the values and category labels a chart plots are not surfaced from the chart; they normally also appear in cells. Images, shapes, text boxes, comments and pivot state are not surfaced",
         "number and date formatting is not applied: the stored value is indexed as stored, so a cell showing 25% is indexed as 0.25, and a date as 2024-01-31 00:00:00 rather than as the sheet displays it",
         "a chart series named only by a cell reference, with no saved copy of the name, contributes no series name",
+        "worksheet bounds include actual stored cells even when declared dimensions are too small or absent; declared or actual rectangles beyond the cell position budget are refused before iteration; inconsistent row/cell coordinates are refused",
         "hidden content is indexed and marked, not withheld: every segment from a hidden sheet, row or column carries `hidden`",
         "a workbook added before this reader existed keeps its older derivative, with formula text in place of stored results, until `archiv rebuild-derived` is run for it; rebuilding can make citations already saved for it stop validating",
         "retrieval indexes each normalized cell or row segment independently; phrases split across cells may not match as one literal phrase"

@@ -21,6 +21,7 @@ from archiv.research.inpage_types import (
     sha256,
     text_sha256,
 )
+from archiv.xml_safety import MalformedXmlError, XmlDeclarationError, refuse_xml_declarations
 
 SPECIAL_ESCAPES: Final[Mapping[int, str]] = {
     0x09: "\t",
@@ -199,12 +200,12 @@ def parse_mapping_xml(data: bytes, *, limits: ExtractionLimits | None = None) ->
     limits = limits or ExtractionLimits()
     if len(data) > limits.max_mapping_bytes:
         raise ExtractionError("mapping file size limit exceeded")
-    upper = data.upper()
-    if b"<!DOCTYPE" in upper or b"<!ENTITY" in upper:
-        raise ExtractionError("mapping XML declarations and entities are forbidden")
     try:
+        refuse_xml_declarations(data)
         root = ET.fromstring(data)
-    except ET.ParseError as error:
+    except XmlDeclarationError:
+        raise ExtractionError("mapping XML declarations and entities are forbidden") from None
+    except (MalformedXmlError, ET.ParseError) as error:
         raise ExtractionError("mapping XML is malformed") from error
     values: dict[int, str] = {}
     duplicates = conflicts = ignored = 0

@@ -367,32 +367,32 @@ Confirming it takes one look, at **Settings → Code security → Code scanning*
 Until one of those is done, treat this repository as having **no static security analysis**,
 whatever the workflow list suggests.
 
-## OpenDocument and InPage XML entity check can be bypassed with UTF-16
+## OpenDocument and InPage UTF-16 XML declaration bypass repaired in S16A
 
-- `parse_odf_xml` in `src/archiv/ingestion/normalize_odf.py` refuses XML declarations
-  and entities by searching the raw bytes for `<!DOCTYPE` and `<!ENTITY`. A part encoded
-  as UTF-16 does not contain those bytes, but the standard-library parser still decodes
-  it and expands its entities. The same byte search is used in
-  `src/archiv/research/inpage_legacy.py`.
+- The earlier `parse_odf_xml` and InPage mapping reader searched raw bytes for
+  `<!DOCTYPE` and `<!ENTITY`. UTF-16 bypassed that search while the parser still
+  decoded the input and expanded its entities.
 - Found by the reviewer of pull request #177 (step S15), who confirmed on `main` that a
   UTF-16 OpenDocument part with two nested entities was accepted and expanded. The
   remaining bound is the XML library's own expansion-ratio protection (about 100 times
   the part's size) plus each reader's member-size limit.
-- The Word reader added in S15 does not have this gap: `_refuse_declarations` in
-  `src/archiv/ingestion/normalize_docx.py` has the XML parser itself stop at the first
-  declaration, whatever the encoding, and
-  `tests/test_ooxml_recovery.py::test_docx_entity_declaration_in_utf16_footnotes_refuses_the_document`
-  covers it.
-- Next action: move that check into a shared helper, use it in both readers, and add a
-  UTF-16 test for each. Not yet scheduled as a queue step.
+- S16A moves the encoding-aware check already used by Word and Excel into
+  `src/archiv/xml_safety.py`. All four readers now stop at the start of a DTD or entity
+  declaration. Comments and CDATA containing declaration-like text remain valid.
+- `tests/test_xml_declarations.py` covers UTF-8, UTF-16 with a BOM, and both UTF-16
+  byte orders without a BOM. It exercises content and manifest parts through ODT
+  ingestion, checks that rejected inputs create no stored original or derivative,
+  and verifies ordinary Unicode, predefined entities, and mapping behavior.
+- Existing archives are not automatically revalidated. This repairs the acceptance
+  check for new parsing; it does not impose a new general parser time limit.
 
-## Current-upstream CoWork check is red after CoWork moved to MCP 2025-06-18
+## CoWork source-contract drift and the limits of the transport check
 
 - The `current CoWork compatibility` job in `.github/workflows/field-trial.yml` checks
-  CoWork-OS `main`, and has failed on every run since the change reached CoWork's `main`
+  CoWork-OS `main`, and began failing after the change reached CoWork's `main`
   at `dcba08b` (the merge of their pull request #239, 2026-09-26 13:29 UTC). The text
   quoted below is as of CoWork `main` at `eff5d12`, the revision inspected.
-  `scripts/check_cowork_source_contract.py` requires the exact
+  `scripts/check_cowork_source_contract.py` required the exact
   text `const PROTOCOL_VERSION = "2024-11-05"` in CoWork's
   `src/electron/mcp/client/MCPServerConnection.ts`. That line now reads
   `const PROTOCOL_VERSION = "2025-06-18"`, next to a new list,
@@ -400,31 +400,35 @@ whatever the workflow list suggests.
 - This is the early warning working as designed (see
   [CoWork integration](cowork-os-integration.md)). The job is not a required check. The
   `pinned CoWork compatibility` job, which tests the locked revision, still passes.
-- Not yet established: whether Archiv works with CoWork's new default. Archiv's server
-  uses the `mcp` Python library (2.2.0 in the development environment; `pyproject.toml`
-  allows any 2.x), whose list of supported handshake versions includes `2025-06-18`, and
-  CoWork logs a
-  warning and carries on if a server answers with a version outside its list. Both point
-  to it working, but nothing has run it. The job stops at the text check, before the
-  transport probe runs, and `scripts/cowork_stdio_probe.ts` still sends `2024-11-05`
-  itself, so it would not exercise the new default even if it ran.
-- Next action: make the current-mode contract accept CoWork's new protocol declaration,
-  make the probe send the protocol version found in the CoWork source it is testing, and
-  confirm the whole current-mode job passes. Moving the pinned revision in
-  `integrations/cowork-os/upstream-lock.json` is a separate, reviewed decision, and this
-  work does not require it.
+- The source checker now reads the inspected revision's classic protocol declaration
+  instead of requiring the old spelling. It accepts tool-name mapping and options in
+  the manager's call, while still requiring returned results and forwarded arguments.
+  The probe sends the version it finds, requires agreement, and records both versions.
+  The independent verifier checks them against the source report and the pinned lock.
+- Local transport and outside-workbench verification passed on current CoWork revision
+  `a7c9956eb48a69722ef8787133968739f3411a68`, requesting and negotiating `2025-06-18`,
+  and on pinned revision `8c01f1271722a5bb5b8d68ee76b8c68353a564bd`, requesting and
+  negotiating `2024-11-05`. These runs used generated documents and the real upstream
+  transport. The lock was not changed.
+- Current CoWork also tries optional `server/discover` negotiation before the classic
+  handshake in its connection manager. The probe does not instantiate that manager and
+  does not exercise discovery or its restart fallback. A passing classic-handshake test
+  does not establish compatibility of those paths or the complete desktop workbench.
+- Future upstream drift can still fail this early-warning check; investigate it rather
+  than skipping the job. Changing the pinned revision remains a separate manual decision.
 
 ## Excel reader: silent losses and slow cases the S16 review found
 
 Found by the distinguished review of S16 (#180), on workbooks generated in the review
 container. None of these is new with S16 except where it says so. None is fixed by it.
 
-- **A sheet that declares a smaller size than it holds loses cells silently.** openpyxl's
-  read-only mode trusts the sheet's declared size. A sheet that declares `A1:A1` but
-  holds a cell at `C9` loses `C9`, and nothing records the loss. The reader before S16
-  lost it too. The S16 XML pass already walks every row, so it could detect this and
-  either read past the declared size or say that cells were dropped. That needs a
-  queue step.
+- **Incorrect worksheet dimensions used to silently drop cells.** A sheet declaring
+  `A1:A1` but holding a cell at `C9` lost `C9` because openpyxl trusted the declared
+  bounds. S16B records actual cell bounds in the existing XML pass and gives both
+  workbook views the same explicit bounds. The tests in `tests/test_ooxml_recovery.py`
+  check recovery, formulas, hidden markers, source hashes, search citations and refusal
+  before storage when padding exceeds the position budget. Existing derivatives are
+  not automatically rebuilt; run `archiv rebuild-derived` to recover their missing cells.
 - **Repeated sheet entries are slow.** A 210 KB workbook that lists one sheet 200 times,
   where that sheet declares 40,000 merged ranges, took 383 seconds. Most of the time is
   openpyxl parsing the merged ranges again for every entry, and no Archiv budget counts
@@ -436,3 +440,8 @@ container. None of these is new with S16 except where it says so. None is fixed 
   A workbook that uses the whole 5,000,000-position budget before being refused takes
   minutes, not the 60 seconds `MAX_TIMEOUT_SECONDS` in
   `src/archiv/ingestion/limits.py` might suggest. Nothing in `src/` uses that constant.
+  S16B refuses oversized declared or actual rectangles before cell iteration, but does
+  not add a deadline around library calls or repair repeated-sheet processing.
+
+The repeated-reference and processing-budget gaps are queued as
+[S16C](plan/steps/S16C.md), ahead of PowerPoint work.

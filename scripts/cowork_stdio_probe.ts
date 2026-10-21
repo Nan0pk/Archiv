@@ -77,6 +77,8 @@ async function main(): Promise<void> {
   const stages: Stage[] = [];
   const runIds: string[] = [];
   let transport: any = null;
+  let requestedProtocol: string | null = null;
+  let negotiatedProtocol: string | null = null;
 
   async function stage<T>(
     name: string,
@@ -95,6 +97,19 @@ async function main(): Promise<void> {
   }
 
   try {
+    requestedProtocol = await stage("upstream_protocol_version", "cowork_integration", async () => {
+      const source = await fs.readFile(
+        path.join(path.resolve(args.coworkRoot), "src/electron/mcp/client/MCPServerConnection.ts"),
+        "utf8",
+      );
+      const declarations = [...source.matchAll(
+        /\bconst\s+PROTOCOL_VERSION\s*=\s*["'](\d{4}-\d{2}-\d{2})["']/g,
+      )];
+      if (declarations.length !== 1) {
+        throw new Error("CoWork source must declare exactly one PROTOCOL_VERSION");
+      }
+      return declarations[0][1];
+    });
     transport = new transportModule.StdioTransport({
       id: `archiv-${args.mode}`,
       name: `Archiv ${args.mode}`,
@@ -114,12 +129,16 @@ async function main(): Promise<void> {
     await stage("cowork_stdio_spawn", "cowork_integration", async () => transport.connect());
     await stage("mcp_initialize", "mcp_transport", async () => {
       const initialized = await transport.sendRequest("initialize", {
-        protocolVersion: "2024-11-05",
+        protocolVersion: requestedProtocol,
         capabilities: {},
         clientInfo: { name: "Archiv CoWork regression", version: "1.0.0" },
       });
       if (!initialized?.serverInfo?.name) {
         throw new Error("initialize response did not contain serverInfo");
+      }
+      negotiatedProtocol = initialized.protocolVersion;
+      if (negotiatedProtocol !== requestedProtocol) {
+        throw new Error(`server negotiated ${negotiatedProtocol}, requested ${requestedProtocol}`);
       }
       await transport.send({ jsonrpc: "2.0", method: "notifications/initialized" });
     });
@@ -266,6 +285,8 @@ async function main(): Promise<void> {
         {
           schema_version: 1,
           mode: args.mode,
+          requested_protocol_version: requestedProtocol,
+          negotiated_protocol_version: negotiatedProtocol,
           tools: tools.map((tool: any) => tool.name).sort(),
           valid_report_path: validReport.docx_path,
           valid_manifest_path: validReport.manifest_path,
@@ -280,7 +301,12 @@ async function main(): Promise<void> {
   } catch (error) {
     await fs.writeFile(
       path.join(outputDir, "cowork-probe.json"),
-      JSON.stringify({ schema_version: 1, mode: args.mode, run_ids: runIds, stages }, null, 2) +
+      JSON.stringify({
+        schema_version: 1, mode: args.mode,
+        requested_protocol_version: requestedProtocol,
+        negotiated_protocol_version: negotiatedProtocol,
+        run_ids: runIds, stages,
+      }, null, 2) +
         "\n",
     );
     throw error;

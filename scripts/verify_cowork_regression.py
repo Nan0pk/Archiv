@@ -22,6 +22,21 @@ def _json(path: Path) -> dict[str, object]:
     return cast(dict[str, object], json.loads(path.read_text(encoding="utf-8")))
 
 
+def protocol_matches_source(
+    probe: dict[str, object],
+    source_report: dict[str, object],
+    lock: dict[str, object],
+    mode: str,
+) -> bool:
+    requested = probe.get("requested_protocol_version")
+    return (
+        isinstance(requested, str)
+        and requested == probe.get("negotiated_protocol_version")
+        and requested == source_report.get("protocol_version")
+        and (mode != "pinned" or requested == lock["protocol_version"])
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output-dir", type=Path, required=True)
@@ -52,6 +67,15 @@ def main() -> None:
 
     probe_stages = cast(list[dict[str, object]], probe["stages"])
     stages.extend(CoworkStageResult.model_validate(stage) for stage in probe_stages)
+    protocol_matches = protocol_matches_source(probe, source_report, lock, arguments.mode)
+    stages.append(
+        CoworkStageResult(
+            stage="protocol_matches_inspected_source",
+            status=CoworkStageStatus.PASSED if protocol_matches else CoworkStageStatus.FAILED,
+            owner_if_failed=CoworkFaultDomain.MCP_TRANSPORT,
+            detail="Protocol agreement is required between the source, request and response.",
+        )
+    )
 
     source_hashes = cast(dict[str, str], plan["source_hashes"])
     source_hashes_unchanged = all(
