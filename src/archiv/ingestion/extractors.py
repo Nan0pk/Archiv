@@ -233,7 +233,7 @@ ALL_EXTRACTORS: tuple[Extractor, ...] = (
     ),
     Extractor(
         name="xlsx",
-        version="2",
+        version="3",
         suffixes=frozenset({".xlsx"}),
         media_types=frozenset(
             {"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
