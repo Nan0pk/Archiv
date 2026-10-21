@@ -208,12 +208,20 @@ def test_manifest_and_relationship_workbook_parts_must_agree(
         )
     elif shape == "no-leading-slash":
         content_types = content_types.replace(
-            element, element.replace('"/xl/workbook.xml"', '"xl/decoy.xml"')
+            element, element.replace('PartName="/xl/workbook.xml"', 'PartName="xl/workbook.xml"')
         )
     else:
-        # openpyxl takes the first matching Override, not the last.
+        # openpyxl takes the first matching Override. A reader that keys Overrides
+        # by part name would let a later duplicate of the decoy part win, keep the
+        # real workbook type, and agree while openpyxl still parses the decoy.
+        workbook_type = re.search(r'ContentType="([^"]+)"', element)
+        assert workbook_type is not None
         decoy = element.replace("/xl/workbook.xml", "/xl/decoy.xml")
-        content_types = content_types.replace(element, decoy + element)
+        overwritten = decoy.replace(
+            workbook_type.group(1),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml",
+        )
+        content_types = content_types.replace(element, decoy + overwritten + element)
     members["[Content_Types].xml"] = content_types.encode("utf-8")
     with ZipFile(path, "w", ZIP_STORED) as archive:
         for name, data in members.items():
