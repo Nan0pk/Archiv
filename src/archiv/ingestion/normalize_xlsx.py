@@ -31,20 +31,20 @@ from dataclasses import dataclass, field
 from io import BytesIO
 from pathlib import Path
 from xml.etree import ElementTree
-from xml.parsers import expat
 from zipfile import ZipFile
 
 from openpyxl import load_workbook
-from openpyxl.utils.cell import get_column_letter, range_boundaries
+from openpyxl.utils.cell import coordinate_to_tuple, get_column_letter, range_boundaries
 from openpyxl.worksheet.formula import ArrayFormula
 
 from archiv.contracts import NormalizedDocument, NormalizedSegment, NormalizedTable
+from archiv.xml_safety import MalformedXmlError, XmlDeclarationError, refuse_xml_declarations
 
 __all__ = ["MAX_CELL_POSITIONS", "MAX_XML_NODES", "normalize_xlsx"]
 
-# A read-only openpyxl load pads every row out to the sheet's declared dimension and
-# yields an empty row for every missing row number, so a small file declaring a huge
-# dimension can make it iterate for hours. The budget counts every position iterated
+# A read-only openpyxl load pads rows and yields missing rows. Explicit bounds cover
+# both declared dimensions and actual cells, and are checked before iteration or row
+# allocation. A small file must not force enormous padding. The budget counts positions
 # across the whole workbook, empty padding included, and refuses the workbook once it
 # is spent. It also counts the positions of the tables built from the cells.
 MAX_CELL_POSITIONS = 5_000_000
@@ -90,14 +90,6 @@ class _Budget:
             raise ValueError("XLSX cell position limit exceeded")
 
 
-class _DeclarationRefused(Exception):
-    pass
-
-
-def _refuse_declaration(*_: object) -> None:
-    raise _DeclarationRefused
-
-
 class _NotXml(ValueError):
     pass
 
@@ -105,14 +97,11 @@ class _NotXml(ValueError):
 def _refuse_declarations(data: bytes, *, name: str) -> None:
     """Refuse any DTD or entity declaration, whatever the part's text encoding."""
 
-    scanner = expat.ParserCreate()
-    scanner.StartDoctypeDeclHandler = _refuse_declaration
-    scanner.EntityDeclHandler = _refuse_declaration
     try:
-        scanner.Parse(data, True)
-    except _DeclarationRefused:
+        refuse_xml_declarations(data)
+    except XmlDeclarationError:
         raise ValueError(f"XLSX XML declarations and entities are not allowed ({name})") from None
-    except expat.ExpatError as error:
+    except MalformedXmlError as error:
         raise _NotXml(f"XLSX package part is not well-formed XML ({name})") from error
 
 
@@ -246,6 +235,8 @@ class _Sheet:
     hidden: bool
     part: str | None
     chartsheet: bool
+    max_row: int = 1
+    max_column: int = 1
     hidden_rows: set[int] = field(default_factory=lambda: set[int]())
     hidden_columns: list[tuple[int, int]] = field(default_factory=lambda: list[tuple[int, int]]())
     merges: list[tuple[str, int, int, int, int]] = field(
@@ -379,6 +370,8 @@ def _read_sheet_structure(package: _Package, sheet: _Sheet) -> None:
     # listing (see docs/known-issues.md).
     parsed = package.sheet_structures.get(sheet.part)
     if parsed is not None:
+        sheet.max_row = parsed.max_row
+        sheet.max_column = parsed.max_column
         sheet.hidden_rows = parsed.hidden_rows
         sheet.hidden_columns = parsed.hidden_columns
         sheet.merges = parsed.merges
@@ -396,13 +389,39 @@ def _read_sheet_structure(package: _Package, sheet: _Sheet) -> None:
     row_number = 0
     for element in package.iterparse(sheet.part, data):
         local = _local(element.tag)
-        if local == "row":
+        if local == "dimension":
+            reference = element.attrib.get("ref", "")
+            _, _, max_column, max_row = range_boundaries(reference)
+            if max_column is None or max_row is None:
+                raise ValueError("XLSX worksheet dimension is not a cell range")
+            sheet.max_row = max(sheet.max_row, max_row)
+            sheet.max_column = max(sheet.max_column, max_column)
+        elif local == "row":
             # A row may omit its number, which then follows the previous row's.
             number = element.attrib.get("r")
-            row_number = row_number + 1 if number is None else _positive(number, label="row")
+            next_row = row_number + 1 if number is None else _positive(number, label="row")
+            if next_row <= row_number:
+                raise ValueError("XLSX worksheet rows are not in increasing order")
+            row_number = next_row
+            column_number = 0
+            for cell in element:
+                if _local(cell.tag) != "c":
+                    continue
+                coordinate = cell.attrib.get("r")
+                if coordinate:
+                    cell_row, column = coordinate_to_tuple(coordinate)
+                    if cell_row != row_number:
+                        raise ValueError("XLSX cell coordinate does not match its row")
+                else:
+                    column = column_number + 1
+                if column <= column_number:
+                    raise ValueError("XLSX worksheet cells are not in increasing column order")
+                column_number = column
+                sheet.max_column = max(sheet.max_column, column)
+            sheet.max_row = max(sheet.max_row, row_number)
             if element.attrib.get("hidden") in _TRUE:
                 sheet.hidden_rows.add(row_number)
-            # Cell elements are read by openpyxl, not here; drop them as each row closes.
+            # Cell values are read by openpyxl; drop them as each row closes.
             element.clear()
         elif local == "col" and element.attrib.get("hidden") in _TRUE:
             low = _positive(element.attrib.get("min"), label="column number")
@@ -592,6 +611,15 @@ def normalize_xlsx(
         for sheet in sheets:
             _read_sheet_structure(package, sheet)
 
+    # Do this before openpyxl can allocate a padded row or walk a long empty gap.
+    # Each sheet's two views must use identical bounds, including cells outside a
+    # stale dimension. The shared budget below still counts tables, links and charts.
+    if (
+        sum(sheet.max_row * sheet.max_column for sheet in sheets if not sheet.chartsheet)
+        > MAX_CELL_POSITIONS
+    ):
+        raise ValueError("XLSX cell position limit exceeded")
+
     formulas = load_workbook(BytesIO(raw), read_only=True, data_only=False)
     stored = load_workbook(BytesIO(raw), read_only=True, data_only=True)
     budget = _Budget()
@@ -604,8 +632,8 @@ def normalize_xlsx(
             stored_sheet = stored[sheet.name]
             sheet_segments, grid = _cells(
                 sheet,
-                formula_sheet.iter_rows(),  # pyright: ignore[reportArgumentType]
-                stored_sheet.iter_rows(),  # pyright: ignore[reportArgumentType]
+                formula_sheet.iter_rows(max_row=sheet.max_row, max_col=sheet.max_column),  # pyright: ignore[reportArgumentType]
+                stored_sheet.iter_rows(max_row=sheet.max_row, max_col=sheet.max_column),  # pyright: ignore[reportArgumentType]
                 budget,
             )
             segments.extend(sheet_segments)

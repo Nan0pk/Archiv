@@ -24,7 +24,6 @@ from __future__ import annotations
 import re
 from pathlib import Path
 from xml.etree import ElementTree
-from xml.parsers import expat
 
 from docx import Document
 from docx.document import Document as DocxDocument
@@ -32,6 +31,7 @@ from docx.opc.constants import RELATIONSHIP_TYPE as RT
 from docx.opc.part import Part
 
 from archiv.contracts import NormalizedDocument, NormalizedSegment, NormalizedTable
+from archiv.xml_safety import MalformedXmlError, XmlDeclarationError, refuse_xml_declarations
 
 __all__ = ["MAX_TABLE_CELLS", "MAX_TABLE_COLUMNS", "MAX_XML_NODES", "normalize_docx"]
 
@@ -285,30 +285,14 @@ def _container(
     return segments, tables, paragraph_number, table_number
 
 
-class _DeclarationRefused(Exception):
-    pass
-
-
-def _refuse_declaration(*_: object) -> None:
-    raise _DeclarationRefused
-
-
 def _refuse_declarations(data: bytes) -> None:
-    """Refuse any DTD or entity declaration, whatever the part's text encoding.
+    """Apply the shared XML check with the existing DOCX error messages."""
 
-    A byte search for ``<!DOCTYPE`` misses a part encoded as UTF-16, which the parser
-    still decodes and expands. So the check is made by the XML parser itself, which
-    stops the moment a declaration starts, before any entity is expanded.
-    """
-
-    scanner = expat.ParserCreate()
-    scanner.StartDoctypeDeclHandler = _refuse_declaration
-    scanner.EntityDeclHandler = _refuse_declaration
     try:
-        scanner.Parse(data, True)
-    except _DeclarationRefused:
+        refuse_xml_declarations(data)
+    except XmlDeclarationError:
         raise ValueError("DOCX XML declarations and entities are not allowed") from None
-    except expat.ExpatError as error:
+    except MalformedXmlError as error:
         raise ValueError("DOCX package part is not well-formed XML") from error
 
 
