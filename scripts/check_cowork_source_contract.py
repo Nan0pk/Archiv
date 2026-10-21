@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 from pathlib import Path
 from typing import cast
@@ -77,6 +78,18 @@ def main() -> None:
     connection_source = _read(root, "src/electron/mcp/client/MCPServerConnection.ts")
     manager_source = _read(root, "src/electron/mcp/client/MCPClientManager.ts")
     cli_docs = _read(root, "docs/cli.md")
+    protocol_declarations = re.findall(
+        r'\bconst\s+PROTOCOL_VERSION\s*=\s*[\'"](\d{4}-\d{2}-\d{2})[\'"]',
+        connection_source,
+    )
+    protocol_version = protocol_declarations[0] if len(protocol_declarations) == 1 else None
+    record("mcp_connection:protocol_version", protocol_version is not None, str(protocol_version))
+    if arguments.mode == "pinned":
+        record(
+            "pinned_protocol_version",
+            protocol_version == lock["protocol_version"],
+            str(protocol_version),
+        )
 
     for field in (
         'export type MCPTransportType = "stdio"',
@@ -111,7 +124,6 @@ def main() -> None:
         record(f"stdio_transport:{phrase}", phrase in transport_source, phrase)
 
     for phrase in (
-        'const PROTOCOL_VERSION = "2024-11-05"',
         "MCP_METHODS.INITIALIZE",
         "MCP_METHODS.TOOLS_LIST",
         "MCP_METHODS.TOOLS_CALL",
@@ -120,11 +132,26 @@ def main() -> None:
         record(f"mcp_connection:{phrase}", phrase in connection_source, phrase)
 
     for phrase in (
-        "return await connection.callTool(toolName, args)",
         "async testServer(",
         "tools: toolCount",
     ):
         record(f"mcp_manager:{phrase}", phrase in manager_source, phrase)
+
+    # Current CoWork can map a displayed tool name back to its server name and
+    # pass a third options argument. Keep requiring that the result is returned
+    # and the caller's arguments are forwarded, rather than one exact spelling.
+    primary_tool_method = re.search(r"(?ms)^([ \t]*)async\s+callTool\s*\(.*?^\1\}", manager_source)
+    forwards_tool_call = re.search(
+        r"return\s+await\s+connection\.callTool\(\s*"
+        r"(?:toolName|this\.toolServerNames\.get\(toolName\)\s*\?\?\s*toolName)"
+        r"\s*,\s*args\s*[,)]",
+        primary_tool_method.group(0) if primary_tool_method else "",
+    )
+    record(
+        "mcp_manager:returns_tool_call_with_args",
+        forwards_tool_call is not None,
+        "manager returns the connection tool result with the caller's arguments",
+    )
 
     for phrase in (
         "cowork mcp list|add|remove|enable|disable|test",
@@ -141,6 +168,7 @@ def main() -> None:
         "cowork_revision": revision,
         "cowork_version": version,
         "node_engine": node_engine,
+        "protocol_version": protocol_version,
         "compatible": compatible,
         "upstream_adopted": False,
         "revision_drift": revision != locked_revision,
