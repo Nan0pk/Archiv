@@ -184,3 +184,75 @@ def test_timeout_does_not_leak_worker_descriptors(
 
     assert marker.exists()
     assert len(list(Path("/proc/self/fd").iterdir())) <= before
+
+
+def test_manifest_and_relationship_workbook_parts_must_agree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # openpyxl picks the workbook part from [Content_Types].xml; this reader picks it
+    # from the package relationships. A file where those disagree would let the
+    # budgets describe one workbook while openpyxl parses another.
+    path = _workbook(tmp_path / "decoy.xlsx")
+    with ZipFile(path) as archive:
+        members = {name: archive.read(name) for name in archive.namelist()}
+    members["xl/decoy.xml"] = members["xl/workbook.xml"]
+    content_types = members["[Content_Types].xml"].decode("utf-8")
+    assert "/xl/workbook.xml" in content_types
+    members["[Content_Types].xml"] = content_types.replace(
+        "/xl/workbook.xml", "/xl/decoy.xml"
+    ).encode("utf-8")
+    with ZipFile(path, "w", ZIP_STORED) as archive:
+        for name, data in members.items():
+            archive.writestr(name, data)
+    marker = tmp_path / "library-called"
+    _instrument_library(monkeypatch, marker, stall=False)
+
+    with pytest.raises(MalformedInputError, match="disagrees with the package manifest"):
+        normalize(path, sha256_file(path))
+
+    assert not marker.exists()
+
+
+def test_non_utf8_stdout_locale_cannot_corrupt_the_response(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "unicode.xlsx"
+    book = Workbook()
+    sheet = book.active
+    assert sheet is not None
+    sheet["A1"] = "日本語 😀 ARCHIV"
+    book.save(path)
+    bootstrap = xlsx_process._WORKER_BOOTSTRAP  # pyright: ignore[reportPrivateUsage]
+    monkeypatch.setattr(
+        xlsx_process,
+        "_WORKER_BOOTSTRAP",
+        'import sys\nsys.stdout.reconfigure(encoding="latin-1")\n' + bootstrap,
+    )
+
+    result = normalize(path, sha256_file(path))
+
+    assert [segment.text for segment in result.segments] == ["日本語 😀 ARCHIV"]
+
+
+def test_worker_refuses_a_file_that_no_longer_matches_its_hash(tmp_path: Path) -> None:
+    path = _workbook(tmp_path / "changed.xlsx")
+
+    with pytest.raises(MalformedInputError, match="changed before the worker read it"):
+        normalize(path, "0" * 64)
+
+
+def test_oversized_response_is_reported_as_a_resource_limit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = _workbook(tmp_path / "oversized.xlsx")
+    monkeypatch.setattr(
+        xlsx_process,
+        "_WORKER_BOOTSTRAP",
+        "import os, resource\n"
+        "resource.setrlimit(resource.RLIMIT_FSIZE, (16, 16))\n"
+        "while True:\n"
+        '    os.write(1, b"x" * 64)\n',
+    )
+
+    with pytest.raises(NativeResourceLimitError, match="could not write its complete result"):
+        normalize(path, sha256_file(path))

@@ -56,6 +56,15 @@ MAX_CELL_POSITIONS = 5_000_000
 MAX_XML_NODES = 25_000_000
 
 _RELATIONSHIPS = "http://schemas.openxmlformats.org/package/2006/relationships"
+# openpyxl chooses the workbook part from [Content_Types].xml in this order. This
+# reader chooses it from the package relationships, so the two must agree before the
+# sheet budgets and the repeated-sheet check can mean anything.
+_WORKBOOK_CONTENT_TYPES = (
+    "application/vnd.ms-excel.template.macroEnabled.main+xml",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.template.main+xml",
+    "application/vnd.ms-excel.sheet.macroEnabled.main+xml",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml",
+)
 _A = "http://schemas.openxmlformats.org/drawingml/2006/main"
 _C = "http://schemas.openxmlformats.org/drawingml/2006/chart"
 _HIDDEN_STATES = {"hidden", "veryHidden"}
@@ -269,6 +278,36 @@ def _positive(value: str | None, *, label: str) -> int:
     return int(value)
 
 
+def _manifest_workbook_part(package: _Package) -> str | None:
+    """The workbook part openpyxl will load, chosen from ``[Content_Types].xml``.
+
+    ``None`` means the manifest names no workbook part; openpyxl then fails on its own,
+    so this reader does not need to guess.
+    """
+
+    content_types = "[Content_Types].xml"
+    data = package.read(content_types)
+    if data is None:
+        return None
+    root = package.root(content_types, data)
+    overrides: dict[str, str] = {}
+    defaults: set[str] = set()
+    for element in root:
+        local = _local(element.tag)
+        if local == "Override":
+            part_name = element.attrib.get("PartName", "").lstrip("/")
+            overrides[part_name] = element.attrib.get("ContentType", "")
+        elif local == "Default":
+            defaults.add(element.attrib.get("ContentType", ""))
+    for content_type in _WORKBOOK_CONTENT_TYPES:
+        for part, declared in overrides.items():
+            if declared == content_type:
+                return part
+    if defaults.intersection(_WORKBOOK_CONTENT_TYPES):
+        return "xl/workbook.xml"
+    return None
+
+
 def _workbook_sheets(package: _Package) -> list[_Sheet]:
     workbook_part = next(
         (
@@ -280,6 +319,11 @@ def _workbook_sheets(package: _Package) -> list[_Sheet]:
     )
     if workbook_part is None:
         raise ValueError("XLSX package has no workbook part")
+    manifest_part = _manifest_workbook_part(package)
+    if manifest_part is not None and manifest_part != workbook_part:
+        # openpyxl would read a different part than the one this reader budgets and
+        # checks, so the budgets would describe a workbook that is never parsed.
+        raise ValueError("XLSX workbook part disagrees with the package manifest")
     data = package.read(workbook_part)
     if data is None:
         raise ValueError("XLSX package workbook part is missing")

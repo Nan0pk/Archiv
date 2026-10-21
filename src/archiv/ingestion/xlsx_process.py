@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 from archiv.contracts import NormalizedDocument
+from archiv.hashing import sha256_file
 from archiv.ingestion.limits import (
     MAX_CPU_SECONDS,
     MAX_EXPANDED_BYTES,
@@ -78,17 +80,35 @@ def read_in_worker(
                 f"XLSX processing time limit exceeded ({MAX_TIMEOUT_SECONDS} seconds)"
             ) from error
         if completed.returncode < 0:
+            if -completed.returncode == signal.SIGXFSZ:
+                raise NativeResourceLimitError(
+                    f"XLSX normalized response size limit exceeded ({MAX_EXPANDED_BYTES} bytes)"
+                )
             raise NativeResourceLimitError(
                 f"XLSX worker terminated by signal {-completed.returncode}"
             )
         if completed.returncode != 0:
             diagnostic.seek(0)
             detail = diagnostic.read(500).decode("utf-8", errors="replace")
+            if "EFBIG" in detail or "File too large" in detail or "file size limit" in detail:
+                # A POSIX child that writes past RLIMIT_FSIZE may die by SIGXFSZ or
+                # raise OSError(EFBIG); Python then exits 120 while flushing stdout.
+                raise NativeResourceLimitError(
+                    f"XLSX normalized response size limit exceeded ({MAX_EXPANDED_BYTES} bytes)"
+                )
+            if completed.returncode == 120:
+                # CPython's exit status when it cannot flush its standard streams. The
+                # child only writes its response, so a truncated response is the cause.
+                raise NativeResourceLimitError(
+                    "XLSX worker could not write its complete result; "
+                    "the response size limit was probably reached"
+                )
             raise ValueError(f"XLSX worker failed (exit {completed.returncode}): {detail}")
-        if output.tell() > MAX_EXPANDED_BYTES:
-            raise NativeResourceLimitError("XLSX normalized response size limit exceeded")
         output.seek(0)
-        response_value: object = json.loads(output.read(MAX_EXPANDED_BYTES + 1))
+        payload = output.read(MAX_EXPANDED_BYTES + 1)
+        if len(payload) > MAX_EXPANDED_BYTES:
+            raise NativeResourceLimitError("XLSX normalized response size limit exceeded")
+        response_value: object = json.loads(payload.decode("utf-8"))
     if not isinstance(response_value, dict):
         raise ValueError("XLSX worker response must be an object")
     response = cast(dict[str, object], response_value)
@@ -104,6 +124,13 @@ def read_in_worker(
     return document
 
 
+def _emit(response: dict[str, Any]) -> None:
+    """Write UTF-8 bytes, independent of the child's locale and stdout encoding."""
+
+    sys.stdout.buffer.write(json.dumps(response, ensure_ascii=False).encode("utf-8"))
+    sys.stdout.buffer.flush()
+
+
 def worker_main() -> None:
     """Parse without storage access; exchange only JSON, never executable objects."""
 
@@ -112,14 +139,23 @@ def worker_main() -> None:
     request = cast(dict[str, object], json.loads(sys.stdin.buffer.read(64 * 1024)))
     reader.MAX_CELL_POSITIONS = int(cast(int, request["cell_limit"]))
     reader.MAX_XML_NODES = int(cast(int, request["node_limit"]))
+    path = Path(cast(str, request["path"]))
+    digest = cast(str, request["digest"])
     try:
+        # The parent hashed this file before starting the child. Hashing it here makes
+        # the hash carried by the returned document describe bytes that were read.
+        if sha256_file(path) != digest:
+            raise ValueError("XLSX source changed before the worker read it")
         document = reader.read_xlsx(
-            Path(cast(str, request["path"])),
-            cast(str, request["digest"]),
+            path,
+            digest,
             source_name=cast(str, request["source_name"]),
             media_type=cast(str, request["media_type"]),
         )
-        response = {"status": "succeeded", "document": document.model_dump(mode="json")}
+        response: dict[str, Any] = {
+            "status": "succeeded",
+            "document": document.model_dump(mode="json"),
+        }
     except (MemoryError, NativeResourceLimitError) as error:
         response = {
             "status": "resource_limit",
@@ -127,4 +163,12 @@ def worker_main() -> None:
         }
     except Exception as error:
         response = {"status": "error", "error": f"{type(error).__name__}: {error}"}
-    json.dump(response, sys.stdout, ensure_ascii=False)
+    try:
+        _emit(response)
+    except MemoryError:
+        _emit(
+            {
+                "status": "resource_limit",
+                "error": "XLSX worker ran out of memory while writing its result",
+            }
+        )

@@ -446,8 +446,12 @@ container. None of these is new with S16 except where it says so. None is fixed 
   output-file limits. A timed-out or killed worker leaves no original, no derived data
   and no searchable content; the failure is recorded.
 
-S16C raises the Excel extractor version from 3 to 4, so existing derived data is marked
-stale. Run `archiv rebuild-derived` to rebuild it.
+S16C raises the Excel extractor version from 3 to 4. That field is recorded by the
+compatibility export and nothing reads it to mark derivatives stale, so existing Excel
+derived data is left as it is. Do not run `archiv rebuild-derived` on a workbook this
+change now refuses: it deletes the existing derived root before normalizing, so the old
+derived evidence is destroyed and the rebuild then fails. Rebuild only a workbook that
+still ingests.
 
 What this does not do: it is process isolation with resource limits, not a sandbox
 against hostile code. The worker inherits the application environment and installed

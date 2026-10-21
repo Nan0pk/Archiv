@@ -61,7 +61,7 @@ class NormalizeFunc(Protocol):
 @dataclass(frozen=True)
 class Extractor:
     name: str
-    version: str  # bumped => derived data is stale => rebuild
+    version: str  # recorded by the compatibility export; does not mark data stale
     suffixes: frozenset[str]
     media_types: frozenset[str]
     magic: tuple[bytes, ...]  # content signatures, checked before suffix
