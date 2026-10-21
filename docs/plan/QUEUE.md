@@ -60,7 +60,7 @@ Word, Excel and PowerPoint files yield their tables, notes, computed values and 
 | **S15** | DOCX: tables, headers, footers, footnotes, comments, hyperlinks, headings | `S00` | [full](steps/S15.md) |
 | **S16** | XLSX: computed values and formulas, hyperlinks, merged ranges, hidden markers, charts | `S15` | [full](steps/S16.md) |
 | **S16A** | Reject XML declarations regardless of encoding | `S16` | [full](steps/S16A.md) |
-| **S16B** | Recover Excel cells beyond incorrect worksheet dimensions | `S16A` | [**stub**](steps/S16B.md) |
+| **S16B** | Recover Excel cells beyond incorrect worksheet dimensions | `S16A` | [full](steps/S16B.md) |
 | **S16C** | Enforce Excel processing limits across library calls | `S16B` | [**stub**](steps/S16C.md) |
 | **S17** | PPTX: speaker notes, tables, charts, grouped shapes, placeholder roles, hidden slides | `S16C` | [**stub**](steps/S17.md) |
 | **S18** | OpenDocument to OOXML parity fixtures and format-matrix update | `S17` | [**stub**](steps/S18.md) |
