@@ -304,7 +304,12 @@ class _SlideReader:
         """
 
         self.chart_number += 1
-        reference = _xml(frame.element).find(f".//{{{CHART_NAMESPACE}}}chart")
+        # The displayed chart is named at graphic/graphicData/chart. A chart
+        # reference in the frame's non-visual properties is decoration and must
+        # not replace it, as with the table lookup above.
+        reference = _xml(frame.element).find(
+            f"{{{_A}}}graphic/{{{_A}}}graphicData/{{{CHART_NAMESPACE}}}chart"
+        )
         relationship_id = None if reference is None else reference.get(f"{{{_R}}}id")
         if not relationship_id:
             return

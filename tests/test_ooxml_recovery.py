@@ -1661,3 +1661,50 @@ def test_pptx_decoy_table_elsewhere_in_the_frame_does_not_shift_cells(tmp_path: 
         for row in (1, 2)
         for column in (1, 2)
     ]
+
+
+def test_pptx_decoy_chart_elsewhere_in_the_frame_does_not_replace_the_chart(
+    tmp_path: Path,
+) -> None:
+    """The chart reference comes from graphicData, not from non-visual properties."""
+
+    presentation = Presentation()
+    slide = _blank_slide(presentation)
+    for title, series in (("First chart", "First series"), ("Second chart", "Second series")):
+        data = CategoryChartData()
+        data.categories = ["A"]
+        data.add_series(series, (1,))  # pyright: ignore[reportUnknownMemberType]
+        frame = cast(
+            GraphicFrame,
+            slide.shapes.add_chart(XL_CHART_TYPE.COLUMN_CLUSTERED, *_PLACE, data),  # pyright: ignore[reportArgumentType]
+        )
+        chart = frame.chart
+        chart.has_title = True
+        chart.chart_title.text_frame.text = title
+    path = _save_deck(presentation, tmp_path / "decoy-chart.pptx")
+
+    with ZipFile(path) as archive:
+        slide_xml = archive.read(PPTX_SLIDE).decode("utf-8")
+    chart_relationships = re.findall(r'<c:chart\b[^>]*\br:id="([^"]+)"', slide_xml)
+    assert len(chart_relationships) == 2
+
+    decoy = (
+        '<p:extLst><p:ext uri="{00000000-0000-0000-0000-000000000000}">'
+        '<c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" '
+        f'r:id="{chart_relationships[1]}"/>'
+        "</p:ext></p:extLst>"
+    )
+
+    def add_decoy(xml: str) -> str:
+        frame_properties = "</p:cNvGraphicFramePr><p:nvPr/>"
+        assert frame_properties in xml
+        return xml.replace(frame_properties, f"</p:cNvGraphicFramePr><p:nvPr>{decoy}</p:nvPr>", 1)
+
+    _rewrite(path, {}, {PPTX_SLIDE: add_decoy})
+
+    result = normalize(path, sha256_file(path))
+
+    assert [(segment.locator, segment.text) for segment in result.segments] == [
+        ({"slide": 1, "shape": 1, "chart": 1}, "First chart\nFirst series"),
+        ({"slide": 1, "shape": 2, "chart": 2}, "Second chart\nSecond series"),
+    ]
