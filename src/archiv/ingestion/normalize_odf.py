@@ -339,15 +339,39 @@ def _cell_value(cell: ElementTree.Element) -> str | None:
     return None
 
 
+def _paragraph_texts(
+    element: ElementTree.Element,
+    *,
+    skip_tables: bool = False,
+) -> list[str]:
+    """Paragraph text under one container, stopping at each paragraph.
+
+    Stopping at a paragraph keeps a note body from being collected twice: the
+    paragraph's own text already includes it inline. A table subtree is skipped only
+    when the caller asks for the text outside a frame's table.
+    """
+
+    paragraphs: list[str] = []
+    stack = list(reversed(list(element)))
+    while stack:
+        child = stack.pop()
+        if skip_tables and child.tag == f"{{{TABLE}}}table":
+            continue
+        if child.tag in {f"{{{TEXT}}}p", f"{{{TEXT}}}h"}:
+            value = _odf_text(child)
+            if value:
+                paragraphs.append(value)
+            continue
+        stack.extend(reversed(list(child)))
+    return paragraphs
+
+
 def _cell_text(cell: ElementTree.Element) -> str | None:
     """A table cell's paragraphs, joined the way the Word reader joins them."""
 
-    paragraphs = [
-        _odf_text(paragraph)
-        for paragraph in cell.iter()
-        if paragraph.tag in {f"{{{TEXT}}}p", f"{{{TEXT}}}h"}
-    ]
-    joined = "\n".join(value for value in paragraphs if value)
+    joined = "\n".join(_paragraph_texts(cell))
+    if len(joined) > MAX_SEGMENT_CHARACTERS:
+        raise ValueError("ODF normalized segment character limit exceeded")
     if joined:
         return joined
     for attribute in (
@@ -542,12 +566,19 @@ def _iter_pages(element: ElementTree.Element) -> Iterator[ElementTree.Element]:
 
 
 def _object_text(element: ElementTree.Element) -> str:
-    paragraphs = [
-        _odf_text(paragraph)
-        for paragraph in element.iter()
-        if paragraph.tag in {f"{{{TEXT}}}p", f"{{{TEXT}}}h"}
-    ]
-    return "\n".join(value for value in paragraphs if value)
+    joined = "\n".join(_paragraph_texts(element))
+    if len(joined) > MAX_SEGMENT_CHARACTERS:
+        raise ValueError("ODF normalized segment character limit exceeded")
+    return joined
+
+
+def _text_outside_tables(element: ElementTree.Element) -> str:
+    """A frame's paragraph text that is not inside its table."""
+
+    joined = "\n".join(_paragraph_texts(element, skip_tables=True))
+    if len(joined) > MAX_SEGMENT_CHARACTERS:
+        raise ValueError("ODF normalized segment character limit exceeded")
+    return joined
 
 
 _NOTES_FURNITURE = {"page", "page-number", "date-time", "header", "footer"}
@@ -608,6 +639,14 @@ def _page_segments(
                 segments.extend(table_segments)
                 if normalized is not None:
                     tables.append(normalized)
+                remaining = _text_outside_tables(element)
+                if remaining:
+                    segments.append(
+                        NormalizedSegment(
+                            locator={page_key: page_number, "object": object_number},
+                            text=remaining,
+                        )
+                    )
                 continue
             value = _object_text(element)
             if not value:

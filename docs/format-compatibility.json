@@ -802,7 +802,7 @@
       "encryption": "manifest-declared encrypted entries fail closed during normalization",
       "known_limits": [
         "tables normalize as structured rows; a table nested inside a cell is refused; page geometry, frames, and styles are not reconstructed",
-        "hyperlinks, footnotes and endnotes are not surfaced in this version"
+        "hyperlink targets and footnote or endnote structure are not surfaced; their text and citation markers remain inline in the paragraph"
       ],
       "support_level": "full"
     },
@@ -846,7 +846,7 @@
       "encryption": "manifest-declared encrypted entries fail closed during normalization",
       "known_limits": [
         "charts and pivot state are not reconstructed",
-        "hyperlinks, merged ranges, and hidden sheets, rows and columns are not surfaced in this version",
+        "hyperlink targets, merged-range state, and hidden sheet, row and column markers are not surfaced; cell values are still read",
         "retrieval indexes each normalized cell or row segment independently; phrases split across cells may not match as one literal phrase"
       ],
       "support_level": "partial"
@@ -894,7 +894,7 @@
       "macros": "embedded content is never executed",
       "encryption": "manifest-declared encrypted entries fail closed during normalization",
       "known_limits": [
-        "charts, grouped shapes and hidden slides or shapes are not reconstructed; animation semantics are not surfaced",
+        "charts, grouped shapes and hidden slides or shapes are not reconstructed; a table nested inside a table cell is refused; animation semantics are not surfaced",
         "speaker notes are read from top-level text frames; a table or group on a notes page is not read"
       ],
       "support_level": "partial"
@@ -937,7 +937,7 @@
       "macros": "embedded content is never executed",
       "encryption": "manifest-declared encrypted entries fail closed during normalization",
       "known_limits": [
-        "vector geometry is not reconstructed; text inside drawing objects and table cells is the searchable surface"
+        "vector geometry is not reconstructed; a table nested inside a table cell is refused; text inside drawing objects and table cells is the searchable surface"
       ],
       "support_level": "full"
     },

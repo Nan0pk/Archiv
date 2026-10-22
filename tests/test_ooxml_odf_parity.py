@@ -281,6 +281,56 @@ def test_text_table_row_budget_is_enforced(tmp_path: Path, monkeypatch: pytest.M
         normalize(path, sha256_file(path))
 
 
+def test_text_table_cell_does_not_repeat_footnote_text(tmp_path: Path) -> None:
+    path = tmp_path / "cell-footnote.odt"
+    _package(
+        path,
+        "application/vnd.oasis.opendocument.text",
+        _content(
+            "<office:text>"
+            '<table:table table:name="CellNote">'
+            "<table:table-row><table:table-cell>"
+            "<text:p>Cell text"
+            '<text:note text:note-class="footnote">'
+            "<text:note-citation>1</text:note-citation>"
+            "<text:note-body><text:p>FOOTNOTE TEXT</text:p></text:note-body>"
+            "</text:note>"
+            "</text:p>"
+            "</table:table-cell></table:table-row>"
+            "</table:table>"
+            "</office:text>"
+        ),
+    )
+
+    document = normalize(path, sha256_file(path))
+
+    assert _texts(document) == ["Cell text1FOOTNOTE TEXT"]
+    assert document.tables[0].rows == [["Cell text1FOOTNOTE TEXT"]]
+
+
+def test_table_cell_joined_character_limit_is_enforced(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(normalize_odf_module, "MAX_SEGMENT_CHARACTERS", 5)
+    path = tmp_path / "long-cell.odt"
+    _package(
+        path,
+        "application/vnd.oasis.opendocument.text",
+        _content(
+            "<office:text>"
+            '<table:table table:name="LongCell">'
+            "<table:table-row><table:table-cell>"
+            "<text:p>abcd</text:p><text:p>efgh</text:p>"
+            "</table:table-cell></table:table-row>"
+            "</table:table>"
+            "</office:text>"
+        ),
+    )
+
+    with pytest.raises(MalformedInputError, match="character limit exceeded"):
+        normalize(path, sha256_file(path))
+
+
 def test_drawing_page_table_is_read(tmp_path: Path) -> None:
     path = tmp_path / "drawing.odg"
     _package(
@@ -306,6 +356,34 @@ def test_drawing_page_table_is_read(tmp_path: Path) -> None:
         ("D1", {"page": 1, "object": 1, "row": 1, "column": 1}),
         ("D2", {"page": 1, "object": 1, "row": 1, "column": 2}),
     ]
+
+
+def test_drawing_frame_keeps_caption_text_outside_its_table(tmp_path: Path) -> None:
+    path = tmp_path / "caption.odg"
+    _package(
+        path,
+        "application/vnd.oasis.opendocument.graphics",
+        _content(
+            "<office:drawing>"
+            '<draw:page draw:name="Page 1">'
+            '<draw:frame draw:name="TableFrame">'
+            '<table:table table:name="CaptionTable">'
+            f"{_rows(('Cell',))}"
+            "</table:table>"
+            "<draw:caption><draw:text-box>"
+            "<text:p>CAPTION TEXT</text:p>"
+            "</draw:text-box></draw:caption>"
+            "</draw:frame>"
+            "</draw:page>"
+            "</office:drawing>",
+            presentation=True,
+        ),
+    )
+
+    document = normalize(path, sha256_file(path))
+
+    assert _texts(document) == ["Cell", "CAPTION TEXT"]
+    assert document.tables[0].rows == [["Cell"]]
 
 
 def test_text_table_header_rows_and_row_groups_are_read(tmp_path: Path) -> None:
