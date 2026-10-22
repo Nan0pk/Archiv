@@ -64,7 +64,7 @@ Word, Excel and PowerPoint files yield their tables, notes, computed values and 
 | **S16C** | Enforce Excel processing limits across library calls | `S16B` | [full](steps/S16C.md) |
 | **S17** | PPTX: speaker notes, tables, charts, grouped shapes, placeholder roles, hidden slides | `S16C` | [full](steps/S17.md) |
 | **S18** | OpenDocument to OOXML parity fixtures and format-matrix update | `S17` | [full](steps/S18.md) |
-| **S18A** | OpenDocument parity for hyperlinks, notes, spreadsheet state and advanced presentation recovery | `S18` | [**stub**](steps/S18A.md) |
+| **S18A** | OpenDocument parity for hyperlinks, notes, spreadsheet state and advanced presentation recovery | `S18` | [**full**](steps/S18A.md) |
 
 ---
 

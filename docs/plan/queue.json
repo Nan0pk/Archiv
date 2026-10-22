@@ -586,7 +586,7 @@
       "phase": "C",
       "title": "OpenDocument parity for hyperlinks, notes, spreadsheet state and advanced presentation recovery",
       "doc": "docs/plan/steps/S18A.md",
-      "detail": "stub",
+      "detail": "full",
       "depends_on": [
         "S18"
       ],
