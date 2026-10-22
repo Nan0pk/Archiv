@@ -789,6 +789,11 @@
         [
           "heading",
           "level"
+        ],
+        [
+          "column",
+          "row",
+          "table"
         ]
       ],
       "grounding": true,
@@ -796,7 +801,8 @@
       "macros": "embedded scripts are never executed; manifest and content are parsed as data only",
       "encryption": "manifest-declared encrypted entries fail closed during normalization",
       "known_limits": [
-        "tables normalize as structured rows; page geometry, frames, and styles are not reconstructed"
+        "tables normalize as structured rows; a table nested inside a cell is refused; page geometry, frames, and styles are not reconstructed",
+        "hyperlink targets and footnote or endnote structure are not surfaced; their text and citation markers remain inline in the paragraph"
       ],
       "support_level": "full"
     },
@@ -840,6 +846,7 @@
       "encryption": "manifest-declared encrypted entries fail closed during normalization",
       "known_limits": [
         "charts and pivot state are not reconstructed",
+        "hyperlink targets, merged-range state, and hidden sheet, row and column markers are not surfaced; cell values are still read",
         "retrieval indexes each normalized cell or row segment independently; phrases split across cells may not match as one literal phrase"
       ],
       "support_level": "partial"
@@ -862,12 +869,24 @@
       "text_extraction": "native",
       "structure": [
         "slides",
-        "objects"
+        "objects",
+        "tables",
+        "speaker notes"
       ],
       "locator_shapes": [
         [
           "object",
           "slide"
+        ],
+        [
+          "column",
+          "object",
+          "row",
+          "slide"
+        ],
+        [
+          "slide",
+          "speaker_notes"
         ]
       ],
       "grounding": true,
@@ -875,7 +894,8 @@
       "macros": "embedded content is never executed",
       "encryption": "manifest-declared encrypted entries fail closed during normalization",
       "known_limits": [
-        "speaker notes are skipped by the segment model; animation semantics are not surfaced"
+        "chart content, group structure, hidden-slide and hidden-shape markers, and placeholder roles are not reconstructed; the text inside grouped shapes and hidden slides or shapes is still read as ordinary object text; a table nested inside a table cell is refused; animation semantics are not surfaced",
+        "speaker notes are read from top-level text frames; a table or group on a notes page is not read"
       ],
       "support_level": "partial"
     },
@@ -897,12 +917,19 @@
       "text_extraction": "native",
       "structure": [
         "pages",
-        "objects"
+        "objects",
+        "tables"
       ],
       "locator_shapes": [
         [
           "object",
           "page"
+        ],
+        [
+          "column",
+          "object",
+          "page",
+          "row"
         ]
       ],
       "grounding": true,
@@ -910,7 +937,7 @@
       "macros": "embedded content is never executed",
       "encryption": "manifest-declared encrypted entries fail closed during normalization",
       "known_limits": [
-        "vector geometry is not reconstructed; text inside drawing objects is the searchable surface"
+        "vector geometry is not reconstructed; a table nested inside a table cell is refused; text inside drawing objects and table cells is the searchable surface"
       ],
       "support_level": "full"
     },

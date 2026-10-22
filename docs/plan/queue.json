@@ -567,7 +567,7 @@
       "phase": "C",
       "title": "OpenDocument to OOXML parity fixtures and format-matrix update",
       "doc": "docs/plan/steps/S18.md",
-      "detail": "stub",
+      "detail": "full",
       "depends_on": [
         "S17"
       ],
@@ -577,6 +577,25 @@
           "tests/test_ooxml_odf_parity.py::test_equivalent_documents_yield_equivalent_recovery",
           "tests/test_ooxml_odf_parity.py::test_equivalent_workbooks_yield_equivalent_recovery",
           "tests/test_ooxml_odf_parity.py::test_equivalent_presentations_yield_equivalent_recovery",
+          "tests/test_format_matrix.py::test_matrix_matches_live_ingestion"
+        ]
+      }
+    },
+    {
+      "id": "S18A",
+      "phase": "C",
+      "title": "OpenDocument parity for hyperlinks, notes, spreadsheet state and advanced presentation recovery",
+      "doc": "docs/plan/steps/S18A.md",
+      "detail": "stub",
+      "depends_on": [
+        "S18"
+      ],
+      "acceptance": {
+        "kind": "pytest",
+        "targets": [
+          "tests/test_ooxml_odf_parity.py::test_equivalent_documents_yield_equivalent_hyperlinks_and_notes",
+          "tests/test_ooxml_odf_parity.py::test_equivalent_workbooks_yield_equivalent_merged_and_hidden_state",
+          "tests/test_ooxml_odf_parity.py::test_equivalent_presentations_yield_equivalent_charts_groups_and_hidden_marks",
           "tests/test_format_matrix.py::test_matrix_matches_live_ingestion"
         ]
       }

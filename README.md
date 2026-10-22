@@ -243,10 +243,10 @@ never quietly accepted and half-read.
 | Word | `.docx` | Natively | a paragraph or heading, a table cell, a header or footer, a footnote, endnote or comment, or a link target |
 | Spreadsheet | `.xlsx` | Natively | a cell (with its formula, merged range or hidden marker), a link target, or a chart |
 | Presentation | `.pptx` | Natively | a shape (or a shape inside a group), a table cell, or a chart on a slide, with its placeholder role and hidden marker, or a slide's speaker notes |
-| OpenDocument text | `.odt` `.ott` `.odm` `.otm` `.fodt` | Natively | a paragraph or heading |
-| OpenDocument spreadsheet | `.ods` `.ots` `.fods` | Natively | a row and column, with formula |
-| OpenDocument presentation | `.odp` `.otp` `.fodp` | Natively | an object on a slide |
-| OpenDocument drawing | `.odg` `.otg` `.fodg` | Natively | an object on a page |
+| OpenDocument text | `.odt` `.ott` `.odm` `.otm` `.fodt` | Natively | a paragraph or heading, or a table cell |
+| OpenDocument spreadsheet | `.ods` `.ots` `.fods` | Natively | a row and column, with formula and stored value |
+| OpenDocument presentation | `.odp` `.otp` `.fodp` | Natively | an object on a slide, a table cell, or a slide's speaker note |
+| OpenDocument drawing | `.odg` `.otg` `.fodg` | Natively | an object on a page, or a table cell |
 | OpenDocument formula | `.odf` | Natively | the formula |
 | OpenDocument database | `.odb` | Details only | a named database object |
 | InPage | `.inp` | Natively | a stream and byte offset |
