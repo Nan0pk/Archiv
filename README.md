@@ -242,7 +242,7 @@ never quietly accepted and half-read.
 | PDF | `.pdf` | Natively | a page |
 | Word | `.docx` | Natively | a paragraph or heading, a table cell, a header or footer, a footnote, endnote or comment, or a link target |
 | Spreadsheet | `.xlsx` | Natively | a cell (with its formula, merged range or hidden marker), a link target, or a chart |
-| Presentation | `.pptx` | Natively | a shape on a slide |
+| Presentation | `.pptx` | Natively | a shape (or a shape inside a group), a table cell, or a chart on a slide, with its placeholder role and hidden marker, or a slide's speaker notes |
 | OpenDocument text | `.odt` `.ott` `.odm` `.otm` `.fodt` | Natively | a paragraph or heading |
 | OpenDocument spreadsheet | `.ods` `.ots` `.fods` | Natively | a row and column, with formula |
 | OpenDocument presentation | `.odp` `.otp` `.fodp` | Natively | an object on a slide |
