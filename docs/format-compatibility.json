@@ -894,7 +894,7 @@
       "macros": "embedded content is never executed",
       "encryption": "manifest-declared encrypted entries fail closed during normalization",
       "known_limits": [
-        "charts, grouped shapes and hidden slides or shapes are not reconstructed; a table nested inside a table cell is refused; animation semantics are not surfaced",
+        "chart content, group structure, hidden-slide and hidden-shape markers, and placeholder roles are not reconstructed; the text inside grouped shapes and hidden slides or shapes is still read as ordinary object text; a table nested inside a table cell is refused; animation semantics are not surfaced",
         "speaker notes are read from top-level text frames; a table or group on a notes page is not read"
       ],
       "support_level": "partial"

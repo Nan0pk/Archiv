@@ -321,6 +321,12 @@ def _iter_sheet_rows(element: ElementTree.Element) -> Iterator[ElementTree.Eleme
             yield from _iter_sheet_rows(child)
 
 
+def _bounded_segment_text(value: str) -> str:
+    if len(value) > MAX_SEGMENT_CHARACTERS:
+        raise ValueError("ODF normalized segment character limit exceeded")
+    return value
+
+
 def _cell_value(cell: ElementTree.Element) -> str | None:
     displayed = _odf_text(cell)
     if displayed:
@@ -335,7 +341,7 @@ def _cell_value(cell: ElementTree.Element) -> str | None:
     ):
         value = cell.attrib.get(f"{{{OFFICE}}}{attribute}")
         if value is not None:
-            return value
+            return _bounded_segment_text(value)
     return None
 
 
@@ -369,9 +375,7 @@ def _paragraph_texts(
 def _cell_text(cell: ElementTree.Element) -> str | None:
     """A table cell's paragraphs, joined the way the Word reader joins them."""
 
-    joined = "\n".join(_paragraph_texts(cell))
-    if len(joined) > MAX_SEGMENT_CHARACTERS:
-        raise ValueError("ODF normalized segment character limit exceeded")
+    joined = _bounded_segment_text("\n".join(_paragraph_texts(cell)))
     if joined:
         return joined
     for attribute in (
@@ -384,7 +388,7 @@ def _cell_text(cell: ElementTree.Element) -> str | None:
     ):
         value = cell.attrib.get(f"{{{OFFICE}}}{attribute}")
         if value is not None:
-            return value
+            return _bounded_segment_text(value)
     return None
 
 
@@ -566,19 +570,13 @@ def _iter_pages(element: ElementTree.Element) -> Iterator[ElementTree.Element]:
 
 
 def _object_text(element: ElementTree.Element) -> str:
-    joined = "\n".join(_paragraph_texts(element))
-    if len(joined) > MAX_SEGMENT_CHARACTERS:
-        raise ValueError("ODF normalized segment character limit exceeded")
-    return joined
+    return _bounded_segment_text("\n".join(_paragraph_texts(element)))
 
 
 def _text_outside_tables(element: ElementTree.Element) -> str:
     """A frame's paragraph text that is not inside its table."""
 
-    joined = "\n".join(_paragraph_texts(element, skip_tables=True))
-    if len(joined) > MAX_SEGMENT_CHARACTERS:
-        raise ValueError("ODF normalized segment character limit exceeded")
-    return joined
+    return _bounded_segment_text("\n".join(_paragraph_texts(element, skip_tables=True)))
 
 
 _NOTES_FURNITURE = {"page", "page-number", "date-time", "header", "footer"}

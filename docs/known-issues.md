@@ -495,11 +495,12 @@ and speaker notes as structure instead of flattened paragraphs.
   marked.
 - **The remaining parity work is queued as S18A.** Hyperlink targets and footnote or
   endnote structure; spreadsheet hyperlink targets, merged-range state, and hidden
-  sheet, row and column markers; and presentation charts, grouped shapes, hidden slides
-  and shapes, and placeholder roles are not read. Hyperlink and note text remains
-  inline in the paragraph, and spreadsheet cell values are still read; what is missing
-  is the target, the state or the structure. The matrix records each gap in
-  `known_limits`.
+  sheet, row and column markers; and presentation chart content, group structure,
+  hidden-slide and hidden-shape markers, and placeholder roles are not read. The text
+  inside grouped shapes and hidden slides or shapes is still read as ordinary object
+  text. Hyperlink and note text remains inline in the paragraph, and spreadsheet cell
+  values are still read; what is missing is the target, the state or the structure. The
+  matrix records each gap in `known_limits`.
 
 The OpenDocument processor version moves from 3 to 4. Existing derivatives are not
 rebuilt automatically; `archiv rebuild-derived` changes the derived hash, and citations

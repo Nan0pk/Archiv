@@ -331,6 +331,52 @@ def test_table_cell_joined_character_limit_is_enforced(
         normalize(path, sha256_file(path))
 
 
+def test_table_cell_attribute_character_limit_is_enforced(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(normalize_odf_module, "MAX_SEGMENT_CHARACTERS", 5)
+    path = tmp_path / "long-attribute.odt"
+    _package(
+        path,
+        "application/vnd.oasis.opendocument.text",
+        _content(
+            "<office:text>"
+            '<table:table table:name="LongAttribute">'
+            "<table:table-row>"
+            '<table:table-cell office:value-type="string" office:string-value="abcdef"/>'
+            "</table:table-row>"
+            "</table:table>"
+            "</office:text>"
+        ),
+    )
+
+    with pytest.raises(MalformedInputError, match="character limit exceeded"):
+        normalize(path, sha256_file(path))
+
+
+def test_spreadsheet_cell_attribute_character_limit_is_enforced(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(normalize_odf_module, "MAX_SEGMENT_CHARACTERS", 5)
+    path = tmp_path / "long-attribute.ods"
+    _package(
+        path,
+        "application/vnd.oasis.opendocument.spreadsheet",
+        _content(
+            "<office:spreadsheet>"
+            '<table:table table:name="Main">'
+            "<table:table-row>"
+            '<table:table-cell office:value-type="string" office:string-value="abcdef"/>'
+            "</table:table-row>"
+            "</table:table>"
+            "</office:spreadsheet>"
+        ),
+    )
+
+    with pytest.raises(MalformedInputError, match="character limit exceeded"):
+        normalize(path, sha256_file(path))
+
+
 def test_drawing_page_table_is_read(tmp_path: Path) -> None:
     path = tmp_path / "drawing.odg"
     _package(
