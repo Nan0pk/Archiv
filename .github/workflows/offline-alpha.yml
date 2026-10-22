@@ -65,7 +65,7 @@ jobs:
         run: sha256sum --check SHA256SUMS
 
       - name: Upload deliberate release evidence
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: archiv-offline-alpha-release
           path: release-artifacts/*
@@ -112,7 +112,7 @@ jobs:
 
       - name: Upload offline acceptance evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: archiv-offline-alpha-egress-denied
           path: offline-alpha-artifacts/*
