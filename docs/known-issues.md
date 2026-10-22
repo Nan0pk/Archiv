@@ -493,16 +493,57 @@ and speaker notes as structure instead of flattened paragraphs.
   the same reader, so a table there is located by `page` instead of `slide`. A table or
   group on a notes page is still dropped, and a hidden shape on a notes page is not
   marked.
-- **The remaining parity work is queued as S18A.** Hyperlink targets and footnote or
+- **S18A added the rest of the parity surface.** Hyperlink targets and footnote or
   endnote structure; spreadsheet hyperlink targets, merged-range state, and hidden
   sheet, row and column markers; and presentation chart content, group structure,
-  hidden-slide and hidden-shape markers, and placeholder roles are not read. The text
-  inside grouped shapes and hidden slides or shapes is still read as ordinary object
-  text. Hyperlink and note text remains inline in the paragraph, and spreadsheet cell
-  values are still read; what is missing is the target, the state or the structure. The
-  matrix records each gap in `known_limits`.
+  hidden-slide and hidden-shape markers, and placeholder roles are recorded in the
+  next section.
 
 The OpenDocument processor version moves from 3 to 4. Existing derivatives are not
 rebuilt automatically; `archiv rebuild-derived` changes the derived hash, and citations
 made against the earlier derivative then fail closed. Rebuild a document only when its
 new citations are wanted.
+
+## OpenDocument reader: what S18A added, and what remains
+
+S18A reads the link targets and structural state that S18 left out. Locator keys and
+derived segments changed for text, spreadsheet, presentation and drawing documents.
+
+- **Text link targets and notes are now structure.** The display text of a `text:a`
+  stays in the paragraph or cell text, and its target becomes a separate segment with a
+  `hyperlink` number. A `text:note` of class `footnote` or `endnote` is removed from the
+  surrounding paragraph text, including its citation marker, and its body is read after
+  the document body with a `footnote` or `endnote` prefix. A note is located by its
+  stored `text:id`, or by its 1-based position among notes of that class when the id is
+  absent. Tables and links inside a note body keep the note prefix. A note class other
+  than `footnote` or `endnote` stays inline rather than being dropped.
+- **Spreadsheet state now mirrors the Excel reader.** The anchor of a merged range
+  carries `merged` with its range, and a covered cell yields no segment. Hidden sheets
+  are read from a `table:display` of false on the table's style, and hidden rows or
+  columns from a `table:visibility` of `collapse` or `filter`; every affected cell and
+  its link target carries `hidden`. A hidden sheet marker wins over a row or column
+  marker. A repeated row or column that also declares a span is refused rather than
+  expanded into overlapping ranges.
+- **Presentation and drawing structure is now read.** Chart text is read from the
+  embedded object part named by `draw:object`: title, axis titles, and series names
+  resolved from the chart's own data table. A missing, external or non-chart object is
+  skipped, and a flat-XML document has no object part to read. A `draw:g` adds a
+  dot-separated `grouped_shape` path to each child without consuming a page object
+  number. A hidden slide or page, and a shape on a layer whose `draw:display` is `none`,
+  keep their text and are marked with `hidden`. `presentation:class` becomes a
+  `placeholder` role in the same vocabulary the PowerPoint reader uses where the roles
+  correspond. Drawing pages reuse the reader with `page` in place of `slide`.
+- **What remains.** Charts contribute their title, axis titles and series names, not the
+  plotted values or category labels; a series label whose cell address cannot be
+  resolved is skipped. OpenDocument comments, annotations, alternative text, SmartArt
+  equivalents, embedded non-chart objects and presentation animation semantics are not
+  read. Speaker notes are still read only from top-level text frames on a notes page; a
+  table or group there is dropped, and a hidden shape there is not marked. Spreadsheet
+  charts, pivot state and cell comments remain outside the spreadsheet reader. Issue
+  #206 (formula-only spreadsheet cells and frame text order) is still separate.
+  Hidden-state styles and layer sets must be declared directly in `content.xml`;
+  `styles.xml`, inherited styles and animation-driven visibility are not resolved.
+- **The OpenDocument processor version moves from 4 to 5.** Existing derivatives are not
+  rebuilt automatically; `archiv rebuild-derived` changes the derived hash, and citations
+  made against the earlier derivative then fail closed. Rebuild a document only when its
+  new citations are wanted.

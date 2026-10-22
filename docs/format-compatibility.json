@@ -777,11 +777,17 @@
       "structure": [
         "paragraphs",
         "headings",
-        "tables"
+        "tables",
+        "footnotes and endnotes",
+        "hyperlink targets"
       ],
       "locator_shapes": [
         [
           "paragraph"
+        ],
+        [
+          "paragraph",
+          "hyperlink"
         ],
         [
           "heading"
@@ -791,9 +797,68 @@
           "level"
         ],
         [
-          "column",
+          "heading",
+          "hyperlink"
+        ],
+        [
+          "heading",
+          "level",
+          "hyperlink"
+        ],
+        [
+          "table",
           "row",
-          "table"
+          "column"
+        ],
+        [
+          "table",
+          "row",
+          "column",
+          "hyperlink"
+        ],
+        [
+          "footnote",
+          "paragraph"
+        ],
+        [
+          "footnote",
+          "paragraph",
+          "hyperlink"
+        ],
+        [
+          "footnote",
+          "table",
+          "row",
+          "column"
+        ],
+        [
+          "footnote",
+          "table",
+          "row",
+          "column",
+          "hyperlink"
+        ],
+        [
+          "endnote",
+          "paragraph"
+        ],
+        [
+          "endnote",
+          "paragraph",
+          "hyperlink"
+        ],
+        [
+          "endnote",
+          "table",
+          "row",
+          "column"
+        ],
+        [
+          "endnote",
+          "table",
+          "row",
+          "column",
+          "hyperlink"
         ]
       ],
       "grounding": true,
@@ -802,7 +867,10 @@
       "encryption": "manifest-declared encrypted entries fail closed during normalization",
       "known_limits": [
         "tables normalize as structured rows; a table nested inside a cell is refused; page geometry, frames, and styles are not reconstructed",
-        "hyperlink targets and footnote or endnote structure are not surfaced; their text and citation markers remain inline in the paragraph"
+        "hyperlink targets and footnote or endnote bodies are read from text:a and text:note elements only; a link or note represented by producer-specific field markup is not surfaced",
+        "a footnote or endnote is located by the identifier stored in the file, or by its 1-based position among notes of that class when no identifier is present; that position can differ from the displayed marker",
+        "comments and annotations are not surfaced, and a note class other than footnote or endnote remains inline rather than becoming its own structure",
+        "a text document added before this reader existed keeps its older derivative, without link targets or note structure, until `archiv rebuild-derived` is run for it; rebuilding can make citations already saved for it stop validating"
       ],
       "support_level": "full"
     },
@@ -825,19 +893,76 @@
       "structure": [
         "sheets",
         "rows",
-        "columns"
+        "columns",
+        "merged ranges",
+        "hidden sheets, rows and columns",
+        "hyperlink targets"
       ],
       "locator_shapes": [
         [
-          "column",
+          "sheet",
           "row",
-          "sheet"
+          "column"
         ],
         [
+          "sheet",
+          "row",
+          "column",
+          "hidden"
+        ],
+        [
+          "sheet",
+          "row",
+          "column",
+          "merged"
+        ],
+        [
+          "sheet",
+          "row",
+          "column",
+          "hidden",
+          "merged"
+        ],
+        [
+          "sheet",
+          "row",
+          "column",
+          "formula"
+        ],
+        [
+          "sheet",
+          "row",
           "column",
           "formula",
+          "hidden"
+        ],
+        [
+          "sheet",
           "row",
-          "sheet"
+          "column",
+          "formula",
+          "merged"
+        ],
+        [
+          "sheet",
+          "row",
+          "column",
+          "formula",
+          "hidden",
+          "merged"
+        ],
+        [
+          "sheet",
+          "row",
+          "column",
+          "hyperlink"
+        ],
+        [
+          "sheet",
+          "row",
+          "column",
+          "hyperlink",
+          "hidden"
         ]
       ],
       "grounding": true,
@@ -846,8 +971,12 @@
       "encryption": "manifest-declared encrypted entries fail closed during normalization",
       "known_limits": [
         "charts and pivot state are not reconstructed",
-        "hyperlink targets, merged-range state, and hidden sheet, row and column markers are not surfaced; cell values are still read",
-        "retrieval indexes each normalized cell or row segment independently; phrases split across cells may not match as one literal phrase"
+        "hidden sheet state uses styles declared directly in content.xml; styles.xml and inherited styles are not resolved",
+        "hidden content is indexed and marked, not withheld: every segment from a hidden sheet, row or column carries `hidden`",
+        "merged-range state is read from the anchor cell; a repeated row or column that also declares a span is refused rather than expanded into overlapping ranges, and a hyperlink attached to a covered cell is not read",
+        "formulas are surfaced with their expressions and never executed; a formula-only cell with no stored display value is indexed as its formula text",
+        "retrieval indexes each normalized cell or row segment independently; phrases split across cells may not match as one literal phrase",
+        "a spreadsheet added before this reader existed keeps its older derivative, without merged or hidden state or link targets, until `archiv rebuild-derived` is run for it; rebuilding can make citations already saved for it stop validating"
       ],
       "support_level": "partial"
     },
@@ -870,13 +999,57 @@
       "structure": [
         "slides",
         "objects",
+        "grouped shapes",
+        "placeholder roles",
         "tables",
-        "speaker notes"
+        "charts",
+        "speaker notes",
+        "hidden slides and shapes"
       ],
       "locator_shapes": [
         [
-          "object",
-          "slide"
+          "slide",
+          "object"
+        ],
+        [
+          "hidden",
+          "slide",
+          "object"
+        ],
+        [
+          "placeholder",
+          "slide",
+          "object"
+        ],
+        [
+          "hidden",
+          "placeholder",
+          "slide",
+          "object"
+        ],
+        [
+          "grouped_shape",
+          "slide",
+          "object"
+        ],
+        [
+          "grouped_shape",
+          "hidden",
+          "slide",
+          "object"
+        ],
+        [
+          "grouped_shape",
+          "placeholder",
+          "slide",
+          "object"
+        ],
+        [
+          "grouped_shape",
+          "hidden",
+          "placeholder",
+          "slide",
+          "object"
         ],
         [
           "column",
@@ -885,6 +1058,117 @@
           "slide"
         ],
         [
+          "column",
+          "hidden",
+          "object",
+          "row",
+          "slide"
+        ],
+        [
+          "column",
+          "object",
+          "placeholder",
+          "row",
+          "slide"
+        ],
+        [
+          "column",
+          "hidden",
+          "object",
+          "placeholder",
+          "row",
+          "slide"
+        ],
+        [
+          "column",
+          "grouped_shape",
+          "object",
+          "row",
+          "slide"
+        ],
+        [
+          "column",
+          "grouped_shape",
+          "hidden",
+          "object",
+          "row",
+          "slide"
+        ],
+        [
+          "column",
+          "grouped_shape",
+          "object",
+          "placeholder",
+          "row",
+          "slide"
+        ],
+        [
+          "column",
+          "grouped_shape",
+          "hidden",
+          "object",
+          "placeholder",
+          "row",
+          "slide"
+        ],
+        [
+          "chart",
+          "object",
+          "slide"
+        ],
+        [
+          "chart",
+          "hidden",
+          "object",
+          "slide"
+        ],
+        [
+          "chart",
+          "object",
+          "placeholder",
+          "slide"
+        ],
+        [
+          "chart",
+          "hidden",
+          "object",
+          "placeholder",
+          "slide"
+        ],
+        [
+          "chart",
+          "grouped_shape",
+          "object",
+          "slide"
+        ],
+        [
+          "chart",
+          "grouped_shape",
+          "hidden",
+          "object",
+          "slide"
+        ],
+        [
+          "chart",
+          "grouped_shape",
+          "object",
+          "placeholder",
+          "slide"
+        ],
+        [
+          "chart",
+          "grouped_shape",
+          "hidden",
+          "object",
+          "placeholder",
+          "slide"
+        ],
+        [
+          "slide",
+          "speaker_notes"
+        ],
+        [
+          "hidden",
           "slide",
           "speaker_notes"
         ]
@@ -894,8 +1178,15 @@
       "macros": "embedded content is never executed",
       "encryption": "manifest-declared encrypted entries fail closed during normalization",
       "known_limits": [
-        "chart content, group structure, hidden-slide and hidden-shape markers, and placeholder roles are not reconstructed; the text inside grouped shapes and hidden slides or shapes is still read as ordinary object text; a table nested inside a table cell is refused; animation semantics are not surfaced",
-        "speaker notes are read from top-level text frames; a table or group on a notes page is not read"
+        "chart content is limited to the title, axis titles and series names; plotted values and category labels are not surfaced, a series label without a resolvable cell address is skipped, and a chart whose draw:object is missing or outside the package is skipped",
+        "a flat-XML presentation has no embedded object part, so its chart content is skipped",
+        "hidden content is indexed and marked, not withheld: every segment from a hidden slide carries `hidden` = `slide`, and every segment from a hidden shape or hidden group carries `hidden` = `shape`",
+        "hidden state uses drawing-page styles and layer sets declared directly in content.xml; styles.xml, inherited styles and animation-driven visibility are not resolved",
+        "group nesting deeper than 32 levels is refused; a table nested inside a table cell is refused",
+        "placeholder roles are mapped from presentation:class; an unknown class is kept as written rather than guessed",
+        "speaker notes are read from top-level text frames; a table or group on a notes page is not read, and a hidden shape there is not marked",
+        "animation and transition semantics are not surfaced",
+        "a presentation added before this reader existed keeps its older derivative, without charts, groups, placeholder roles or hidden markers, until `archiv rebuild-derived` is run for it; rebuilding can make citations already saved for it stop validating"
       ],
       "support_level": "partial"
     },
@@ -918,18 +1209,168 @@
       "structure": [
         "pages",
         "objects",
-        "tables"
+        "grouped shapes",
+        "placeholder roles",
+        "tables",
+        "charts",
+        "hidden pages and shapes"
       ],
       "locator_shapes": [
         [
-          "object",
-          "page"
+          "page",
+          "object"
+        ],
+        [
+          "hidden",
+          "page",
+          "object"
+        ],
+        [
+          "placeholder",
+          "page",
+          "object"
+        ],
+        [
+          "hidden",
+          "placeholder",
+          "page",
+          "object"
+        ],
+        [
+          "grouped_shape",
+          "page",
+          "object"
+        ],
+        [
+          "grouped_shape",
+          "hidden",
+          "page",
+          "object"
+        ],
+        [
+          "grouped_shape",
+          "placeholder",
+          "page",
+          "object"
+        ],
+        [
+          "grouped_shape",
+          "hidden",
+          "placeholder",
+          "page",
+          "object"
         ],
         [
           "column",
           "object",
           "page",
           "row"
+        ],
+        [
+          "column",
+          "hidden",
+          "object",
+          "page",
+          "row"
+        ],
+        [
+          "column",
+          "object",
+          "page",
+          "placeholder",
+          "row"
+        ],
+        [
+          "column",
+          "hidden",
+          "object",
+          "page",
+          "placeholder",
+          "row"
+        ],
+        [
+          "column",
+          "grouped_shape",
+          "object",
+          "page",
+          "row"
+        ],
+        [
+          "column",
+          "grouped_shape",
+          "hidden",
+          "object",
+          "page",
+          "row"
+        ],
+        [
+          "column",
+          "grouped_shape",
+          "object",
+          "page",
+          "placeholder",
+          "row"
+        ],
+        [
+          "column",
+          "grouped_shape",
+          "hidden",
+          "object",
+          "page",
+          "placeholder",
+          "row"
+        ],
+        [
+          "chart",
+          "object",
+          "page"
+        ],
+        [
+          "chart",
+          "hidden",
+          "object",
+          "page"
+        ],
+        [
+          "chart",
+          "object",
+          "page",
+          "placeholder"
+        ],
+        [
+          "chart",
+          "hidden",
+          "object",
+          "page",
+          "placeholder"
+        ],
+        [
+          "chart",
+          "grouped_shape",
+          "object",
+          "page"
+        ],
+        [
+          "chart",
+          "grouped_shape",
+          "hidden",
+          "object",
+          "page"
+        ],
+        [
+          "chart",
+          "grouped_shape",
+          "object",
+          "page",
+          "placeholder"
+        ],
+        [
+          "chart",
+          "grouped_shape",
+          "hidden",
+          "object",
+          "page",
+          "placeholder"
         ]
       ],
       "grounding": true,
@@ -937,7 +1378,13 @@
       "macros": "embedded content is never executed",
       "encryption": "manifest-declared encrypted entries fail closed during normalization",
       "known_limits": [
-        "vector geometry is not reconstructed; a table nested inside a table cell is refused; text inside drawing objects and table cells is the searchable surface"
+        "vector geometry is not reconstructed; a table nested inside a table cell is refused; text inside drawing objects and table cells is the searchable surface",
+        "chart content is limited to the title, axis titles and series names; plotted values and category labels are not surfaced, a series label without a resolvable cell address is skipped, and a chart whose draw:object is missing or outside the package is skipped",
+        "a flat-XML drawing has no embedded object part, so its chart content is skipped",
+        "hidden content is indexed and marked, not withheld: every segment from a hidden page carries `hidden` = `page`, and every segment from a hidden shape or hidden group carries `hidden` = `shape`",
+        "hidden state uses drawing-page styles and layer sets declared directly in content.xml; styles.xml and inherited styles are not resolved",
+        "group nesting deeper than 32 levels is refused; placeholder roles are mapped from presentation:class; an unknown class is kept as written",
+        "a drawing added before this reader existed keeps its older derivative, without charts, groups, placeholder roles or hidden markers, until `archiv rebuild-derived` is run for it; rebuilding can make citations already saved for it stop validating"
       ],
       "support_level": "full"
     },
