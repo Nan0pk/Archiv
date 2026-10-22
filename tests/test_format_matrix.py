@@ -179,50 +179,47 @@ def _ingest(tmp_path: Path, suffix: str) -> tuple[IngestionResult, list[dict[str
     return result, segments, home
 
 
-@pytest.mark.parametrize(
-    "suffix",
-    [
-        ".txt",
-        ".md",
-        ".pdf",
-        ".doc",
-        ".rtf",
-        ".docx",
-        ".xls",
-        ".xlsx",
-        ".ppt",
-        ".pptx",
-        ".odt",
-        ".ott",
-        ".odm",
-        ".otm",
-        ".fodt",
-        ".ods",
-        ".ots",
-        ".fods",
-        ".odp",
-        ".otp",
-        ".fodp",
-        ".odg",
-        ".otg",
-        ".fodg",
-        ".odf",
-        ".odb",
-        ".inp",
-        ".svg",
-        ".zip",
-        ".tar",
-        ".tar.gz",
-        ".tgz",
-        ".tar.bz2",
-        ".tbz2",
-        ".tar.xz",
-        ".txz",
-    ],
+LIVE_INGESTION_SUFFIXES = (
+    ".txt",
+    ".md",
+    ".pdf",
+    ".doc",
+    ".rtf",
+    ".docx",
+    ".xls",
+    ".xlsx",
+    ".ppt",
+    ".pptx",
+    ".odt",
+    ".ott",
+    ".odm",
+    ".otm",
+    ".fodt",
+    ".ods",
+    ".ots",
+    ".fods",
+    ".odp",
+    ".otp",
+    ".fodp",
+    ".odg",
+    ".otg",
+    ".fodg",
+    ".odf",
+    ".odb",
+    ".inp",
+    ".svg",
+    ".zip",
+    ".tar",
+    ".tar.gz",
+    ".tgz",
+    ".tar.bz2",
+    ".tbz2",
+    ".tar.xz",
+    ".txz",
 )
-def test_family_claims_match_live_ingestion(
-    tmp_path: Path, matrix: FormatMatrix, suffix: str
-) -> None:
+
+
+def _check_family_claims(tmp_path: Path, matrix: FormatMatrix, suffix: str) -> None:
     family = matrix.family_for_suffix(suffix)
     result, segments, home = _ingest(tmp_path, suffix)
     assert result.media_type in family.media_types
@@ -250,6 +247,22 @@ def test_family_claims_match_live_ingestion(
         for match in matches:
             validation = validate_citation(match.citation, home=home)
             assert validation.valid, f"{suffix}: citation failed validation"
+
+
+@pytest.mark.parametrize("suffix", LIVE_INGESTION_SUFFIXES)
+def test_family_claims_match_live_ingestion(
+    tmp_path: Path, matrix: FormatMatrix, suffix: str
+) -> None:
+    _check_family_claims(tmp_path, matrix, suffix)
+
+
+def test_matrix_matches_live_ingestion(tmp_path: Path, matrix: FormatMatrix) -> None:
+    """Every family the matrix claims passes through the real ingestion pipeline."""
+
+    for number, suffix in enumerate(LIVE_INGESTION_SUFFIXES):
+        case = tmp_path / f"case-{number}"
+        case.mkdir()
+        _check_family_claims(case, matrix, suffix)
 
 
 def test_image_family_is_metadata_only_without_local_ocr(

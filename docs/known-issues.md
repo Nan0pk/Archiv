@@ -474,3 +474,29 @@ reader still does less than a reader could.
   declarations. They behave the same today; a fix made to one copy could miss the
   others. Moving it into one shared module, as S17 did for chart text, would remove the
   risk.
+
+## OpenDocument reader: what S18 added, and what remains
+
+S18 made the OpenDocument reader recover text tables, presentation tables and speaker
+notes as structure instead of flattened paragraphs.
+
+- **Text tables are now structured.** A `table:table` yields one segment per non-empty
+  cell with `table`, `row` and `column`, plus a `NormalizedTable`. Paragraphs inside a
+  table are no longer also emitted as ordinary paragraphs, so the paragraph numbers of
+  later body paragraphs shift. A table nested inside a cell is refused rather than
+  flattened; producers that nest tables now fail with a malformed-input error.
+- **Presentation tables and notes are now read.** A `draw:frame/table:table` yields cell
+  segments and a `NormalizedTable`; `presentation:notes` yields speaker-note segments
+  and the page furniture is skipped by its `presentation:class`. A drawing page reuses
+  the same reader, so a table there is located by `page` instead of `slide`. A table or
+  group on a notes page is still dropped, and a hidden shape on a notes page is not
+  marked.
+- **The remaining parity work is queued as S18A.** Text hyperlinks, footnotes and
+  endnotes; spreadsheet hyperlinks, merged ranges, and hidden sheets, rows and columns;
+  and presentation charts, grouped shapes, hidden slides and shapes, and placeholder
+  roles are not read. The matrix records each gap in `known_limits`.
+
+The OpenDocument processor version moves from 3 to 4. Existing derivatives are not
+rebuilt automatically; `archiv rebuild-derived` changes the derived hash, and citations
+made against the earlier derivative then fail closed. Rebuild a document only when its
+new citations are wanted.

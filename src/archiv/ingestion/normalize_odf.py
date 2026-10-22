@@ -91,6 +91,22 @@ class _CellSpec:
     formula: str | None
 
 
+@dataclass
+class _TableBudget:
+    """Upper bound on expanded rows and cells across every table in one document."""
+
+    rows: int = 0
+    cells: int = 0
+
+    def spend(self, rows: int, columns: int, *, label: str) -> None:
+        if self.rows + rows > MAX_EXPANDED_ROWS:
+            raise ValueError(f"ODF {label} expanded row limit exceeded")
+        if self.cells + rows * columns > MAX_EXPANDED_CELLS:
+            raise ValueError(f"ODF {label} expanded cell limit exceeded")
+        self.rows += rows
+        self.cells += rows * columns
+
+
 def _positive_integer(value: str | None, *, label: str, maximum: int) -> int:
     if value is None:
         return 1
@@ -238,31 +254,53 @@ def _read_flat_xml(path: Path) -> bytes:
     return path.read_bytes()
 
 
-def _paragraph_segments(root: ElementTree.Element) -> list[NormalizedSegment]:
+def _text_content(
+    body: ElementTree.Element,
+) -> tuple[list[NormalizedSegment], list[NormalizedTable]]:
+    """Paragraphs and tables in document order, with no paragraph indexed twice."""
+
     segments: list[NormalizedSegment] = []
+    tables: list[NormalizedTable] = []
     paragraph = 0
     heading = 0
-    for element in root.iter():
-        if element.tag not in {f"{{{TEXT}}}p", f"{{{TEXT}}}h"}:
+    table_number = 0
+    budget = _TableBudget()
+    stack = list(reversed(list(body)))
+    while stack:
+        element = stack.pop()
+        if element.tag == f"{{{TABLE}}}table":
+            table_number += 1
+            table_segments, table = _read_table(
+                element,
+                {"table": table_number},
+                budget,
+                label="table",
+            )
+            segments.extend(table_segments)
+            if table is not None:
+                tables.append(table)
             continue
-        value = _odf_text(element)
-        if not value:
+        if element.tag in {f"{{{TEXT}}}p", f"{{{TEXT}}}h"}:
+            value = _odf_text(element)
+            if not value:
+                continue
+            if element.tag == f"{{{TEXT}}}h":
+                heading += 1
+                locator: dict[str, object] = {"heading": heading}
+                level = element.attrib.get(f"{{{TEXT}}}outline-level")
+                if level is not None:
+                    locator["level"] = _positive_integer(
+                        level,
+                        label="heading level",
+                        maximum=10,
+                    )
+            else:
+                paragraph += 1
+                locator = {"paragraph": paragraph}
+            segments.append(NormalizedSegment(locator=locator, text=value))
             continue
-        if element.tag == f"{{{TEXT}}}h":
-            heading += 1
-            locator: dict[str, object] = {"heading": heading}
-            level = element.attrib.get(f"{{{TEXT}}}outline-level")
-            if level is not None:
-                locator["level"] = _positive_integer(
-                    level,
-                    label="heading level",
-                    maximum=10,
-                )
-        else:
-            paragraph += 1
-            locator = {"paragraph": paragraph}
-        segments.append(NormalizedSegment(locator=locator, text=value))
-    return segments
+        stack.extend(reversed(list(element)))
+    return segments, tables
 
 
 def _iter_sheets(element: ElementTree.Element) -> Iterator[ElementTree.Element]:
@@ -299,6 +337,117 @@ def _cell_value(cell: ElementTree.Element) -> str | None:
         if value is not None:
             return value
     return None
+
+
+def _cell_text(cell: ElementTree.Element) -> str | None:
+    """A table cell's paragraphs, joined the way the Word reader joins them."""
+
+    paragraphs = [
+        _odf_text(paragraph)
+        for paragraph in cell.iter()
+        if paragraph.tag in {f"{{{TEXT}}}p", f"{{{TEXT}}}h"}
+    ]
+    joined = "\n".join(value for value in paragraphs if value)
+    if joined:
+        return joined
+    for attribute in (
+        "string-value",
+        "value",
+        "date-value",
+        "time-value",
+        "boolean-value",
+        "currency",
+    ):
+        value = cell.attrib.get(f"{{{OFFICE}}}{attribute}")
+        if value is not None:
+            return value
+    return None
+
+
+_ROW_CONTAINERS = {
+    f"{{{TABLE}}}table-rows",
+    f"{{{TABLE}}}table-header-rows",
+    f"{{{TABLE}}}table-row-group",
+}
+
+
+def _table_rows(table: ElementTree.Element) -> Iterator[ElementTree.Element]:
+    """Rows in document order, including rows inside a header or group wrapper."""
+
+    stack = list(reversed(list(table)))
+    while stack:
+        element = stack.pop()
+        if element.tag == f"{{{TABLE}}}table-row":
+            yield element
+        elif element.tag in _ROW_CONTAINERS:
+            stack.extend(reversed(list(element)))
+
+
+def _read_table(
+    table: ElementTree.Element,
+    prefix: dict[str, object],
+    budget: _TableBudget,
+    *,
+    label: str,
+) -> tuple[list[NormalizedSegment], NormalizedTable | None]:
+    """One segment per non-empty cell, located by row and column plus the prefix.
+
+    A covered cell carries no text of its own, matching the Word reader's merge
+    handling. A table nested inside a cell is refused rather than silently
+    flattened into the outer cell.
+    """
+
+    if table.find(f".//{{{TABLE}}}table") is not None:
+        raise ValueError(f"ODF {label} nests a table inside a cell")
+    segments: list[NormalizedSegment] = []
+    rows: list[list[object | None]] = []
+    for row in _table_rows(table):
+        row_repeat = _positive_integer(
+            row.attrib.get(f"{{{TABLE}}}number-rows-repeated"),
+            label="row repeat",
+            maximum=MAX_EXPANDED_ROWS,
+        )
+        cells: list[tuple[int, str | None]] = []
+        width = 0
+        for cell in row:
+            if cell.tag not in {
+                f"{{{TABLE}}}table-cell",
+                f"{{{TABLE}}}covered-table-cell",
+            }:
+                continue
+            repeat = _positive_integer(
+                cell.attrib.get(f"{{{TABLE}}}number-columns-repeated"),
+                label="column repeat",
+                maximum=MAX_COLUMNS_PER_ROW,
+            )
+            width += repeat
+            if width > MAX_COLUMNS_PER_ROW:
+                raise ValueError(f"ODF {label} column limit exceeded")
+            text = None if cell.tag == f"{{{TABLE}}}covered-table-cell" else _cell_text(cell)
+            cells.append((repeat, text))
+        if width == 0:
+            continue
+        budget.spend(row_repeat, width, label=label)
+        for _ in range(row_repeat):
+            values: list[object | None] = []
+            column = 0
+            for repeat, text in cells:
+                for _ in range(repeat):
+                    column += 1
+                    values.append(text)
+                    if text is not None:
+                        locator: dict[str, object] = {
+                            **prefix,
+                            "row": len(rows) + 1,
+                            "column": column,
+                        }
+                        segments.append(NormalizedSegment(locator=locator, text=text))
+            rows.append(values)
+    if not any(value is not None for row in rows for value in row):
+        return segments, None
+    width = max(len(row) for row in rows)
+    padded = [row + [None] * (width - len(row)) for row in rows]
+    return segments, NormalizedTable(locator=dict(prefix), rows=padded)
 
 
 def _row_template(row: ElementTree.Element) -> tuple[list[_CellSpec], int]:
@@ -401,14 +550,65 @@ def _object_text(element: ElementTree.Element) -> str:
     return "\n".join(value for value in paragraphs if value)
 
 
-def _page_segments(root: ElementTree.Element, *, page_key: str) -> list[NormalizedSegment]:
+_NOTES_FURNITURE = {"page", "page-number", "date-time", "header", "footer"}
+
+
+def _notes_segments(notes: ElementTree.Element, slide: int) -> list[NormalizedSegment]:
+    """Speaker notes from top-level text frames, without the page furniture."""
+
     segments: list[NormalizedSegment] = []
+    spoken = 0
+    for frame in notes:
+        if frame.tag != f"{{{DRAW}}}frame":
+            continue
+        if frame.attrib.get(f"{{{PRESENTATION}}}class") in _NOTES_FURNITURE:
+            continue
+        if frame.find(f".//{{{TABLE}}}table") is not None:
+            continue
+        if frame.find(f".//{{{DRAW}}}g") is not None:
+            continue
+        value = _object_text(frame)
+        if not value:
+            continue
+        spoken += 1
+        segments.append(
+            NormalizedSegment(
+                locator={"slide": slide, "speaker_notes": spoken},
+                text=value,
+            )
+        )
+    return segments
+
+
+def _page_segments(
+    root: ElementTree.Element,
+    *,
+    page_key: str,
+    include_notes: bool,
+) -> tuple[list[NormalizedSegment], list[NormalizedTable]]:
+    segments: list[NormalizedSegment] = []
+    tables: list[NormalizedTable] = []
+    budget = _TableBudget()
     for page_number, page in enumerate(_iter_pages(root), 1):
         object_number = 0
         for element in page:
             if element.tag == f"{{{PRESENTATION}}}notes":
+                if include_notes:
+                    segments.extend(_notes_segments(element, page_number))
                 continue
             object_number += 1
+            table = element.find(f"{{{TABLE}}}table") if element.tag == f"{{{DRAW}}}frame" else None
+            if table is not None:
+                table_segments, normalized = _read_table(
+                    table,
+                    {page_key: page_number, "object": object_number},
+                    budget,
+                    label="presentation table",
+                )
+                segments.extend(table_segments)
+                if normalized is not None:
+                    tables.append(normalized)
+                continue
             value = _object_text(element)
             if not value:
                 continue
@@ -418,7 +618,7 @@ def _page_segments(root: ElementTree.Element, *, page_key: str) -> list[Normaliz
                     text=value,
                 )
             )
-    return segments
+    return segments, tables
 
 
 def _validated_body(
@@ -502,11 +702,19 @@ def normalize_odf(
         if family == "spreadsheet":
             segments, tables = _spreadsheet(body)
         elif family == "presentation":
-            segments = _page_segments(body, page_key="slide")
+            segments, tables = _page_segments(
+                body,
+                page_key="slide",
+                include_notes=True,
+            )
         elif family == "drawing":
-            segments = _page_segments(body, page_key="page")
+            segments, tables = _page_segments(
+                body,
+                page_key="page",
+                include_notes=False,
+            )
         else:
-            segments = _paragraph_segments(body)
+            segments, tables = _text_content(body)
 
     external_links = 0
     for element in root.iter():
@@ -516,7 +724,7 @@ def normalize_odf(
 
     metadata: dict[str, object] = {
         "processor": "archiv.odf-core",
-        "processor_version": "3",
+        "processor_version": "4",
         "odf_family": family,
         "odf_representation": representation,
         "declared_mimetype": expected_mimetype,
@@ -530,7 +738,9 @@ def normalize_odf(
     else:
         metadata["document_mimetype"] = expected_mimetype
     if family == "presentation":
-        metadata["presentation_notes_extracted"] = False
+        metadata["presentation_notes_extracted"] = any(
+            "speaker_notes" in segment.locator for segment in segments
+        )
     if formula_source is not None and formula_source_sha256 is not None:
         metadata["formula_source_kind"] = "mathml"
         metadata["formula_source"] = formula_source
