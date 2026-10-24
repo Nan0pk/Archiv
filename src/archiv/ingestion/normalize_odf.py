@@ -410,11 +410,12 @@ def _note_segments(
             continue
         if element.tag in {f"{{{TEXT}}}p", f"{{{TEXT}}}h"}:
             value = _odf_text(element, drop_notes=True)
-            if not value:
+            if not value and not _link_targets(element):
                 continue
             paragraph += 1
             locator: dict[str, object] = {**prefix, "paragraph": paragraph}
-            segments.append(NormalizedSegment(locator=locator, text=value))
+            if value:
+                segments.append(NormalizedSegment(locator=locator, text=value))
             segments.extend(_link_segments(element, locator))
             continue
         if element.tag == f"{{{TEXT}}}note":
@@ -454,7 +455,7 @@ def _text_content(
             continue
         if element.tag in {f"{{{TEXT}}}p", f"{{{TEXT}}}h"}:
             value = _odf_text(element, drop_notes=True)
-            if not value:
+            if not value and not _link_targets(element):
                 continue
             if element.tag == f"{{{TEXT}}}h":
                 heading += 1
@@ -469,7 +470,8 @@ def _text_content(
             else:
                 paragraph += 1
                 locator = {"paragraph": paragraph}
-            segments.append(NormalizedSegment(locator=locator, text=value))
+            if value:
+                segments.append(NormalizedSegment(locator=locator, text=value))
             segments.extend(_link_segments(element, locator))
             continue
         stack.extend(reversed(list(element)))
@@ -587,6 +589,28 @@ def _table_rows(table: ElementTree.Element) -> Iterator[ElementTree.Element]:
             stack.extend(reversed(list(element)))
 
 
+def _has_nested_table_outside_notes(table: ElementTree.Element) -> bool:
+    """True when a table sits inside a cell, ignoring note bodies.
+
+    A table inside a footnote or endnote body is read separately as
+    that note's own structure, so it must not count as a table nested
+    inside the outer cell. A genuinely nested cell table still counts.
+    """
+
+    stack = list(table)
+    while stack:
+        element = stack.pop()
+        if (
+            element.tag == f"{{{TEXT}}}note"
+            and element.attrib.get(f"{{{TEXT}}}note-class") in _NOTE_CLASSES
+        ):
+            continue
+        if element.tag == f"{{{TABLE}}}table":
+            return True
+        stack.extend(list(element))
+    return False
+
+
 def _read_table(
     table: ElementTree.Element,
     prefix: dict[str, object],
@@ -604,7 +628,7 @@ def _read_table(
     for them, because the PowerPoint table reader does not read links.
     """
 
-    if table.find(f".//{{{TABLE}}}table") is not None:
+    if _has_nested_table_outside_notes(table):
         raise ValueError(f"ODF {label} nests a table inside a cell")
     segments: list[NormalizedSegment] = []
     rows: list[list[object | None]] = []
@@ -646,15 +670,15 @@ def _read_table(
                 for _ in range(repeat):
                     column += 1
                     values.append(text)
+                    locator: dict[str, object] = {
+                        **prefix,
+                        "row": len(rows) + 1,
+                        "column": column,
+                    }
                     if text is not None:
-                        locator: dict[str, object] = {
-                            **prefix,
-                            "row": len(rows) + 1,
-                            "column": column,
-                        }
                         segments.append(NormalizedSegment(locator=locator, text=text))
-                        if include_links:
-                            segments.extend(_link_segments(cell, locator))
+                    if include_links and cell.tag != f"{{{TABLE}}}covered-table-cell":
+                        segments.extend(_link_segments(cell, locator))
             rows.append(values)
     if not any(value is not None for row in rows for value in row):
         return segments, None
@@ -704,6 +728,32 @@ def _row_template(row: ElementTree.Element) -> tuple[list[_CellSpec], int]:
             )
         )
     return specs, width
+
+
+def _effective_row_width(specs: list[_CellSpec]) -> int:
+    """Last column that carries content, ignoring empty trailing padding.
+
+    A repeated empty cell is padding, not work: LibreOffice pads sheets
+    with empty repeats out to the full column count, while the real
+    content may end far earlier. Middle empty cells still count,
+    because they sit before content, and a merged anchor counts
+    through the end of its span.
+    """
+
+    effective = 0
+    column = 0
+    for spec in specs:
+        for _ in range(spec.repeat):
+            column += 1
+            if (
+                spec.value is not None
+                or spec.formula is not None
+                or spec.links
+                or spec.column_span > 1
+                or spec.row_span > 1
+            ):
+                effective = max(effective, column + spec.column_span - 1)
+    return effective
 
 
 def _hidden_columns(table: ElementTree.Element) -> list[tuple[int, int]]:
@@ -805,15 +855,16 @@ def _spreadsheet(
                 label="row repeat",
                 maximum=MAX_EXPANDED_ROWS,
             )
-            specs, row_width = _row_template(row)
+            specs, _row_width = _row_template(row)
             if row_repeat > 1 and any(spec.column_span > 1 or spec.row_span > 1 for spec in specs):
                 raise ValueError("ODF spreadsheet repeats a merged cell")
             if expanded_rows + row_repeat > MAX_EXPANDED_ROWS:
                 raise ValueError("ODF expanded row limit exceeded")
-            if expanded_cells + row_width * row_repeat > MAX_EXPANDED_CELLS:
+            effective_width = _effective_row_width(specs)
+            if expanded_cells + effective_width * row_repeat > MAX_EXPANDED_CELLS:
                 raise ValueError("ODF expanded cell limit exceeded")
             expanded_rows += row_repeat
-            expanded_cells += row_width * row_repeat
+            expanded_cells += effective_width * row_repeat
             row_hidden = row.attrib.get(f"{{{TABLE}}}visibility") in _HIDDEN_VISIBILITY
 
             for _ in range(row_repeat):
@@ -853,7 +904,7 @@ def _spreadsheet(
                             segments.append(
                                 NormalizedSegment(
                                     locator=locator,
-                                    text=(
+                                    text=_bounded_segment_text(
                                         spec.value if spec.value is not None else spec.formula or ""
                                     ),
                                 )
@@ -918,12 +969,6 @@ def _iter_pages(element: ElementTree.Element) -> Iterator[ElementTree.Element]:
 
 def _object_text(element: ElementTree.Element) -> str:
     return _bounded_segment_text("\n".join(_paragraph_texts(element)))
-
-
-def _text_outside_tables(element: ElementTree.Element) -> str:
-    """A frame's paragraph text that is not inside its table."""
-
-    return _bounded_segment_text("\n".join(_paragraph_texts(element, skip_tables=True)))
 
 
 _NOTES_FURNITURE = {"page", "page-number", "date-time", "header", "footer"}
@@ -1134,6 +1179,52 @@ def _chart_text_from_part(data: bytes, *, label: str) -> str | None:
     return _bounded_segment_text("\n".join(lines)) or None
 
 
+def _frame_table_segments(
+    frame: ElementTree.Element,
+    locator: dict[str, object],
+    budget: _TableBudget,
+) -> tuple[list[NormalizedSegment], list[NormalizedTable]]:
+    """A frame's tables and outside-table text, in document order.
+
+    Text that appears before a table is emitted before it, and text
+    after it is emitted after it. Consecutive outside-table paragraphs
+    stay joined into one segment, as before.
+    """
+
+    segments: list[NormalizedSegment] = []
+    tables: list[NormalizedTable] = []
+    buffer: list[str] = []
+
+    def flush() -> None:
+        if buffer:
+            segments.append(NormalizedSegment(locator=dict(locator), text="\n".join(buffer)))
+            buffer.clear()
+
+    stack = list(reversed(list(frame)))
+    while stack:
+        element = stack.pop()
+        if element.tag == f"{{{TABLE}}}table":
+            flush()
+            table_segments, normalized = _read_table(
+                element,
+                dict(locator),
+                budget,
+                label="presentation table",
+            )
+            segments.extend(table_segments)
+            if normalized is not None:
+                tables.append(normalized)
+            continue
+        if element.tag in {f"{{{TEXT}}}p", f"{{{TEXT}}}h"}:
+            value = _odf_text(element)
+            if value:
+                buffer.append(value)
+            continue
+        stack.extend(reversed(list(element)))
+    flush()
+    return segments, tables
+
+
 class _PageReader:
     """One page's shapes, groups, tables, charts and hidden markers."""
 
@@ -1212,18 +1303,13 @@ class _PageReader:
 
         table = element.find(f"{{{TABLE}}}table") if element.tag == f"{{{DRAW}}}frame" else None
         if table is not None:
-            table_segments, normalized = _read_table(
-                table,
+            frame_segments, frame_tables = _frame_table_segments(
+                element,
                 locator,
                 self.budget,
-                label="presentation table",
             )
-            self.segments.extend(table_segments)
-            if normalized is not None:
-                self.tables.append(normalized)
-            remaining = _text_outside_tables(element)
-            if remaining:
-                self.segments.append(NormalizedSegment(locator=locator, text=remaining))
+            self.segments.extend(frame_segments)
+            self.tables.extend(frame_tables)
             return
 
         chart_text = self._chart_text(element)

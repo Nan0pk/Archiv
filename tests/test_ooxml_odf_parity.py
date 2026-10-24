@@ -1334,3 +1334,161 @@ def test_notes_page_with_only_furniture_yields_no_notes_segments(tmp_path: Path)
     assert _texts(document) == ["Slide title"]
     assert all("speaker_notes" not in segment.locator for segment in document.segments)
     assert document.metadata["presentation_notes_extracted"] is False
+
+
+def test_spreadsheet_formula_only_cell_character_limit_is_enforced(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(normalize_odf_module, "MAX_SEGMENT_CHARACTERS", 5)
+    path = tmp_path / "long-formula.ods"
+    _package(
+        path,
+        "application/vnd.oasis.opendocument.spreadsheet",
+        _content(
+            "<office:spreadsheet>"
+            '<table:table table:name="Main">'
+            "<table:table-row>"
+            '<table:table-cell table:formula="of:=SUM([.A1:.A99])"/>'
+            "</table:table-row>"
+            "</table:table>"
+            "</office:spreadsheet>"
+        ),
+    )
+
+    with pytest.raises(MalformedInputError, match="character limit exceeded"):
+        normalize(path, sha256_file(path))
+
+
+def test_padded_spreadsheet_rows_with_only_empty_trailing_repeats_are_read(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "padded.ods"
+    rows = "".join(
+        "<table:table-row>"
+        "<table:table-cell><text:p>Content</text:p></table:table-cell>"
+        "<table:table-cell table:number-columns-repeated='16383'/>"
+        "</table:table-row>"
+        for _ in range(4)
+    )
+    _package(
+        path,
+        "application/vnd.oasis.opendocument.spreadsheet",
+        _content(
+            "<office:spreadsheet>"
+            f'<table:table table:name="Main">{rows}</table:table>'
+            "</office:spreadsheet>"
+        ),
+    )
+
+    document = normalize(path, sha256_file(path))
+
+    assert _texts(document) == ["Content"] * 4
+
+
+def test_link_with_no_visible_text_is_recovered_from_paragraph_and_cell(
+    tmp_path: Path,
+) -> None:
+    paragraph_path = tmp_path / "link-paragraph.odt"
+    _package(
+        paragraph_path,
+        "application/vnd.oasis.opendocument.text",
+        _content(
+            "<office:text>"
+            '<text:p><text:a xlink:href="https://example.com/empty"/></text:p>'
+            "</office:text>"
+        ),
+    )
+    cell_path = tmp_path / "link-cell.odt"
+    _package(
+        cell_path,
+        "application/vnd.oasis.opendocument.text",
+        _content(
+            "<office:text>"
+            '<table:table table:name="Links">'
+            "<table:table-row><table:table-cell>"
+            '<text:p><text:a xlink:href="https://example.com/cell"/></text:p>'
+            "</table:table-cell></table:table-row>"
+            "</table:table>"
+            "</office:text>"
+        ),
+    )
+
+    assert _texts(normalize(paragraph_path, sha256_file(paragraph_path))) == [
+        "https://example.com/empty"
+    ]
+    assert _texts(normalize(cell_path, sha256_file(cell_path))) == ["https://example.com/cell"]
+
+
+def test_note_table_inside_a_table_cell_is_read_without_allowing_nested_tables(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "footnote-table.odt"
+    _package(
+        path,
+        "application/vnd.oasis.opendocument.text",
+        _content(
+            "<office:text>"
+            '<table:table table:name="Outer"><table:table-row><table:table-cell>'
+            "<text:p>Outer"
+            '<text:note text:note-class="footnote">'
+            "<text:note-citation>1</text:note-citation>"
+            "<text:note-body>"
+            '<table:table table:name="NoteTable"><table:table-row>'
+            "<table:table-cell><text:p>NOTE CELL</text:p></table:table-cell>"
+            "</table:table-row></table:table>"
+            "</text:note-body>"
+            "</text:note>"
+            "</text:p>"
+            "</table:table-cell></table:table-row></table:table>"
+            "</office:text>"
+        ),
+    )
+
+    document = normalize(path, sha256_file(path))
+
+    assert _texts(document) == ["Outer", "NOTE CELL"]
+
+    nested_path = tmp_path / "nested.odt"
+    _package(
+        nested_path,
+        "application/vnd.oasis.opendocument.text",
+        _content(
+            "<office:text>"
+            '<table:table table:name="Outer"><table:table-row><table:table-cell>'
+            '<table:table table:name="Inner"><table:table-row>'
+            "<table:table-cell><text:p>Inner</text:p></table:table-cell>"
+            "</table:table-row></table:table>"
+            "</table:table-cell></table:table-row></table:table>"
+            "</office:text>"
+        ),
+    )
+
+    with pytest.raises(MalformedInputError, match="nests a table"):
+        normalize(nested_path, sha256_file(nested_path))
+
+
+def test_caption_before_a_table_keeps_document_order(tmp_path: Path) -> None:
+    path = tmp_path / "caption-before.odg"
+    _package(
+        path,
+        "application/vnd.oasis.opendocument.graphics",
+        _content(
+            "<office:drawing>"
+            '<draw:page draw:name="Page 1">'
+            '<draw:frame draw:name="TableFrame">'
+            "<draw:caption><draw:text-box>"
+            "<text:p>CAPTION FIRST</text:p>"
+            "</draw:text-box></draw:caption>"
+            '<table:table table:name="CaptionTable">'
+            f"{_rows(('Cell',))}"
+            "</table:table>"
+            "</draw:frame>"
+            "</draw:page>"
+            "</office:drawing>",
+            presentation=True,
+        ),
+    )
+
+    document = normalize(path, sha256_file(path))
+
+    assert _texts(document) == ["CAPTION FIRST", "Cell"]
