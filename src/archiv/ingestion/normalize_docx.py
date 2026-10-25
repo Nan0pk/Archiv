@@ -207,11 +207,11 @@ def _table(
             if not _is_vertical_continuation(cell):
                 paragraphs = [_paragraph_text(p) for p in cell.iter(_w("p"))]
                 joined = "\n".join(value for value in paragraphs if value)
+                locator: Locator = {**prefix, "row": row_number, "column": column}
                 if joined:
                     text = joined
-                    locator: Locator = {**prefix, "row": row_number, "column": column}
                     segments.append(NormalizedSegment(locator=locator, text=joined))
-                    segments.extend(_link_segments(cell, part, locator))
+                segments.extend(_link_segments(cell, part, locator))
             values.append(text)
             values.extend([None] * (span - 1))
             column += span
@@ -267,14 +267,15 @@ def _container(
         if child.tag == _w("p"):
             paragraph_number += 1
             text = _paragraph_text(child)
-            if not text:
+            if not text and not _hyperlink_targets(child, part):
                 continue
             locator: Locator = {**prefix, "paragraph": paragraph_number}
             if style_levels is not None:
                 level = _heading_level(child, style_levels)
                 if level is not None:
                     locator["heading_level"] = level
-            segments.append(NormalizedSegment(locator=locator, text=text))
+            if text:
+                segments.append(NormalizedSegment(locator=locator, text=text))
             segments.extend(_link_segments(child, part, locator))
         elif child.tag == _w("tbl"):
             table_number += 1
