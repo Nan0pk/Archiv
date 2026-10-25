@@ -670,7 +670,7 @@ def _read_table(
                 for _ in range(repeat):
                     column += 1
                     values.append(text)
-                    locator: dict[str, object] = {
+                    locator = {
                         **prefix,
                         "row": len(rows) + 1,
                         "column": column,
@@ -728,32 +728,6 @@ def _row_template(row: ElementTree.Element) -> tuple[list[_CellSpec], int]:
             )
         )
     return specs, width
-
-
-def _effective_row_width(specs: list[_CellSpec]) -> int:
-    """Last column that carries content, ignoring empty trailing padding.
-
-    A repeated empty cell is padding, not work: LibreOffice pads sheets
-    with empty repeats out to the full column count, while the real
-    content may end far earlier. Middle empty cells still count,
-    because they sit before content, and a merged anchor counts
-    through the end of its span.
-    """
-
-    effective = 0
-    column = 0
-    for spec in specs:
-        for _ in range(spec.repeat):
-            column += 1
-            if (
-                spec.value is not None
-                or spec.formula is not None
-                or spec.links
-                or spec.column_span > 1
-                or spec.row_span > 1
-            ):
-                effective = max(effective, column + spec.column_span - 1)
-    return effective
 
 
 def _hidden_columns(table: ElementTree.Element) -> list[tuple[int, int]]:
@@ -855,16 +829,15 @@ def _spreadsheet(
                 label="row repeat",
                 maximum=MAX_EXPANDED_ROWS,
             )
-            specs, _row_width = _row_template(row)
+            specs, row_width = _row_template(row)
             if row_repeat > 1 and any(spec.column_span > 1 or spec.row_span > 1 for spec in specs):
                 raise ValueError("ODF spreadsheet repeats a merged cell")
             if expanded_rows + row_repeat > MAX_EXPANDED_ROWS:
                 raise ValueError("ODF expanded row limit exceeded")
-            effective_width = _effective_row_width(specs)
-            if expanded_cells + effective_width * row_repeat > MAX_EXPANDED_CELLS:
+            if expanded_cells + row_width * row_repeat > MAX_EXPANDED_CELLS:
                 raise ValueError("ODF expanded cell limit exceeded")
             expanded_rows += row_repeat
-            expanded_cells += effective_width * row_repeat
+            expanded_cells += row_width * row_repeat
             row_hidden = row.attrib.get(f"{{{TABLE}}}visibility") in _HIDDEN_VISIBILITY
 
             for _ in range(row_repeat):
@@ -1188,7 +1161,11 @@ def _frame_table_segments(
 
     Text that appears before a table is emitted before it, and text
     after it is emitted after it. Consecutive outside-table paragraphs
-    stay joined into one segment, as before.
+    stay joined into one segment, as before. Every table in the frame
+    is read, in order: previously only the first table found in a
+    frame was read, and any later tables were silently dropped.
+    Outside-table text keeps the old note handling, which does not
+    drop footnote text from a frame paragraph.
     """
 
     segments: list[NormalizedSegment] = []

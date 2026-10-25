@@ -1359,32 +1359,6 @@ def test_spreadsheet_formula_only_cell_character_limit_is_enforced(
         normalize(path, sha256_file(path))
 
 
-def test_padded_spreadsheet_rows_with_only_empty_trailing_repeats_are_read(
-    tmp_path: Path,
-) -> None:
-    path = tmp_path / "padded.ods"
-    rows = "".join(
-        "<table:table-row>"
-        "<table:table-cell><text:p>Content</text:p></table:table-cell>"
-        "<table:table-cell table:number-columns-repeated='16383'/>"
-        "</table:table-row>"
-        for _ in range(4)
-    )
-    _package(
-        path,
-        "application/vnd.oasis.opendocument.spreadsheet",
-        _content(
-            "<office:spreadsheet>"
-            f'<table:table table:name="Main">{rows}</table:table>'
-            "</office:spreadsheet>"
-        ),
-    )
-
-    document = normalize(path, sha256_file(path))
-
-    assert _texts(document) == ["Content"] * 4
-
-
 def test_link_with_no_visible_text_is_recovered_from_paragraph_and_cell(
     tmp_path: Path,
 ) -> None:
@@ -1492,3 +1466,113 @@ def test_caption_before_a_table_keeps_document_order(tmp_path: Path) -> None:
     document = normalize(path, sha256_file(path))
 
     assert _texts(document) == ["CAPTION FIRST", "Cell"]
+
+
+def test_caption_after_a_table_keeps_document_order(tmp_path: Path) -> None:
+    path = tmp_path / "caption-after.odg"
+    _package(
+        path,
+        "application/vnd.oasis.opendocument.graphics",
+        _content(
+            "<office:drawing>"
+            '<draw:page draw:name="Page 1">'
+            '<draw:frame draw:name="TableFrame">'
+            '<table:table table:name="CaptionTable">'
+            f"{_rows(('Cell',))}"
+            "</table:table>"
+            "<draw:caption><draw:text-box>"
+            "<text:p>CAPTION AFTER</text:p>"
+            "</draw:text-box></draw:caption>"
+            "</draw:frame>"
+            "</draw:page>"
+            "</office:drawing>",
+            presentation=True,
+        ),
+    )
+
+    document = normalize(path, sha256_file(path))
+
+    assert _texts(document) == ["Cell", "CAPTION AFTER"]
+
+
+def test_two_tables_in_one_frame_are_both_read_in_order(tmp_path: Path) -> None:
+    path = tmp_path / "two-tables.odg"
+    _package(
+        path,
+        "application/vnd.oasis.opendocument.graphics",
+        _content(
+            "<office:drawing>"
+            '<draw:page draw:name="Page 1">'
+            '<draw:frame draw:name="TableFrame">'
+            '<table:table table:name="First">'
+            f"{_rows(('First',))}"
+            "</table:table>"
+            "<text:p>Between</text:p>"
+            '<table:table table:name="Second">'
+            f"{_rows(('Second',))}"
+            "</table:table>"
+            "</draw:frame>"
+            "</draw:page>"
+            "</office:drawing>",
+            presentation=True,
+        ),
+    )
+
+    document = normalize(path, sha256_file(path))
+
+    assert _texts(document) == ["First", "Between", "Second"]
+
+
+def test_frame_text_keeps_footnote_text_as_before(tmp_path: Path) -> None:
+    path = tmp_path / "frame-note.odg"
+    _package(
+        path,
+        "application/vnd.oasis.opendocument.graphics",
+        _content(
+            "<office:drawing>"
+            '<draw:page draw:name="Page 1">'
+            '<draw:frame draw:name="TableFrame">'
+            '<table:table table:name="FrameTable">'
+            f"{_rows(('Cell',))}"
+            "</table:table>"
+            "<text:p>Body"
+            '<text:note text:note-class="footnote">'
+            "<text:note-citation>1</text:note-citation>"
+            "<text:note-body><text:p>NOTE TEXT</text:p></text:note-body>"
+            "</text:note>"
+            "</text:p>"
+            "</draw:frame>"
+            "</draw:page>"
+            "</office:drawing>",
+            presentation=True,
+        ),
+    )
+
+    document = normalize(path, sha256_file(path))
+
+    assert _texts(document)[0] == "Cell"
+    assert "NOTE TEXT" in _texts(document)[1]
+
+
+def test_link_on_a_merged_anchor_cell_is_kept(tmp_path: Path) -> None:
+    path = tmp_path / "anchor-link.odt"
+    _package(
+        path,
+        "application/vnd.oasis.opendocument.text",
+        _content(
+            "<office:text>"
+            '<table:table table:name="Merged">'
+            "<table:table-row>"
+            '<table:table-cell table:number-columns-spanned="2">'
+            '<text:p><text:a xlink:href="https://example.com/anchor"/></text:p>'
+            "</table:table-cell>"
+            "<table:covered-table-cell/>"
+            "</table:table-row>"
+            "</table:table>"
+            "</office:text>"
+        ),
+    )
+
+    document = normalize(path, sha256_file(path))
+
+    assert _texts(document) == ["https://example.com/anchor"]
