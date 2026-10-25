@@ -1576,3 +1576,202 @@ def test_link_on_a_merged_anchor_cell_is_kept(tmp_path: Path) -> None:
     document = normalize(path, sha256_file(path))
 
     assert _texts(document) == ["https://example.com/anchor"]
+
+
+def test_padded_spreadsheet_rows_with_only_empty_trailing_repeats_are_read(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "padded.ods"
+    rows = "".join(
+        "<table:table-row>"
+        "<table:table-cell><text:p>Content</text:p></table:table-cell>"
+        "<table:table-cell table:number-columns-repeated='16383'/>"
+        "</table:table-row>"
+        for _ in range(4)
+    )
+    _package(
+        path,
+        "application/vnd.oasis.opendocument.spreadsheet",
+        _content(
+            "<office:spreadsheet>"
+            f'<table:table table:name="Main">{rows}</table:table>'
+            "</office:spreadsheet>"
+        ),
+    )
+
+    document = normalize(path, sha256_file(path))
+
+    assert _texts(document) == ["Content"] * 4
+
+
+def test_middle_empty_cells_still_count_in_a_spreadsheet_row(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "middle-empty.ods"
+    _package(
+        path,
+        "application/vnd.oasis.opendocument.spreadsheet",
+        _content(
+            "<office:spreadsheet>"
+            '<table:table table:name="Main">'
+            "<table:table-row>"
+            "<table:table-cell><text:p>First</text:p></table:table-cell>"
+            "<table:table-cell table:number-columns-repeated='3'/>"
+            "<table:table-cell><text:p>Last</text:p></table:table-cell>"
+            "</table:table-row>"
+            "</table:table>"
+            "</office:spreadsheet>"
+        ),
+    )
+
+    document = normalize(path, sha256_file(path))
+
+    assert _texts(document) == ["First", "Last"]
+    assert [segment.locator["column"] for segment in document.segments] == [1, 5]
+    assert _table_rows(document) == [[["First", None, None, None, "Last"]]]
+
+
+def test_large_row_repeat_with_trailing_padding_stays_bounded(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "large-repeat.ods"
+    _package(
+        path,
+        "application/vnd.oasis.opendocument.spreadsheet",
+        _content(
+            "<office:spreadsheet>"
+            '<table:table table:name="Main">'
+            "<table:table-row table:number-rows-repeated='10000'>"
+            "<table:table-cell><text:p>Content</text:p></table:table-cell>"
+            "<table:table-cell table:number-columns-repeated='16383'/>"
+            "</table:table-row>"
+            "</table:table>"
+            "</office:spreadsheet>"
+        ),
+    )
+
+    document = normalize(path, sha256_file(path))
+
+    assert _texts(document) == ["Content"] * 10000
+
+
+def test_large_row_repeat_with_only_empty_padding_reads_quickly(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "empty-repeat.ods"
+    _package(
+        path,
+        "application/vnd.oasis.opendocument.spreadsheet",
+        _content(
+            "<office:spreadsheet>"
+            '<table:table table:name="Main">'
+            "<table:table-row table:number-rows-repeated='10000'>"
+            "<table:table-cell table:number-columns-repeated='16384'/>"
+            "</table:table-row>"
+            "</table:table>"
+            "</office:spreadsheet>"
+        ),
+    )
+
+    document = normalize(path, sha256_file(path))
+
+    assert _texts(document) == []
+
+
+def test_far_right_content_after_padding_still_hits_the_cell_budget(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "far-right.ods"
+    rows = "".join(
+        "<table:table-row>"
+        "<table:table-cell table:number-columns-repeated='16383'/>"
+        "<table:table-cell><text:p>Far</text:p></table:table-cell>"
+        "</table:table-row>"
+        for _ in range(4)
+    )
+    _package(
+        path,
+        "application/vnd.oasis.opendocument.spreadsheet",
+        _content(
+            "<office:spreadsheet>"
+            f'<table:table table:name="Main">{rows}</table:table>'
+            "</office:spreadsheet>"
+        ),
+    )
+
+    with pytest.raises(MalformedInputError, match="expanded cell limit exceeded"):
+        normalize(path, sha256_file(path))
+
+
+def test_formula_only_cell_after_padding_is_kept(tmp_path: Path) -> None:
+    path = tmp_path / "formula-padded.ods"
+    _package(
+        path,
+        "application/vnd.oasis.opendocument.spreadsheet",
+        _content(
+            "<office:spreadsheet>"
+            '<table:table table:name="Main">'
+            "<table:table-row>"
+            "<table:table-cell table:number-columns-repeated='3'/>"
+            '<table:table-cell table:formula="of:=SUM([.A1:.A99])"/>'
+            "<table:table-cell table:number-columns-repeated='16380'/>"
+            "</table:table-row>"
+            "</table:table>"
+            "</office:spreadsheet>"
+        ),
+    )
+
+    document = normalize(path, sha256_file(path))
+
+    assert _texts(document) == ["of:=SUM([.A1:.A99])"]
+    assert [segment.locator["column"] for segment in document.segments] == [4]
+
+
+def test_link_only_cell_after_padding_is_kept(tmp_path: Path) -> None:
+    path = tmp_path / "link-padded.ods"
+    _package(
+        path,
+        "application/vnd.oasis.opendocument.spreadsheet",
+        _content(
+            "<office:spreadsheet>"
+            '<table:table table:name="Main">'
+            "<table:table-row>"
+            "<table:table-cell table:number-columns-repeated='3'/>"
+            '<table:table-cell><text:p><text:a xlink:href="https://example.com/padded-link"/></text:p></table:table-cell>'
+            "<table:table-cell table:number-columns-repeated='16380'/>"
+            "</table:table-row>"
+            "</table:table>"
+            "</office:spreadsheet>"
+        ),
+    )
+
+    document = normalize(path, sha256_file(path))
+
+    assert _texts(document) == ["https://example.com/padded-link"]
+    assert [segment.locator["column"] for segment in document.segments] == [4]
+
+
+def test_merged_anchor_after_padding_is_kept(tmp_path: Path) -> None:
+    path = tmp_path / "merged-padded.ods"
+    _package(
+        path,
+        "application/vnd.oasis.opendocument.spreadsheet",
+        _content(
+            "<office:spreadsheet>"
+            '<table:table table:name="Main">'
+            "<table:table-row>"
+            "<table:table-cell table:number-columns-repeated='3'/>"
+            '<table:table-cell table:number-columns-spanned="2">'
+            "<text:p>Merged</text:p></table:table-cell>"
+            "<table:covered-table-cell/>"
+            "<table:table-cell table:number-columns-repeated='16379'/>"
+            "</table:table-row>"
+            "</table:table>"
+            "</office:spreadsheet>"
+        ),
+    )
+
+    document = normalize(path, sha256_file(path))
+
+    assert _texts(document) == ["Merged"]
+    assert [segment.locator["column"] for segment in document.segments] == [4]
