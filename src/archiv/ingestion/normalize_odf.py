@@ -663,7 +663,7 @@ def _read_table(
     return segments, NormalizedTable(locator=dict(prefix), rows=padded)
 
 
-def _row_template(row: ElementTree.Element) -> tuple[list[_CellSpec], int]:
+def _row_template(row: ElementTree.Element) -> list[_CellSpec]:
     specs: list[_CellSpec] = []
     width = 0
     for cell in row:
@@ -703,7 +703,34 @@ def _row_template(row: ElementTree.Element) -> tuple[list[_CellSpec], int]:
                 links=() if covered else tuple(_link_targets(cell)),
             )
         )
-    return specs, width
+    return specs
+
+
+def _effective_row_width(specs: list[_CellSpec]) -> int:
+    """Last column that carries content, ignoring empty trailing padding.
+
+    A repeated empty cell is padding, not work: LibreOffice pads sheets
+    with empty repeats out to the full column count, while the real
+    content may end far earlier. Middle empty cells still count,
+    because they sit before content, and a merged anchor counts
+    through the end of its span. This is computed from the repeat
+    counts, not by walking every repeated cell, so a large padding
+    repeat costs no more than a small one.
+    """
+
+    effective = 0
+    column = 0
+    for spec in specs:
+        column += spec.repeat
+        if (
+            spec.value is not None
+            or spec.formula is not None
+            or spec.links
+            or spec.column_span > 1
+            or spec.row_span > 1
+        ):
+            effective = max(effective, column + spec.column_span - 1)
+    return effective
 
 
 def _hidden_columns(table: ElementTree.Element) -> list[tuple[int, int]]:
@@ -805,15 +832,16 @@ def _spreadsheet(
                 label="row repeat",
                 maximum=MAX_EXPANDED_ROWS,
             )
-            specs, row_width = _row_template(row)
+            specs = _row_template(row)
             if row_repeat > 1 and any(spec.column_span > 1 or spec.row_span > 1 for spec in specs):
                 raise ValueError("ODF spreadsheet repeats a merged cell")
             if expanded_rows + row_repeat > MAX_EXPANDED_ROWS:
                 raise ValueError("ODF expanded row limit exceeded")
-            if expanded_cells + row_width * row_repeat > MAX_EXPANDED_CELLS:
+            effective_width = _effective_row_width(specs)
+            if expanded_cells + effective_width * row_repeat > MAX_EXPANDED_CELLS:
                 raise ValueError("ODF expanded cell limit exceeded")
             expanded_rows += row_repeat
-            expanded_cells += row_width * row_repeat
+            expanded_cells += effective_width * row_repeat
             row_hidden = row.attrib.get(f"{{{TABLE}}}visibility") in _HIDDEN_VISIBILITY
 
             for _ in range(row_repeat):
@@ -822,7 +850,13 @@ def _spreadsheet(
                     hidden_rows.add(row_number)
                 column = 0
                 for spec in specs:
-                    for _ in range(spec.repeat):
+                    # The budget charges only up to the effective width,
+                    # so work must stop there too. Trailing empty repeats
+                    # past that point carry no value, formula, link, or
+                    # merge, so skipping them changes no output.
+                    if column >= effective_width:
+                        break
+                    for _ in range(min(spec.repeat, effective_width - column)):
                         column += 1
                         end_row = row_number + spec.row_span - 1
                         end_column = column + spec.column_span - 1

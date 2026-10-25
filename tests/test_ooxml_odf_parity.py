@@ -1334,3 +1334,103 @@ def test_notes_page_with_only_furniture_yields_no_notes_segments(tmp_path: Path)
     assert _texts(document) == ["Slide title"]
     assert all("speaker_notes" not in segment.locator for segment in document.segments)
     assert document.metadata["presentation_notes_extracted"] is False
+
+
+def test_padded_spreadsheet_rows_with_only_empty_trailing_repeats_are_read(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "padded.ods"
+    rows = "".join(
+        "<table:table-row>"
+        "<table:table-cell><text:p>Content</text:p></table:table-cell>"
+        "<table:table-cell table:number-columns-repeated='16383'/>"
+        "</table:table-row>"
+        for _ in range(4)
+    )
+    _package(
+        path,
+        "application/vnd.oasis.opendocument.spreadsheet",
+        _content(
+            "<office:spreadsheet>"
+            f'<table:table table:name="Main">{rows}</table:table>'
+            "</office:spreadsheet>"
+        ),
+    )
+
+    document = normalize(path, sha256_file(path))
+
+    assert _texts(document) == ["Content"] * 4
+
+
+def test_middle_empty_cells_still_count_in_a_spreadsheet_row(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "middle-empty.ods"
+    _package(
+        path,
+        "application/vnd.oasis.opendocument.spreadsheet",
+        _content(
+            "<office:spreadsheet>"
+            '<table:table table:name="Main">'
+            "<table:table-row>"
+            "<table:table-cell><text:p>First</text:p></table:table-cell>"
+            "<table:table-cell table:number-columns-repeated='3'/>"
+            "<table:table-cell><text:p>Last</text:p></table:table-cell>"
+            "</table:table-row>"
+            "</table:table>"
+            "</office:spreadsheet>"
+        ),
+    )
+
+    document = normalize(path, sha256_file(path))
+
+    assert _texts(document) == ["First", "Last"]
+    assert [segment.locator["column"] for segment in document.segments] == [1, 5]
+    assert _table_rows(document) == [[["First", None, None, None, "Last"]]]
+
+
+def test_large_row_repeat_with_trailing_padding_stays_bounded(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "large-repeat.ods"
+    _package(
+        path,
+        "application/vnd.oasis.opendocument.spreadsheet",
+        _content(
+            "<office:spreadsheet>"
+            '<table:table table:name="Main">'
+            "<table:table-row table:number-rows-repeated='10000'>"
+            "<table:table-cell><text:p>Content</text:p></table:table-cell>"
+            "<table:table-cell table:number-columns-repeated='16383'/>"
+            "</table:table-row>"
+            "</table:table>"
+            "</office:spreadsheet>"
+        ),
+    )
+
+    document = normalize(path, sha256_file(path))
+
+    assert _texts(document) == ["Content"] * 10000
+
+
+def test_large_row_repeat_with_only_empty_padding_reads_quickly(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "empty-repeat.ods"
+    _package(
+        path,
+        "application/vnd.oasis.opendocument.spreadsheet",
+        _content(
+            "<office:spreadsheet>"
+            '<table:table table:name="Main">'
+            "<table:table-row table:number-rows-repeated='10000'>"
+            "<table:table-cell table:number-columns-repeated='16384'/>"
+            "</table:table-row>"
+            "</table:table>"
+            "</office:spreadsheet>"
+        ),
+    )
+
+    document = normalize(path, sha256_file(path))
+
+    assert _texts(document) == []
