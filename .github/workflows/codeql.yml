@@ -32,7 +32,7 @@ jobs:
           persist-credentials: false
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@b484113f1160b9fd93f70e3791895b6344bcd042
+        uses: github/codeql-action/init@2d7aeadbf01df0b0a833f218ff2eccfb1b5fc291
         with:
           languages: python
 
