@@ -41,6 +41,10 @@ dev = [
   "tiktoken>=0.8",
   "xlwt==1.3.0",
 ]
+memory = [
+  "fastembed>=0.5",
+  "numpy>=2",
+]
 remote-evaluation = [
   "tiktoken>=0.8",
 ]
