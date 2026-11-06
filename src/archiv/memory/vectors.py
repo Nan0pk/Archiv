@@ -6,13 +6,17 @@ import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
-import numpy as np
-from numpy.typing import NDArray
+# numpy belongs to the optional `memory` extra, so it is imported only where it is used.
+# Importing it at the top would make every `archiv` command depend on it.
+if TYPE_CHECKING:
+    import numpy as np
+    from numpy.typing import NDArray
+
+    Vectors = NDArray[np.float32]
 
 DEFAULT_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
-Vectors = NDArray[np.float32]
 
 
 class EmbedderUnavailable(RuntimeError):
@@ -49,6 +53,8 @@ class FastEmbedder:
             ) from error
 
     def embed(self, texts: list[str]) -> Vectors:
+        import numpy as np
+
         order = sorted(range(len(texts)), key=lambda i: len(texts[i]))
         rows = np.array(
             list(self._model.embed([texts[i] for i in order], batch_size=64)), dtype=np.float32
@@ -68,6 +74,8 @@ class VectorIndex:
 
     def save(self, base: Path) -> None:
         base.parent.mkdir(parents=True, exist_ok=True)
+        import numpy as np
+
         np.save(f"{base}.npy", self.vectors)
         Path(f"{base}.ids.json").write_text(
             json.dumps({"ids": self.ids, "embedder": self.embedder}), encoding="utf-8"
@@ -75,6 +83,8 @@ class VectorIndex:
 
     @classmethod
     def load(cls, base: Path) -> VectorIndex:
+        import numpy as np
+
         meta = json.loads(Path(f"{base}.ids.json").read_text(encoding="utf-8"))
         return cls(
             ids=list(meta["ids"]),
@@ -89,6 +99,8 @@ class VectorIndex:
         floor: float,
         exclude: set[str] | None = None,
     ) -> list[tuple[str, float]]:
+        import numpy as np
+
         scores = self.vectors @ query
         hits: list[tuple[str, float]] = []
         for position in np.argsort(-scores):

@@ -43,3 +43,13 @@ def test_build_skips_reembed_when_unchanged(tmp_path: Path) -> None:
     assert embedder.calls == 1
     build_memory(home=home, complete=FakeModel([]), model_label="f", embedder=embedder)
     assert embedder.calls == 1
+
+
+def test_archiv_starts_without_numpy() -> None:
+    """The memory extra is optional: the main command must start when numpy is absent."""
+    import subprocess
+    import sys
+
+    code = "import sys; sys.modules['numpy'] = None; import archiv.cli"
+    result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr[-400:]
