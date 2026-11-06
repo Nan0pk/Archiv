@@ -80,5 +80,6 @@ def build_command(
         f"Read {summary.documents} documents: {summary.model_calls} model calls, "
         f"{summary.cache_hits} answers reused from earlier runs, "
         f"{summary.failed_batches} batches the model did not answer usably.\n"
-        f"The memory now holds {summary.things} things and {summary.relations} relations."
+        f"The memory now holds {summary.things} things and {summary.relations} relations; "
+        f"{summary.merges_confirmed} written forms were confirmed to be the same thing."
     )

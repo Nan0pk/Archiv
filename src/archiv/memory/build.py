@@ -14,6 +14,7 @@ from archiv.memory.extract import (
     extraction_prompt,
     parse_extraction,
 )
+from archiv.memory.merge import confirm_pairs, propose_pairs
 from archiv.memory.model import Complete
 from archiv.memory.passages import Passage, load_passages, passages_by_object
 from archiv.memory.store import cache_key, cached, open_memory, remember, store_extraction
@@ -39,6 +40,8 @@ def build_memory(
     model_label: str,
     max_chars: int = 6000,
     embedder: Embedder | None = None,
+    max_merge_pairs: int = 500,
+    merge_floor: float = 0.80,
 ) -> BuildSummary:
     layout = ArchivLayout.resolve(home)
     passages = load_passages(home)
@@ -74,8 +77,15 @@ def build_memory(
             conn.commit()
         things = int(conn.execute("SELECT COUNT(*) FROM things").fetchone()[0])
         relation_count = int(conn.execute("SELECT COUNT(*) FROM relations").fetchone()[0])
+    merged = 0
     if embedder is not None:
         embed_passages(layout, passages, embedder)
+        passage_text = {p.segment_id: p.text for p in passages}
+        with open_memory(layout) as conn:
+            pairs = propose_pairs(
+                conn, embedder, passage_text, floor=merge_floor, max_pairs=max_merge_pairs
+            )
+            merged = confirm_pairs(conn, pairs, complete, model_label, passage_text)
     return BuildSummary(
         documents=len(grouped),
         model_calls=calls,
@@ -83,6 +93,7 @@ def build_memory(
         failed_batches=failed,
         things=things,
         relations=relation_count,
+        merges_confirmed=merged,
     )
 
 
