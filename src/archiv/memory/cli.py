@@ -13,6 +13,7 @@ import typer
 
 from archiv.memory.build import build_memory
 from archiv.memory.model import Complete, command_completer
+from archiv.memory.vectors import Embedder, EmbedderUnavailable, FastEmbedder
 
 memory_app = typer.Typer(
     no_args_is_help=True,
@@ -48,6 +49,14 @@ def _completer(model_cmd: str | None) -> Complete:
     return command_completer(shlex.split(command))
 
 
+def _embedder() -> Embedder | None:
+    try:
+        return FastEmbedder()
+    except EmbedderUnavailable as error:
+        typer.echo(f"Meaning vectors skipped. {error}", err=True)
+        return None
+
+
 @memory_app.command("build")
 def build_command(
     model_label: ModelLabelOption,
@@ -58,7 +67,11 @@ def build_command(
 ) -> None:
     """Read every document through the model and store what it mentions and how it connects."""
     summary = build_memory(
-        home=home, complete=_completer(model_cmd), model_label=model_label, max_chars=max_chars
+        home=home,
+        complete=_completer(model_cmd),
+        model_label=model_label,
+        max_chars=max_chars,
+        embedder=_embedder(),
     )
     if json_output:
         typer.echo(json.dumps(asdict(summary), indent=2))

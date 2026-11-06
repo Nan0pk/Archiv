@@ -15,8 +15,9 @@ from archiv.memory.extract import (
     parse_extraction,
 )
 from archiv.memory.model import Complete
-from archiv.memory.passages import load_passages, passages_by_object
+from archiv.memory.passages import Passage, load_passages, passages_by_object
 from archiv.memory.store import cache_key, cached, open_memory, remember, store_extraction
+from archiv.memory.vectors import Embedder, VectorIndex
 from archiv.storage.layout import ArchivLayout
 
 
@@ -37,9 +38,11 @@ def build_memory(
     complete: Complete,
     model_label: str,
     max_chars: int = 6000,
+    embedder: Embedder | None = None,
 ) -> BuildSummary:
     layout = ArchivLayout.resolve(home)
-    grouped = passages_by_object(load_passages(home))
+    passages = load_passages(home)
+    grouped = passages_by_object(passages)
     calls = hits = failed = 0
     with open_memory(layout) as conn:
         for object_sha256 in sorted(grouped):
@@ -71,6 +74,8 @@ def build_memory(
             conn.commit()
         things = int(conn.execute("SELECT COUNT(*) FROM things").fetchone()[0])
         relation_count = int(conn.execute("SELECT COUNT(*) FROM relations").fetchone()[0])
+    if embedder is not None:
+        embed_passages(layout, passages, embedder)
     return BuildSummary(
         documents=len(grouped),
         model_calls=calls,
@@ -79,3 +84,20 @@ def build_memory(
         things=things,
         relations=relation_count,
     )
+
+
+def passage_vectors_base(layout: ArchivLayout) -> Path:
+    return layout.indexes / "memory-passages"
+
+
+def embed_passages(layout: ArchivLayout, passages: list[Passage], embedder: Embedder) -> None:
+    """Embed every passage unless the stored vectors already match these passages."""
+    base = passage_vectors_base(layout)
+    ids = [p.segment_id for p in passages]
+    if Path(f"{base}.ids.json").is_file():
+        stored = VectorIndex.load(base)
+        if stored.ids == ids and stored.embedder == embedder.name:
+            return
+    VectorIndex(
+        ids=ids, vectors=embedder.embed([p.text for p in passages]), embedder=embedder.name
+    ).save(base)

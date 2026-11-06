@@ -55,3 +55,27 @@ class FakeModel:
                     }
                 )
         return json.dumps({"things": things, "relations": relations})
+
+
+class HashEmbedder:
+    """Dependency-free stand-in embedder: hashed lowercase words in 64 dimensions."""
+
+    name = "hash-test"
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def embed(self, texts: list[str]):  # noqa: ANN201
+        import hashlib
+
+        import numpy as np
+
+        self.calls += 1
+        out = np.zeros((len(texts), 64), dtype=np.float32)
+        for row, text in enumerate(texts):
+            for word in text.casefold().split():
+                digest = hashlib.sha256(word.strip(".,;:!?").encode()).digest()
+                out[row, digest[0] % 64] += 1.0
+        norms = np.linalg.norm(out, axis=1, keepdims=True)
+        norms[norms == 0] = 1.0
+        return out / norms
