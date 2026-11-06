@@ -14,7 +14,10 @@ import typer
 from archiv.memory.ask import ask
 from archiv.memory.build import build_memory, passage_vectors_base
 from archiv.memory.model import Complete, command_completer
+from archiv.memory.probe import draw_probes
+from archiv.memory.store import open_memory
 from archiv.memory.vectors import Embedder, EmbedderUnavailable, FastEmbedder
+from archiv.search.service import search_documents
 from archiv.storage.layout import ArchivLayout
 
 memory_app = typer.Typer(
@@ -143,3 +146,60 @@ def ask_command(
         typer.echo(
             f"\nWarning: {report.uncited_sentences} sentence(s) in the report have no source."
         )
+
+
+@memory_app.command("probe")
+def probe_command(
+    model_label: ModelLabelOption,
+    n: Annotated[int, typer.Option("--n", min=1, help="How many random questions.")] = 10,
+    seed: Annotated[int, typer.Option("--seed", help="Same seed, same questions.")] = 1,
+    out: Annotated[Path, typer.Option("--out", file_okay=False)] = Path("memory-probes"),
+    home: HomeOption = None,
+    model_cmd: ModelCmdOption = None,
+) -> None:
+    """Ask random questions drawn from the data and set each answer beside plain search."""
+    layout = ArchivLayout.resolve(home)
+    complete = _completer(model_cmd)
+    has_vectors = Path(f"{passage_vectors_base(layout)}.ids.json").is_file()
+    embedder = _embedder() if has_vectors else None
+    with open_memory(layout) as conn:
+        probes = draw_probes(conn, n=n, seed=seed)
+    out.mkdir(parents=True, exist_ok=True)
+    rows: list[str] = []
+    for number, probe in enumerate(probes, start=1):
+        name = f"probe-{number:02d}"
+        report = ask(
+            probe.question,
+            home=home,
+            complete=complete,
+            model_label=model_label,
+            embedder=embedder,
+        )
+        lines = [f"# {name}: {probe.question}", "", "## What the memory says", "", report.text, ""]
+        for label, passage in zip(report.labels, report.cited, strict=True):
+            lines.append(
+                f"- [P{label}] {passage.source_name} {passage.locator}: {passage.text[:160]}"
+            )
+        if report.unknown_labels:
+            lines.append(
+                f"\nWarning: cites passages never given to the model: {report.unknown_labels}"
+            )
+        if report.uncited_sentences:
+            lines.append(f"\nWarning: {report.uncited_sentences} sentence(s) have no source.")
+        lines += ["", "## What plain search finds", ""]
+        for result in search_documents(probe.form, home=home, limit=20):
+            c = result.citation
+            lines.append(f"- {c.source_name} {c.locator}: {result.text[:160]}")
+        (out / f"{name}.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+        rows.append(f"| {name} | {probe.form} |  |  |  |")
+    judge = [
+        "# Judge the answers",
+        "",
+        "For each probe, open its file and fill in the three blank columns.",
+        "",
+        "| probe | about | useful? | beyond search? | any claim wrong? |",
+        "|---|---|---|---|---|",
+        *rows,
+    ]
+    (out / "judge.md").write_text("\n".join(judge) + "\n", encoding="utf-8")
+    typer.echo(f"Wrote {len(probes)} probes and judge.md to {out}")
