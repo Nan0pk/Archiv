@@ -463,6 +463,7 @@ them can create, edit, or replace a canonical original.
 | `archiv graph stats` | Show summary statistics of entities, relationships, and evidence edges |
 | `archiv graph query` | Query across photographs and the documents that mention a person |
 | `archiv graph entity TARGET` | Inspect one entity's full graph profile and evidence citations |
+| `archiv memory build` | Read every document through a model you name and store the things it mentions and how they connect |
 
 #### Local model
 
