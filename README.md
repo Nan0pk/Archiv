@@ -464,6 +464,7 @@ them can create, edit, or replace a canonical original.
 | `archiv graph query` | Query across photographs and the documents that mention a person |
 | `archiv graph entity TARGET` | Inspect one entity's full graph profile and evidence citations |
 | `archiv memory build` | Read every document through a model you name and store the things it mentions and how they connect |
+| `archiv memory ask QUESTION` | Answer a question from the memory with a cited source for every claim |
 
 #### Local model
 

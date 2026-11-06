@@ -11,9 +11,11 @@ from typing import Annotated
 
 import typer
 
-from archiv.memory.build import build_memory
+from archiv.memory.ask import ask
+from archiv.memory.build import build_memory, passage_vectors_base
 from archiv.memory.model import Complete, command_completer
 from archiv.memory.vectors import Embedder, EmbedderUnavailable, FastEmbedder
+from archiv.storage.layout import ArchivLayout
 
 memory_app = typer.Typer(
     no_args_is_help=True,
@@ -83,3 +85,61 @@ def build_command(
         f"The memory now holds {summary.things} things and {summary.relations} relations; "
         f"{summary.merges_confirmed} written forms were confirmed to be the same thing."
     )
+
+
+@memory_app.command("ask")
+def ask_command(
+    question: Annotated[str, typer.Argument(help="Your question, in plain words.")],
+    model_label: ModelLabelOption,
+    home: HomeOption = None,
+    model_cmd: ModelCmdOption = None,
+    json_output: Annotated[bool, typer.Option("--json", help="Emit JSON.")] = False,
+) -> None:
+    """Answer a question from what the memory holds, with a cited source for every claim."""
+    layout = ArchivLayout.resolve(home)
+    has_vectors = Path(f"{passage_vectors_base(layout)}.ids.json").is_file()
+    report = ask(
+        question,
+        home=home,
+        complete=_completer(model_cmd),
+        model_label=model_label,
+        embedder=_embedder() if has_vectors else None,
+    )
+    sources = [
+        {
+            "label": f"P{n}",
+            "source": p.source_name,
+            "locator": p.locator,
+            "text": p.text[:160],
+        }
+        for n, p in zip(report.labels, report.cited, strict=True)
+    ]
+    if json_output:
+        typer.echo(
+            json.dumps(
+                {
+                    "report": report.text,
+                    "sources": sources,
+                    "unknown_labels": report.unknown_labels,
+                    "uncited_sentences": report.uncited_sentences,
+                },
+                indent=2,
+                ensure_ascii=False,
+            )
+        )
+        return
+    typer.echo(report.text)
+    if sources:
+        typer.echo("\nSources:")
+        for item in sources:
+            typer.echo(f"  [{item['label']}] {item['source']} {item['locator']}: {item['text']}")
+    if report.unknown_labels:
+        typer.echo(
+            "\nWarning: the report cites passages that were never given to the model: "
+            + ", ".join(report.unknown_labels)
+            + ". Do not trust those statements."
+        )
+    if report.uncited_sentences:
+        typer.echo(
+            f"\nWarning: {report.uncited_sentences} sentence(s) in the report have no source."
+        )
