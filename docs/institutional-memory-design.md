@@ -1,6 +1,8 @@
 # Institutional memory: design
 
-Status: **draft for approval** (2026-11-07). Nothing below is built yet.
+Status: **approved by the owner** (2026-11-07). Built so far: everything in sections 2 to 5,
+as the `archiv memory` commands. Not yet done: the owner's judgement of real reports against
+plain search, which decides whether the old regex reader is removed (plan, Task 9).
 
 > **For anyone joining this work.** Examples you hear in discussions are
 > illustrations, never requirements. Do not shape code, prompts, tests or this

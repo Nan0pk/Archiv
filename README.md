@@ -574,6 +574,12 @@ and *loopback*; there is nothing to switch off.
 If your local server needs a token, you give Archiv the *name of an environment variable*
 to read it from — the secret itself is never written into Archiv's configuration.
 
+**`archiv memory` works differently.** Its `build`, `ask` and `probe` commands hand text to
+a command that *you* name with `--model-cmd`, and Archiv does not look inside that command.
+If your command talks to a service on the internet, the document text it is given goes
+there. Archiv itself sends nothing and never downloads a model, but this one door is yours to
+choose. For private documents, name a command that talks only to your own machine.
+
 ---
 
 ## For developers
