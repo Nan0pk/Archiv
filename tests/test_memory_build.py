@@ -91,7 +91,8 @@ def test_unicode_identity(tmp_path: Path) -> None:
     assert forms == {composed, decomposed}
 
 
-def test_cli_build_json(tmp_path: Path) -> None:
+def test_cli_build_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("archiv.memory.cli._embedder", lambda: None)
     home = make_archive(tmp_path, DOCS)
     script = 'import sys; sys.stdin.read(); print(\'{"things": [], "relations": []}\')'
     command = f'{sys.executable} -c "{script}"'

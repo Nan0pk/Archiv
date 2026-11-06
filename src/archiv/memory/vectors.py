@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 import os
 from dataclasses import dataclass
@@ -38,14 +39,17 @@ class FastEmbedder:
         self.name = model_name
         folder = cache_dir or Path(os.environ.get("ARCHIV_EMBED_CACHE", "/tmp/fastembed_cache"))
         try:
-            from fastembed import TextEmbedding
+            # Loaded by name so that type checking works without the optional library.
+            fastembed = importlib.import_module("fastembed")
         except ImportError as error:
             raise EmbedderUnavailable(
                 "The meaning-vector library is not installed. "
                 "Install it with: pip install 'archiv-core[memory]'"
             ) from error
         try:
-            self._model = TextEmbedding(model_name, cache_dir=str(folder), local_files_only=True)
+            self._model = fastembed.TextEmbedding(
+                model_name, cache_dir=str(folder), local_files_only=True
+            )
         except Exception as error:
             raise EmbedderUnavailable(
                 f"The embedding model '{model_name}' is not on this machine (looked in {folder}). "
