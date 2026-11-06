@@ -68,6 +68,14 @@ def build_command(
     home: HomeOption = None,
     model_cmd: ModelCmdOption = None,
     max_chars: Annotated[int, typer.Option("--max-chars", min=200)] = 6000,
+    max_merge_pairs: Annotated[
+        int,
+        typer.Option(
+            "--max-merge-pairs",
+            min=0,
+            help="Most pairs of written forms to ask the model about (one call each).",
+        ),
+    ] = 500,
     json_output: Annotated[bool, typer.Option("--json", help="Emit JSON.")] = False,
 ) -> None:
     """Read every document through the model and store what it mentions and how it connects."""
@@ -77,6 +85,7 @@ def build_command(
         model_label=model_label,
         max_chars=max_chars,
         embedder=_embedder(),
+        max_merge_pairs=max_merge_pairs,
     )
     if json_output:
         typer.echo(json.dumps(asdict(summary), indent=2))

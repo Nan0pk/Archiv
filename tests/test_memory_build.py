@@ -5,7 +5,8 @@ import sqlite3
 import sys
 from pathlib import Path
 
-from memory_support import FakeModel, make_archive
+import pytest
+from memory_support import FakeModel, HashEmbedder, make_archive
 from typer.testing import CliRunner
 
 from archiv.cli import app
@@ -14,6 +15,10 @@ from archiv.memory.store import memory_path, open_memory
 from archiv.search.index import search_index_path
 from archiv.storage.layout import ArchivLayout
 
+SHARED_TAIL = (
+    " met on the old quay to discuss the repair schedule for the winter months and the"
+    " budget for the spring works along the river bank near the mill."
+)
 FORMS = ["Harbour Board", "Bridge Plan", "Orchard Group"]
 DOCS = {
     "a.txt": "The Harbour Board approved the Bridge Plan after a long debate.",
@@ -107,3 +112,50 @@ def test_cli_build_json(tmp_path: Path) -> None:
     assert result.exit_code == 0, result.output
     assert json.loads(result.output)["documents"] == 2
     assert memory_path(ArchivLayout.resolve(home)).is_file()
+
+
+def test_cli_build_limits_merge_questions(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("archiv.memory.cli._embedder", lambda: HashEmbedder())
+    home = make_archive(
+        tmp_path,
+        {
+            "a.txt": f"Quay Committee{SHARED_TAIL}",
+            "b.txt": f"Harbour Panel{SHARED_TAIL}",
+        },
+    )
+    log = tmp_path / "calls.log"
+    script = tmp_path / "model.py"
+    script.write_text(
+        "import sys, json, re\n"
+        f"open({str(log)!r}, 'a').write('call\\n')\n"
+        "p = sys.stdin.read()\n"
+        "if 'same thing' in p:\n"
+        "    print(json.dumps({'same': True, 'reason': 'x'}))\n"
+        "else:\n"
+        "    t = [{'form': ' '.join(m[1].split()[:2]), 'kind': 'k', 'passages': [m[0]]}\n"
+        "         for m in re.findall(r'^\\[(P\\d+)\\] (.*)$', p, flags=re.M)]\n"
+        "    print(json.dumps({'things': t, 'relations': []}))\n",
+        encoding="utf-8",
+    )
+
+    def run(label: str, limit: int) -> int:
+        log.write_text("", encoding="utf-8")
+        result = CliRunner().invoke(
+            app,
+            [
+                "memory",
+                "build",
+                "--home",
+                str(home),
+                "--model-cmd",
+                f"{sys.executable} {script}",
+                "--model-label",
+                label,
+                "--max-merge-pairs",
+                str(limit),
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        return len(log.read_text(encoding="utf-8").splitlines())
+
+    assert run("none", 0) < run("some", 5)
