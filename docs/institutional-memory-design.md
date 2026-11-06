@@ -128,7 +128,22 @@ extraction caught.
 
 ## 6. Models
 
-**One function** sends a prompt and returns text. It reads the endpoint, model name
+**During development (user's decision, 2026-11-07): no model-calling code in the
+project.** The project's steps produce prompts and consume answers. Development and
+test runs feed those prompts to Claude Haiku 5.5 at low effort through the
+developer's existing Claude Code subscription (`claude -p`, with a short system
+prompt, no tools and no MCP). Each run records token usage, so cost is known per
+document and per MB before any bulk pass is planned.
+
+Measured 2026-11-07: about 4.2K input and 5.3K output tokens for 4 short passages.
+Output dominates the cost.
+
+Haiku 5.5 at low effort scores about the same as the best ~27B open model at full
+reasoning on a public capability index. That makes it a fair stand-in for the
+eventual local model, a step stronger rather than far stronger.
+
+**Later, when bulk runs or the product need it:** one function sends a prompt and
+returns text. It reads the endpoint, model name
 and key from a config file outside the repo. Switching between online and local is a
 config change.
 
