@@ -7,7 +7,7 @@ import pytest
 from memory_support import make_archive
 
 from archiv.memory.model import command_completer
-from archiv.memory.passages import load_passages, passages_by_object
+from archiv.memory.passages import count_literal_passages, load_passages, passages_by_object
 
 SHARED = "The harbour committee reviewed the second bridge proposal in detail."
 
@@ -41,3 +41,18 @@ def test_command_completer_pipes_stdin() -> None:
         [sys.executable, "-c", "import sys; print(sys.stdin.read().upper())"]
     )
     assert complete("abc") == "ABC\n"
+
+
+def test_count_literal_passages_counts_distinct_passages(tmp_path: Path) -> None:
+    home = make_archive(
+        tmp_path,
+        {
+            "a.txt": (
+                f"{SHARED}\n\nShort line\n\nHARBOUR committee met again on the first day of spring."
+            ),
+            "b.txt": f"{SHARED}\n\nThe orchard group planted four rows of pears.",
+        },
+    )
+    assert count_literal_passages(home, "harbour committee") == 2  # case-insensitive, repeats once
+    assert count_literal_passages(home, "orchard group") == 1
+    assert count_literal_passages(home, "no such thing") == 0

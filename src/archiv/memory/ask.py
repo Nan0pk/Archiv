@@ -15,7 +15,7 @@ from archiv.memory.build import passage_vectors_base
 from archiv.memory.extract import first_json_object, ident
 from archiv.memory.merge import canonical_ids
 from archiv.memory.model import Complete
-from archiv.memory.passages import Passage, load_passages
+from archiv.memory.passages import Passage, count_literal_passages, load_passages
 from archiv.memory.store import cache_key, cached, open_memory, remember
 from archiv.memory.vectors import Embedder, VectorIndex
 from archiv.search.service import search_documents
@@ -24,15 +24,25 @@ from archiv.storage.layout import ArchivLayout
 if TYPE_CHECKING:
     from archiv.memory.vectors import Vectors
 
-ENTRY_PROMPT_VERSION = "1"
-EXIT_PROMPT_VERSION = "1"
+ENTRY_PROMPT_VERSION = "2"
+EXIT_PROMPT_VERSION = "2"
 NOTHING_FOUND = "The collection has nothing that bears on this question."
 
 _LABELS = re.compile(r"\[(P\d+(?:\s*,\s*P\d+)*)\]")
 
 
-def entry_prompt(question: str) -> str:
+def entry_prompt(question: str, samples: list[str] | None = None) -> str:
+    grounding = ""
+    if samples:
+        shown = "\n".join(f"- {sample}" for sample in samples)
+        grounding = (
+            "Here are a few passages from this collection that are closest in meaning to the "
+            "question. The collection may use a word or an abbreviation differently from "
+            "everyday use, so rely on what these passages show it to mean:\n"
+            f"{shown}\n\n"
+        )
     return (
+        f"{grounding}"
         "A user is asking the question below of a collection of documents. Say how the "
         "subject of the question might be written in those documents: other names, "
         "spellings, abbreviations, translations or descriptions. Also list other things "
@@ -197,16 +207,51 @@ def walk(
     return [by_id[s] for s in (exact + rest)[:max_passages]]
 
 
-def exit_prompt(question: str, passages: list[Passage]) -> str:
-    labelled = "\n".join(f"[P{i}] {p.text}" for i, p in enumerate(passages, start=1))
+def exit_prompt(
+    question: str, passages: list[Passage], totals: list[tuple[str, int, int]] | None = None
+) -> str:
+    """The prompt for the report step.
+
+    Each passage is shown with the name of its document, which usually carries the date.
+    `totals` holds (name, passages in the collection that mention it, how many were given).
+    """
+    labelled = "\n".join(f"[P{i}] ({p.source_name}) {p.text}" for i, p in enumerate(passages, 1))
+    counts = ""
+    if totals:
+        lines = [
+            f"- The collection has {n} passage{'s' if n != 1 else ''} that "
+            f"{'mention' if n != 1 else 'mentions'} '{name}'. You have been given {k} of them."
+            for name, n, k in totals
+        ]
+        counts = "Counts you may rely on:\n" + "\n".join(lines) + "\n\n"
     return (
         "Write a plain-language report that answers the question using only the passages "
-        "below. Organise it around whatever the passages show matters for the question; "
-        "do not use a fixed template. End every sentence with the labels of the passages "
-        "that support it, like [P2] or [P1][P3]. If the passages leave part of the "
-        "question unanswered, say so. Add nothing from outside the passages.\n\n"
-        f"Question: {question}\n\n{labelled}"
+        "below. Each passage starts with the name of the document it came from, which often "
+        "includes its date. Organise the report around whatever the passages show matters "
+        "for the question; do not use a fixed template. End every sentence that states "
+        "something with the labels of the passages that support it, like [P2] or [P1][P3]. "
+        "Do not say how many passages or items the collection holds unless a line under "
+        "'Counts you may rely on' gives that number; otherwise say how many you were given. "
+        "Put anything about what the passages do not say in a final paragraph that starts "
+        "with 'Gaps:'; that paragraph needs no labels. Add nothing from outside the "
+        f"passages.\n\n{counts}Question: {question}\n\n{labelled}"
     )
+
+
+def literal_totals(
+    home: Path | None, forms: list[str], given: list[Passage], limit: int = 5
+) -> list[tuple[str, int, int]]:
+    """For the first starting names that occur in the collection: the true number of passages
+    that mention each, and how many of those were given to the report step."""
+    totals: list[tuple[str, int, int]] = []
+    for form in [f.strip() for f in forms if f.strip()][:10]:
+        total = count_literal_passages(home, form)
+        if total:
+            have = sum(1 for p in given if form.casefold() in p.text.casefold())
+            totals.append((form, total, have))
+        if len(totals) >= limit:
+            break
+    return totals
 
 
 @dataclass
@@ -225,9 +270,12 @@ def check_report(answer: str, passages: list[Passage]) -> Report:
     cited_numbers = list(dict.fromkeys(n for n in numbers if 1 <= n <= len(passages)))
     unknown = list(dict.fromkeys(f"P{n}" for n in numbers if not 1 <= n <= len(passages)))
     uncited = 0
-    for sentence in re.split(r"(?<=[.!?])\s+", answer.strip()):
-        if len(sentence.split()) >= 4 and not sentence.lstrip().startswith("#"):
-            uncited += 0 if _LABELS.search(sentence) else 1
+    for paragraph in re.split(r"\n\s*\n", answer.strip()):
+        if re.match(r"\W*gaps\b", paragraph, re.IGNORECASE):
+            continue  # what the passages do not say has nothing to cite
+        for sentence in re.split(r"(?<=[.!?])\s+", paragraph):
+            if len(sentence.split()) >= 6 and not sentence.lstrip().startswith("#"):
+                uncited += 0 if _LABELS.search(sentence) else 1
     return Report(
         text=answer.strip(),
         cited=[passages[n - 1] for n in cited_numbers],
@@ -247,14 +295,6 @@ def ask(
 ) -> Report:
     layout = ArchivLayout.resolve(home)
     with open_memory(layout) as conn:
-        prompt = entry_prompt(question)
-        key = cache_key(question, model_label, ENTRY_PROMPT_VERSION, prompt)
-        answer = cached(conn, key)
-        if answer is None:
-            answer = complete(prompt)
-            if first_json_object(answer) is not None:
-                remember(conn, key, answer)
-        forms = parse_entry(answer)
         by_id = {p.segment_id: p for p in load_passages(home)}
         vectors: VectorIndex | None = None
         question_vec = None
@@ -263,12 +303,29 @@ def ask(
             stored = VectorIndex.load(base)
             if stored.embedder == embedder.name:
                 vectors, question_vec = stored, embedder.embed([question])[0]
+        # Show the entry step what this collection says near the question, so that a term is
+        # read the way the collection uses it and not the way everyday use does.
+        samples: list[str] = []
+        if vectors is not None and question_vec is not None:
+            samples = [
+                by_id[s].text[:300]
+                for s, _ in vectors.nearest(question_vec, k=5, floor=0.3)
+                if s in by_id
+            ]
+        prompt = entry_prompt(question, samples)
+        key = cache_key(question, model_label, ENTRY_PROMPT_VERSION, prompt)
+        answer = cached(conn, key)
+        if answer is None:
+            answer = complete(prompt)
+            if first_json_object(answer) is not None:
+                remember(conn, key, answer)
+        forms = parse_entry(answer)
         found = walk(
             conn, forms=forms, question_vec=question_vec, vectors=vectors, by_id=by_id, home=home
         )
         if not found:
             return Report(NOTHING_FOUND, [], [], 0)
-        prompt = exit_prompt(question, found)
+        prompt = exit_prompt(question, found, literal_totals(home, forms, found))
         key = cache_key(question, model_label, EXIT_PROMPT_VERSION, prompt)
         answer = cached(conn, key)
         if answer is None:
