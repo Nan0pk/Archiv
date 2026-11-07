@@ -5,7 +5,7 @@ from __future__ import annotations
 import importlib
 import json
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
@@ -75,6 +75,17 @@ class VectorIndex:
     ids: list[str]
     vectors: Vectors
     embedder: str = ""
+    _row: dict[str, int] | None = field(default=None, init=False, repr=False, compare=False)
+
+    def scores(self, ids: list[str], query: Vectors) -> dict[str, float]:
+        """Similarity of each stored passage in `ids` to `query`; unknown ids are left out."""
+        if self._row is None:
+            self._row = {identifier: position for position, identifier in enumerate(self.ids)}
+        known = [identifier for identifier in ids if identifier in self._row]
+        if not known:
+            return {}
+        values = self.vectors[[self._row[identifier] for identifier in known]] @ query
+        return {identifier: float(value) for identifier, value in zip(known, values, strict=True)}
 
     def save(self, base: Path) -> None:
         base.parent.mkdir(parents=True, exist_ok=True)
