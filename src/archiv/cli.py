@@ -21,6 +21,7 @@ from archiv.graph.cli import register_graph_commands
 from archiv.images.cli import register_image_commands
 from archiv.ingestion import ingest_file, rebuild_derived
 from archiv.ingestion.formats import UnsupportedFormatError, suffix_for
+from archiv.memory.cli import memory_app
 from archiv.model_cli import model_app
 from archiv.ocr_benchmark_cli import register_ocr_benchmark_command
 from archiv.report_cli import register_report_commands
@@ -42,6 +43,7 @@ register_ui_command(app)
 register_image_commands(app)
 register_faces_commands(app)
 register_graph_commands(app)
+app.add_typer(memory_app, name="memory")
 
 
 @app.command()

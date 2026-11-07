@@ -13,6 +13,10 @@ repository. Read it first, then follow the resume procedure below.
 
 ---
 
+**Separate track:** the institutional-memory work (`archiv memory …`) runs outside the
+queue below, by the owner's decision. Its design is `docs/institutional-memory-design.md`
+and its plan is `docs/institutional-memory-plan.md`.
+
 ## Resume procedure
 
 Work is a strictly ordered queue of small steps. **Progress is derived by running checks,

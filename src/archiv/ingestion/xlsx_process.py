@@ -24,6 +24,11 @@ from archiv.ingestion.limits import (
 # Limits are applied before importing the document reader or any third-party parser.
 # No preexec_fn is needed, so this remains safe when called from a worker thread.
 _WORKER_BOOTSTRAP = """
+import os
+# If numpy is installed (the openpyxl reader loads it), its math library reserves memory for
+# every processor core, which the address-space limit below would refuse. One thread is enough.
+for name in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS"):
+    os.environ[name] = "1"
 import resource
 import sys
 cpu, memory, output = map(int, sys.argv[1:])

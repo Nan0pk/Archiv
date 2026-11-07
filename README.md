@@ -463,6 +463,9 @@ them can create, edit, or replace a canonical original.
 | `archiv graph stats` | Show summary statistics of entities, relationships, and evidence edges |
 | `archiv graph query` | Query across photographs and the documents that mention a person |
 | `archiv graph entity TARGET` | Inspect one entity's full graph profile and evidence citations |
+| `archiv memory build` | Read every document through a model you name and store the things it mentions and how they connect |
+| `archiv memory ask QUESTION` | Answer a question from the memory with a cited source for every claim |
+| `archiv memory probe` | Ask random questions drawn from the data and set each answer beside plain search, for judging |
 
 #### Local model
 
@@ -570,6 +573,12 @@ and *loopback*; there is nothing to switch off.
 
 If your local server needs a token, you give Archiv the *name of an environment variable*
 to read it from — the secret itself is never written into Archiv's configuration.
+
+**`archiv memory` works differently.** Its `build`, `ask` and `probe` commands hand text to
+a command that *you* name with `--model-cmd`, and Archiv does not look inside that command.
+If your command talks to a service on the internet, the document text it is given goes
+there. Archiv itself sends nothing and never downloads a model, but this one door is yours to
+choose. For private documents, name a command that talks only to your own machine.
 
 ---
 
