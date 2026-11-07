@@ -29,6 +29,14 @@ EXIT_PROMPT_VERSION = "2"
 NOTHING_FOUND = "The collection has nothing that bears on this question."
 
 _LABELS = re.compile(r"\[(P\d+(?:\s*,\s*P\d+)*)\]")
+_HEADING = re.compile(r"\s*\*\*[^*]+\*\*:?\s*")  # a line that is only a bold heading
+# The report step is told how many passages exist and how many it was given; saying so is
+# not a claim about the documents and has nothing to cite.
+_COUNT_STATEMENT = re.compile(
+    r"\b(?:i|you|we)\s+(?:was|were|have been|had been)\s+given\b"
+    r"|\bthe collection has \d+ passages?\b",
+    re.IGNORECASE,
+)
 
 
 def entry_prompt(question: str, samples: list[str] | None = None) -> str:
@@ -273,9 +281,18 @@ def check_report(answer: str, passages: list[Passage]) -> Report:
     for paragraph in re.split(r"\n\s*\n", answer.strip()):
         if re.match(r"\W*gaps\b", paragraph, re.IGNORECASE):
             continue  # what the passages do not say has nothing to cite
-        for sentence in re.split(r"(?<=[.!?])\s+", paragraph):
-            if len(sentence.split()) >= 6 and not sentence.lstrip().startswith("#"):
-                uncited += 0 if _LABELS.search(sentence) else 1
+        sentences = re.split(r"(?<=[.!?])\s+", paragraph)
+        labelled = [bool(_LABELS.search(sentence)) for sentence in sentences]
+        for position, sentence in enumerate(sentences):
+            near_label = any(labelled[max(0, position - 1) : position + 2])
+            if (
+                len(sentence.split()) >= 6
+                and not sentence.lstrip().startswith("#")
+                and not _HEADING.fullmatch(sentence)
+                and not _COUNT_STATEMENT.search(sentence)
+                and not near_label  # a continuation of a cited point is not a new claim
+            ):
+                uncited += 1
     return Report(
         text=answer.strip(),
         cited=[passages[n - 1] for n in cited_numbers],

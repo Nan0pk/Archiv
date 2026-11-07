@@ -101,13 +101,38 @@ def test_nothing_found_makes_no_exit_call(tmp_path: Path) -> None:
 def test_check_report_flags_unknown_and_uncited() -> None:
     passages = [Passage(f"{i:064x}", "a" * 64, "doc.txt", {"line": i}, f"text {i}") for i in (1, 2)]
     answer = (
-        "The first thing happened early on [P1]. Another thing is claimed with no source at all."
+        "The first thing happened early on [P1]. A second claim sits next to it with no label. "
+        "Another thing is claimed with no source at all anywhere. "
+        "A fourth claim follows it also with no label at all. It was seen again [P7]."
     )
-    report = check_report(answer + " It was seen again [P7].", passages)
+    report = check_report(answer, passages)
     assert report.unknown_labels == ["P7"]
-    assert report.uncited_sentences == 1
+    assert report.uncited_sentences == 1  # only the one with no label on either side
     assert [p.segment_id for p in report.cited] == [passages[0].segment_id]
     assert report.labels == [1]
+
+
+def test_check_report_accepts_a_label_on_the_neighbouring_sentence() -> None:
+    passages = [Passage("1" * 64, "a" * 64, "doc.txt", {"line": 1}, "text one")]
+    before = (
+        "Kremlin spokesman said the country would help with the nuclear talks. "
+        "Trump raised it in February [P1]."
+    )
+    after = (
+        "The envoy asked for an honest inquiry into the departure [P1]. "
+        "He said it led to the change."
+    )
+    assert check_report(before, passages).uncited_sentences == 0
+    assert check_report(after, passages).uncited_sentences == 0
+
+
+def test_check_report_does_not_flag_the_models_own_count_statements() -> None:
+    passages = [Passage("1" * 64, "a" * 64, "doc.txt", {"line": 1}, "text one")]
+    answer = (
+        "The collection has 4 passages that mention 'the Minister', and I was given all 4.\n\n"
+        "Sentences like this one claim something with no label anywhere near it at all."
+    )
+    assert check_report(answer, passages).uncited_sentences == 1  # only the real claim
 
 
 def test_entry_prompt_and_parse() -> None:
@@ -281,12 +306,13 @@ def test_exit_prompt_shows_document_names_and_true_counts() -> None:
 def test_check_report_ignores_the_gaps_paragraph_and_headings() -> None:
     passages = [Passage("1" * 64, "a" * 64, "doc.txt", {"line": 1}, "text one")]
     answer = (
-        "**Overview**\n\nThe first thing happened early on [P1].\n\n"
+        "**Overview**\n\n**Claims made by several groups about the attacks**\n\n"
+        "The first thing happened early on [P1].\n\n"
         "Gaps: The passages do not say when it ended or who else was involved."
     )
     assert check_report(answer, passages).uncited_sentences == 0
     claim = (
-        "The first thing happened early on [P1]. Another thing is claimed with no source at all."
+        "The first thing happened early on [P1].\n\nAnother thing is claimed with no source at all."
     )
     assert check_report(claim, passages).uncited_sentences == 1
 
