@@ -102,13 +102,31 @@ def passage_vectors_base(layout: ArchivLayout) -> Path:
 
 
 def embed_passages(layout: ArchivLayout, passages: list[Passage], embedder: Embedder) -> None:
-    """Embed every passage unless the stored vectors already match these passages."""
+    """Embed only the passages that have no stored vector yet, and keep the rest as they are.
+
+    A passage id includes a hash of the passage text, so a stored vector for an id is still
+    right for it.
+    Adding one document to a large collection therefore embeds that document's passages,
+    not the whole collection again. Vectors made by a different embedder are not reused.
+    """
     base = passage_vectors_base(layout)
     ids = [p.segment_id for p in passages]
+    kept: dict[str, int] = {}
+    stored: VectorIndex | None = None
     if Path(f"{base}.ids.json").is_file():
         stored = VectorIndex.load(base)
-        if stored.ids == ids and stored.embedder == embedder.name:
-            return
-    VectorIndex(
-        ids=ids, vectors=embedder.embed([p.text for p in passages]), embedder=embedder.name
-    ).save(base)
+        if stored.embedder == embedder.name:
+            kept = {identifier: row for row, identifier in enumerate(stored.ids)}
+            if stored.ids == ids:
+                return
+    import numpy as np
+
+    new = [p for p in passages if p.segment_id not in kept]
+    fresh = embedder.embed([p.text for p in new]) if new else np.empty((0, 0), dtype=np.float32)
+    if stored is None or not kept:
+        VectorIndex(ids=ids, vectors=fresh, embedder=embedder.name).save(base)
+        return
+    new_row = {p.segment_id: row for row, p in enumerate(new)}
+    rows = [stored.vectors[kept[i]] if i in kept else fresh[new_row[i]] for i in ids]
+    vectors = np.stack(rows).astype(np.float32)
+    VectorIndex(ids=ids, vectors=vectors, embedder=embedder.name).save(base)
