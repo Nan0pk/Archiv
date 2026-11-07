@@ -203,3 +203,10 @@ def test_propose_reaches_a_twin_buried_among_other_numbers(tmp_path: Path) -> No
         pairs = propose_pairs(conn, HashEmbedder(), NUM_TEXT, k=3, floor=0.5)
     assert (1, 6) in [(a, b) for a, b, _ in pairs]
     assert not any({a, b} <= {1, 2, 3, 4, 5} for a, b, _ in pairs)
+
+
+def test_propose_never_pairs_a_bare_number_with_a_plain_name(tmp_path: Path) -> None:
+    """A name made only of digits is a value, not a name; a phrase can't be it."""
+    with open_memory(_layout(tmp_path)) as conn:
+        _numbers_seed(conn, [("7,565,367", "n1"), ("confirmed cases", "n2")])
+        assert propose_pairs(conn, HashEmbedder(), NUM_TEXT, floor=0.5) == []

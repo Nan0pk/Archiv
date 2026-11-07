@@ -90,9 +90,12 @@ def propose_pairs(
         passages.setdefault(int(thing_id), set()).add(str(segment_id))
     # Names that contain numbers: two such things can only be the same thing if one of
     # their numbers is the same value. Nothing is dropped; this only decides which pairs
-    # the model is asked about. A number against a plain name is always allowed.
+    # the model is asked about.
     numbers: dict[int, set[tuple[int, ...]]] = {}
+    has_letters: set[int] = set()
     for thing_id, form in conn.execute("SELECT DISTINCT thing_id, form FROM forms"):
+        if any(character.isalpha() for character in str(form)):
+            has_letters.add(int(thing_id))
         signature = digit_signature(str(form))
         if signature:
             numbers.setdefault(int(thing_id), set()).add(signature)
@@ -100,7 +103,12 @@ def propose_pairs(
     def allowed(a: int, b: int) -> bool:
         if (a, b) in decided or passages.get(a, set()) & passages.get(b, set()):
             return False
-        return not (a in numbers and b in numbers and not numbers[a] & numbers[b])
+        if a in numbers and b in numbers:
+            return bool(numbers[a] & numbers[b])
+        # One side has no number. A name made only of digits is a value, not a name, so a
+        # plain name cannot be it; names with letters and digits ("G20") still can.
+        number_side = a if a in numbers else b if b in numbers else None
+        return number_side is None or number_side in has_letters
 
     best: dict[tuple[int, int], float] = {}
     for position, thing_id in enumerate(ids):
