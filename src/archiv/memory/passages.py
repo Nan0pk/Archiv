@@ -65,3 +65,29 @@ def passages_by_object(passages: list[Passage]) -> dict[str, list[Passage]]:
     for passage in passages:
         grouped.setdefault(passage.object_sha256, []).append(passage)
     return grouped
+
+
+def count_literal_passages(home: Path | None, form: str, *, min_chars: int = 40) -> int:
+    """How many distinct passages contain `form` as exact text, ignoring case.
+
+    Counted the same way `load_passages` counts: repeats of the same text count once and
+    very short lines are left out, so the number matches what the report step can be given.
+    """
+    phrase = form.strip()
+    if not phrase:
+        return 0
+    path = search_index_path(ArchivLayout.resolve(home))
+    if not path.is_file():
+        raise FileNotFoundError("search index missing; run rebuild-search-index")
+    match = '"' + phrase.replace('"', '""') + '"'
+    connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    try:
+        rows = connection.execute(
+            "SELECT text FROM segments WHERE rowid IN "
+            "(SELECT rowid FROM segments_fts WHERE segments_fts MATCH ?)",
+            (match,),
+        ).fetchall()
+    finally:
+        connection.close()
+    distinct = {_collapse(str(text)).casefold() for (text,) in rows}
+    return sum(1 for text in distinct if len(text) >= min_chars)

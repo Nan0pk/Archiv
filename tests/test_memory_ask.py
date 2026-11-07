@@ -14,6 +14,7 @@ from archiv.memory.ask import (
     ask,
     check_report,
     entry_prompt,
+    exit_prompt,
     parse_entry,
     walk,
 )
@@ -252,3 +253,66 @@ def test_walk_ranks_by_similarity_and_leaves_room_beyond_exact_matches(tmp_path:
     assert len(got) == 6
     # at most half the slots go to exact matches, so the passages closest in meaning get room
     assert sum(1 for p in got if p.source_name.startswith("n")) >= 2
+
+
+def test_entry_prompt_shows_the_collections_own_wording() -> None:
+    prompt = entry_prompt("What is the TTP?", ["TTP claimed an attack on a checkpoint."])
+    assert "TTP claimed an attack on a checkpoint." in prompt
+    assert "this collection" in prompt.lower()
+    assert "TTP claimed" not in entry_prompt("What is the TTP?")
+
+
+def test_exit_prompt_shows_document_names_and_true_counts() -> None:
+    passage = Passage(
+        "1" * 64,
+        "a" * 64,
+        "Daily report (8 May 2024).docx",
+        {"paragraph": 3},
+        "Something happened here today in the valley.",
+    )
+    prompt = exit_prompt("What about the guild?", [passage], [("Pier Guild", 7, 1)])
+    assert "[P1] (Daily report (8 May 2024).docx) Something happened" in prompt
+    assert "has 7 passages that mention 'Pier Guild'" in prompt
+    assert "given 1 of them" in prompt
+    assert "Gaps:" in prompt
+    assert "has 1 passage that" in exit_prompt("q", [passage], [("X", 1, 1)])
+
+
+def test_check_report_ignores_the_gaps_paragraph_and_headings() -> None:
+    passages = [Passage("1" * 64, "a" * 64, "doc.txt", {"line": 1}, "text one")]
+    answer = (
+        "**Overview**\n\nThe first thing happened early on [P1].\n\n"
+        "Gaps: The passages do not say when it ended or who else was involved."
+    )
+    assert check_report(answer, passages).uncited_sentences == 0
+    claim = (
+        "The first thing happened early on [P1]. Another thing is claimed with no source at all."
+    )
+    assert check_report(claim, passages).uncited_sentences == 1
+
+
+def test_ask_gives_the_entry_step_nearby_passages_and_the_report_step_names_and_counts(
+    tmp_path: Path,
+) -> None:
+    home = _built(tmp_path)
+    prompts: list[str] = []
+
+    def complete(prompt: str) -> str:
+        prompts.append(prompt)
+        if '"forms"' in prompt:
+            return json.dumps({"forms": ["Alpha Works"], "related": []})
+        return "Alpha Works signed an agreement with Beta Trust [P1]."
+
+    ask(
+        "Who signed the northern lease?",
+        home=home,
+        complete=complete,
+        model_label="fake",
+        embedder=HashEmbedder(),
+    )
+    entry = next(p for p in prompts if '"forms"' in p)
+    report = next(p for p in prompts if '"forms"' not in p)
+    assert "Alpha Works signed an agreement" in entry  # a nearby passage, shown to the entry step
+    assert "(a.txt)" in report
+
+    assert "has 1 passage that mentions 'Alpha Works'" in report
