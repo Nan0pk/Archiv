@@ -53,3 +53,11 @@ def test_archiv_starts_without_numpy() -> None:
     code = "import sys; sys.modules['numpy'] = None; import archiv.cli"
     result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr[-400:]
+
+
+def test_scores_gives_similarity_for_known_ids_only() -> None:
+    query = np.array([1, 0], dtype=np.float32)
+    got = _index().scores(["z", "x", "missing"], query)
+    assert set(got) == {"x", "z"}
+    assert got["x"] > got["z"]
+    assert _index().scores(["missing"], query) == {}

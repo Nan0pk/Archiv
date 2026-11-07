@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import re
 import sqlite3
-from collections.abc import Iterable
+from collections import defaultdict
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from archiv.memory.build import passage_vectors_base
 from archiv.memory.extract import first_json_object, ident
@@ -52,9 +54,20 @@ def parse_entry(answer: str) -> list[str]:
     return list(dict.fromkeys(item for item in found if item))
 
 
-def _in(ids: Iterable[int]) -> tuple[str, list[int]]:
-    values = list(ids)
-    return ",".join("?" * len(values)), values
+_CHUNK = 400  # SQLite allows only a limited number of ? marks in one statement
+
+
+def _chunks(items: list[int] | list[str], size: int = _CHUNK) -> Iterator[list[Any]]:
+    for position in range(0, len(items), size):
+        yield list(items[position : position + size])
+
+
+def _marks(count: int) -> str:
+    return ",".join("?" * count)
+
+
+def _document_order(passage: Passage) -> tuple[str, str]:
+    return passage.source_name, json.dumps(passage.locator, sort_keys=True, default=str)
 
 
 def walk(
@@ -66,55 +79,122 @@ def walk(
     by_id: dict[str, Passage],
     home: Path | None,
     hops: int = 2,
-    max_passages: int = 60,
+    max_passages: int = 40,
     floor: float = 0.55,
     vector_k: int = 10,
     text_limit: int = 10,
+    max_forms: int = 10,
+    derived_seeds: int = 15,
 ) -> list[Passage]:
-    """Collect passages by following the web outward from the forms, then add text and
-    meaning matches. No model is involved."""
+    """Collect the passages to hand to the report step. No model is involved.
+
+    Three kinds of passage compete for `max_passages` slots:
+    - exact text matches of the starting names, taking at most half the slots;
+    - passages reached by following the web outward from those names;
+    - passages whose meaning is close to the question.
+    Everything except the exact matches is ranked by similarity to the question when
+    vectors exist, and in a fixed document order when they do not.
+    """
+    forms = [form for form in (value.strip() for value in forms) if form][:max_forms]
     canon = canonical_ids(conn)
     members: dict[int, list[int]] = {}
     for thing_id, root in canon.items():
         members.setdefault(root, []).append(thing_id)
-    wanted = {ident(f) for f in forms}
-    seeds = {
-        canon[int(r[0])]
-        for r in conn.execute("SELECT thing_id, ident FROM things").fetchall()
-        if str(r[1]) in wanted
+    passages_of = {
+        int(t): int(c)
+        for t, c in conn.execute(
+            "SELECT thing_id, COUNT(DISTINCT segment_id) FROM forms GROUP BY thing_id"
+        )
     }
-    ordered: list[str] = []
+    hub_limit = max(10, int(0.02 * len(by_id)))  # a name in more passages than this is everywhere
+
+    def is_hub(root: int) -> bool:
+        return max(passages_of.get(t, 0) for t in members[root]) > hub_limit
+
+    literal = list(
+        dict.fromkeys(
+            result.citation.segment_id
+            for form in forms
+            for result in search_documents(form, home=home, limit=text_limit)
+            if result.citation.segment_id in by_id
+        )
+    )
+    meaning: list[str] = []
+    if vectors is not None and question_vec is not None:
+        meaning = [
+            s for s, _ in vectors.nearest(question_vec, k=vector_k, floor=floor) if s in by_id
+        ]
+
+    # Starting points: names equal to a starting name, names that contain it or are part of
+    # it (other tools draw name boundaries differently), and, one step out, the other names
+    # mentioned in the passages found so far.
+    wanted = {ident(form) for form in forms}
+    names = {int(t): str(i) for t, i in conn.execute("SELECT thing_id, ident FROM things")}
+    seen_in_found: dict[int, int] = defaultdict(int)
+    for chunk in _chunks(list(dict.fromkeys(literal + meaning))):
+        for thing_id, count in conn.execute(
+            "SELECT thing_id, COUNT(DISTINCT segment_id) FROM forms "
+            f"WHERE segment_id IN ({_marks(len(chunk))}) GROUP BY thing_id",
+            chunk,
+        ):
+            seen_in_found[int(thing_id)] += int(count)
+
+    def related_to_asked(thing_id: int) -> bool:
+        name = names[thing_id]
+        return len(name) >= 4 and any(name in want or want in name for want in wanted)
+
+    start = {canon[t] for t, i in names.items() if i in wanted}
+    start |= {canon[t] for t in seen_in_found if related_to_asked(t)}
+    nearby = sorted(
+        (t for t in seen_in_found if canon[t] not in start and passages_of.get(t, 0) <= hub_limit),
+        key=lambda t: (-seen_in_found[t], passages_of.get(t, 0), t),
+    )[:derived_seeds]
+    one_step_out = {canon[t] for t in nearby}
+
+    graph: list[str] = []
     visited: set[int] = set()
-    level = seeds
-    for _ in range(hops + 1):
+    level = set(start)
+    for depth in range(hops + 1):
+        if depth == 1:
+            level |= one_step_out
+        level = {root for root in level if root not in visited}
         if not level:
+            if depth == 0:
+                continue
             break
         visited |= level
         things = [t for root in level for t in members[root]]
-        marks, params = _in(things)
-        for (segment_id,) in conn.execute(
-            f"SELECT segment_id FROM forms WHERE thing_id IN ({marks}) ORDER BY segment_id",
-            params,
-        ):
-            ordered.append(str(segment_id))
-        nxt: set[int] = set()
-        for source, target, segment_id in conn.execute(
-            f"SELECT source_id, target_id, segment_id FROM relations "
-            f"WHERE source_id IN ({marks}) OR target_id IN ({marks}) ORDER BY segment_id",
-            params + params,
-        ):
-            ordered.append(str(segment_id))
-            nxt.add(canon[int(source)])
-            nxt.add(canon[int(target)])
-        level = nxt - visited
-    for form in forms:
-        if form.strip():
-            for result in search_documents(form, home=home, limit=text_limit):
-                ordered.append(result.citation.segment_id)
+        found: list[str] = []
+        following: set[int] = set()
+        for chunk in _chunks(things):
+            marks = _marks(len(chunk))
+            found += [
+                str(r[0])
+                for r in conn.execute(
+                    f"SELECT segment_id FROM forms WHERE thing_id IN ({marks})", chunk
+                )
+            ]
+            for column, other in (("source_id", "target_id"), ("target_id", "source_id")):
+                for segment_id, neighbour in conn.execute(
+                    f"SELECT segment_id, {other} FROM relations WHERE {column} IN ({marks})", chunk
+                ):
+                    found.append(str(segment_id))
+                    following.add(canon[int(neighbour)])
+        graph += sorted(
+            (s for s in dict.fromkeys(found) if s in by_id), key=lambda s: _document_order(by_id[s])
+        )
+        level = {root for root in following if not is_hub(root)}
+
+    scores: dict[str, float] = {}
     if vectors is not None and question_vec is not None:
-        ordered.extend(s for s, _ in vectors.nearest(question_vec, k=vector_k, floor=floor))
-    unique = dict.fromkeys(s for s in ordered if s in by_id)
-    return [by_id[s] for s in list(unique)[:max_passages]]
+        scores = vectors.scores(list(dict.fromkeys(literal + graph + meaning)), question_vec)
+
+    def ranked(ids: list[str]) -> list[str]:
+        return sorted(ids, key=lambda s: -scores.get(s, -1.0)) if scores else ids
+
+    exact = ranked(literal)[: max_passages // 2]
+    rest = ranked([s for s in dict.fromkeys(meaning + graph + literal) if s not in exact])
+    return [by_id[s] for s in (exact + rest)[:max_passages]]
 
 
 def exit_prompt(question: str, passages: list[Passage]) -> str:
