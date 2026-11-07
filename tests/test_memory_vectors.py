@@ -103,3 +103,24 @@ def test_embedding_only_does_the_new_passages(tmp_path: Path) -> None:
     assert stored.ids == ["c", "b"]
     fresh = HashEmbedder().embed(["orchard group", "bridge plan"])
     assert np.allclose(stored.vectors, fresh)
+
+
+def test_embedding_ignores_stored_vectors_that_do_not_match_their_ids(tmp_path: Path) -> None:
+    import json
+
+    from archiv.memory.build import embed_passages
+    from archiv.storage.layout import ArchivLayout
+
+    layout = ArchivLayout.resolve(tmp_path / "home")
+    layout.ensure()
+    passages = [_passage("a", "harbour board"), _passage("b", "bridge plan")]
+    embed_passages(layout, passages, HashEmbedder())
+    # A save cut off between its two files: three ids on disk, two rows of vectors.
+    ids_file = layout.indexes / "memory-passages.ids.json"
+    ids_file.write_text(
+        json.dumps({"ids": ["a", "b", "z"], "embedder": HashEmbedder.name}), encoding="utf-8"
+    )
+    embedder = _CountingEmbedder()
+    embed_passages(layout, passages, embedder)
+    assert embedder.seen == ["harbour board", "bridge plan"]
+    assert VectorIndex.load(layout.indexes / "memory-passages").ids == ["a", "b"]
