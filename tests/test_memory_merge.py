@@ -107,3 +107,21 @@ def test_build_confirms_merges(tmp_path: Path) -> None:
     assert summary.merges_confirmed == 1
     with open_memory(ArchivLayout.resolve(home)) as conn:
         assert len(set(canonical_ids(conn).values())) == 1
+
+
+def test_propose_skips_things_that_only_appear_together(tmp_path: Path) -> None:
+    """Two things found only in one shared passage are neighbours, not candidates to merge."""
+    with open_memory(_layout(tmp_path)) as conn:
+        store_extraction(
+            conn,
+            "a" * 64,
+            Extraction(
+                (
+                    Mention("Quay Committee", "a group", "s1"),
+                    Mention("Harbour Panel", "a group", "s1"),
+                ),
+                (),
+                0,
+            ),
+        )
+        assert propose_pairs(conn, HashEmbedder(), TEXT, floor=0.8) == []

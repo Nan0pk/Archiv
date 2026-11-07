@@ -69,14 +69,20 @@ def propose_pairs(
     decided = {
         (int(a), int(b)) for a, b in conn.execute("SELECT a_id, b_id FROM merges").fetchall()
     }
+    # Two things found in the same passage are neighbours, not candidates to be the same
+    # thing: they share their surrounding text, so their vectors look alike for that reason.
+    passages: dict[int, set[str]] = {}
+    for thing_id, segment_id in conn.execute("SELECT thing_id, segment_id FROM forms"):
+        passages.setdefault(int(thing_id), set()).add(str(segment_id))
     best: dict[tuple[int, int], float] = {}
     for position, thing_id in enumerate(ids):
         for other, score in index.nearest(
             vectors[position], k=k, floor=floor, exclude={str(thing_id)}
         ):
             pair = (min(thing_id, int(other)), max(thing_id, int(other)))
-            if pair not in decided:
-                best[pair] = max(score, best.get(pair, 0.0))
+            if pair in decided or passages.get(pair[0], set()) & passages.get(pair[1], set()):
+                continue
+            best[pair] = max(score, best.get(pair, 0.0))
     ranked = sorted(best.items(), key=lambda item: (-item[1], item[0]))[:max_pairs]
     return [(a, b, score) for (a, b), score in ranked]
 
