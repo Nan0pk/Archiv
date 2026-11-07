@@ -1,8 +1,20 @@
 # Institutional memory: design
 
-Status: **approved by the owner** (2026-11-07). Built so far: everything in sections 2 to 5,
-as the `archiv memory` commands. Not yet done: the owner's judgement of real reports against
-plain search, which decides whether the old regex reader is removed (plan, Task 9).
+Status, in three parts:
+
+1. **What the owner approved (2026-11-07):** the design in which a model reads every document
+   at ingest. Not yet done under it: the owner's judgement of real reports against plain
+   search, which decides whether the old regex reader is removed (plan, Task 9).
+2. **What changed since, decided by the builder (2026-11-07).** The owner said "you decide"
+   and has not judged the evidence. Reading every document with a model at ingest is too slow
+   for the offline product: about 1.8 minutes and 29 thousand written tokens per document, so
+   100,000 documents is about 1.8 years on one local graphics card. Sections 2, 4, 5 and 6
+   below describe the replacement: **no model reads documents at ingest.** The reason is
+   ingest cost. Quality on 20 documents was a wash and the open risk is finding other forms
+   of a name at scale (section 8).
+3. **What exists in the code today:** the model-reads-every-document version, as the
+   `archiv memory` commands. The replacement exists only as throwaway test scripts outside
+   the repository.
 
 > **For anyone joining this work.** Examples you hear in discussions are
 > illustrations, never requirements. Do not shape code, prompts, tests or this
@@ -44,21 +56,22 @@ connections is a possible later showpiece, not part of this work.
 question ──► ENTRY ──► WALK THE WEB ──► EXIT ──► cited report
              (model)    (no model)       (model)
                             ▲
-                            │ built once, at ingest
-                    THE WEB (graph + meaning links)
+                            │ built once, at ingest, with no model
+                    THE WEB (names + meaning links)
 ```
 
 - **Entry.** A model reads the question and works out what it is about: the forms
   the subject may take in the collection, related things, and starting points in
   the web.
-- **The web.** It is built once per document at ingest and stored. It has three
-  kinds of link:
-  - **Things and their mentions.** A model reads each document and extracts
-    whatever things it mentions, of any kind. It also extracts the relationships
-    the text states between them, in the model's own words, each with the locator
-    of the passage that says so.
-  - **Same-thing merges.** A second pass decides which extracted things are the
-    same across documents (§4).
+- **The web.** It is built once per document at ingest and stored, with **no model
+  reading the documents**. It has three kinds of link:
+  - **Names and where they appear.** Ordinary language tools pick out the noun
+    phrases and named things in every passage. No list of kinds is kept. Two names
+    in the same passage are linked as "appears with". Names that appear in a large
+    share of the collection are left out as links, because they connect everything
+    to everything.
+  - **Same-thing merges.** Decided at question time, for the names the question is
+    about (§4).
   - **Meaning links.** Every passage gets a meaning-vector, so passages on the same
     subject connect even when they share no words (§4, §8).
 - **Walk.** Plain code, no model. It starts from the entry points and follows links
@@ -106,16 +119,31 @@ merging, the web stays fragmented, and that is search with extra steps.
 
 Merging works in two stages:
 
-1. **Propose.** Each extracted thing gets a vector from its name plus the passages
-   that mention it. Nearby vectors, and similar forms, become merge candidates.
-   This is cheap and needs no model.
+1. **Propose.** Each name gets a vector from its text plus the passages that mention
+   it. Nearby vectors, and similar forms, become merge candidates. This needs no model.
 2. **Confirm.** For each candidate pair, a model looks at a few passages from each
    side and answers whether they are the same thing, and why.
    - A confirmed merge keeps every form as an alias and cites the passages it was
      decided from.
    - A rejected pair stays separate.
-   - Merges are stored separately from extractions, so they can be redone without
+   - Merges are stored separately from names, so they can be redone without
      re-reading documents.
+
+**Where the two stages run (changed 2026-11-07).** Run over a whole collection at ingest,
+both stages cost too much. Measured on 6,136 passages: finding candidates took 621
+seconds (about a tenth of a second per passage, growing in step with the collection),
+produced 5,595 candidates, and confirming one pair takes about 4.5 seconds of model time.
+Confirming them all is about 7 hours, longer than having a model read the 100 documents.
+Of those 621 seconds, a sampled estimate puts about 440 on turning every one of the
+34,360 names into a vector and about 145 on the neighbour search. So the plan is:
+neither stage runs over the whole collection at ingest, and **no vectors of names are
+built at ingest**. The passage vectors already exist (56 seconds for the same 100
+documents). At question time, the proposal takes the names the entry step produced, finds
+the passages nearest to them by the existing passage vectors, and offers as candidates the
+names in those passages whose text looks like a form of the same name (shared words,
+one containing the other, near spelling). The confirmation covers only those few pairs.
+Confirmed merges are stored and reused. **This is not built or tested yet**; until it is,
+the existing capped ingest-time confirmation is the only version that exists.
 
 ## 5. Kinds of things and relationships come from the data
 
@@ -125,8 +153,11 @@ The current contracts fix the vocabulary in advance:
 
 That contradicts the goal. So in the new web:
 
-- **Kinds of things and relationships are free text**, recorded verbatim as the
-  model describes them, with their citation.
+- **At ingest there are no kinds and one relationship**: "appears with", meaning two
+  names share a passage. Anything richer is stated by the model at question time, in
+  its own words, from the passages it is shown, each with its citation.
+- **Kinds of things and relationships are free text** wherever they are recorded,
+  verbatim as the model describes them, with their citation.
 - **No fixed list of kinds**, coarse or fine, is defined by hand. If grouping is
   needed later, for filtering or display, it is derived from the recorded phrases
   themselves, for example by clustering them.
@@ -147,6 +178,11 @@ dominate the cost, not input.
 Haiku 5.5 at low effort scores about the same as the best ~27B open model at full
 reasoning on a public capability index. That makes it a fair stand-in for the
 eventual local model, a step stronger rather than far stronger.
+
+**Where the model is used (changed 2026-11-07).** At question time only: the entry
+step, the same-thing check for the names the question is about, and the report. Ingest
+needs no model. The model-reads-every-document version stays in the code as the
+slow, higher-detail option and as the comparison for tests.
 
 **Bulk passes and the product.** When a whole corpus has to be read, or the product
 needs a model, add one function that sends a prompt and returns text. Its endpoint,
@@ -215,6 +251,48 @@ Results:
   - near-duplicate wordings surface separately
   - vectors give one undifferentiated "relatedness" and can't say *why* two things
     connect, which is the reason for §4–5
+
+**Model-built against cheap-built memory (2026-11-07), 20 documents.** The same code
+and the same 10 random questions, once on a memory a model built by reading the documents
+and once on a memory built by ordinary language tools with no model. One shared
+first-step answer per question.
+- Passages containing the exact words that were reported: 34 of 34 (model-built), 33 of 34
+  (cheap).
+- Finding passages that use only another form of the name (17 cases): walking the memory
+  alone from one starting name, 12 (model-built) against 4 (cheap) passages handed over.
+  Through the whole question path, 13 against 16 passages cited. The two numbers count
+  different things. The gain for the cheap memory on the whole path most likely comes
+  from the entry step, which offers other forms of the name after seeing the 5 nearest
+  passages; the walk alone already used the passage vectors and still found only 4. That
+  explanation was not tested separately.
+- About 14 seconds a question (model-built) against 9 (cheap).
+- The owner judged the first round of this comparison by feel: mostly ties. The second round
+  was judged by the builder, not blind, and is not counted as evidence.
+- Limits: one try per question, one genre (English daily news digests), and the same model
+  writes both reports.
+
+**Cheap memory on 100 documents (6,136 passages), no model reading anything.**
+- Embedding the passages 56 seconds, finding names 6 seconds, building the memory 3
+  seconds (34,360 names, 258,141 "appears with" links, 25 over-common names left out).
+- Finding merge candidates: 621 seconds, 5,595 candidates (see section 4 for why this
+  moves to question time). Two sizes were measured (about 500 passages and 6,136), and the
+  time grew in step with the passages. If it keeps doing so, 100,000 documents is about a
+  week.
+- Ten random questions through the whole path: about 15 seconds each. The walk itself is
+  under a second of that; the rest is the two model calls. Passages with the exact
+  words that were reported: 35 of 59. One question was a date that 30 passages contain, more
+  than a report can be given, and the report said so (8 given of 30); leaving that one out it
+  is 27 of 29. Both missed passages belong to one question about an oddly hyphenated name;
+  why they were missed was not looked into.
+
+**Not tested yet:**
+- Finding other forms of a name at 100 documents. The known cases are not in that set, and
+  the one that is has 44 matching passages against 40 report slots, so it proves nothing.
+- Merging at question time (section 4). It does not exist yet.
+- Text that is not English. The language tools are English; a language-independent method
+  exists but was noisy on Arabic-script text.
+- Each question loads every name in the memory. That costs under a second at 34,360 names;
+  it has not been measured at 100,000 documents.
 
 **Testing the real thing:**
 - **Probes are drawn from the data at random**, never chosen by the builder.
