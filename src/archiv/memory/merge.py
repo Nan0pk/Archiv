@@ -7,6 +7,7 @@ confirm each pair from the passages, and keeps its reason.
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from collections.abc import Mapping
 
@@ -16,8 +17,21 @@ from archiv.memory.store import cache_key, cached, remember
 from archiv.memory.vectors import Embedder, VectorIndex
 
 MERGE_PROMPT_VERSION = "1"
+_THOUSANDS = re.compile(r"(?<=\d)[,.\u066c](?=\d{3}(?!\d))")
+_DIGIT_RUNS = re.compile(r"\d+")
 _FORMS_SHOWN = 8
+_NEIGHBOURS_LOOKED_AT = 10
 _PASSAGES_SHOWN = 3
+
+
+def digit_signature(form: str) -> tuple[int, ...]:
+    """The numbers written in a name, as values: "7,355" and "7355" give the same answer.
+
+    A separator is dropped only when exactly three digits follow it. Digits of any script
+    count, because int() reads them all.
+    """
+    cleaned = _THOUSANDS.sub("", form)
+    return tuple(int(run[:40]) for run in _DIGIT_RUNS.findall(cleaned))
 
 
 def _forms(conn: sqlite3.Connection, thing_id: int) -> list[str]:
@@ -74,15 +88,35 @@ def propose_pairs(
     passages: dict[int, set[str]] = {}
     for thing_id, segment_id in conn.execute("SELECT thing_id, segment_id FROM forms"):
         passages.setdefault(int(thing_id), set()).add(str(segment_id))
+    # Names that contain numbers: two such things can only be the same thing if one of
+    # their numbers is the same value. Nothing is dropped; this only decides which pairs
+    # the model is asked about. A number against a plain name is always allowed.
+    numbers: dict[int, set[tuple[int, ...]]] = {}
+    for thing_id, form in conn.execute("SELECT DISTINCT thing_id, form FROM forms"):
+        signature = digit_signature(str(form))
+        if signature:
+            numbers.setdefault(int(thing_id), set()).add(signature)
+
+    def allowed(a: int, b: int) -> bool:
+        if (a, b) in decided or passages.get(a, set()) & passages.get(b, set()):
+            return False
+        return not (a in numbers and b in numbers and not numbers[a] & numbers[b])
+
     best: dict[tuple[int, int], float] = {}
     for position, thing_id in enumerate(ids):
+        # Look further than k: bare numbers look alike, so their nearest neighbours are
+        # mostly other numbers that the rule then discards.
+        kept = 0
         for other, score in index.nearest(
-            vectors[position], k=k, floor=floor, exclude={str(thing_id)}
+            vectors[position], k=_NEIGHBOURS_LOOKED_AT, floor=floor, exclude={str(thing_id)}
         ):
             pair = (min(thing_id, int(other)), max(thing_id, int(other)))
-            if pair in decided or passages.get(pair[0], set()) & passages.get(pair[1], set()):
+            if not allowed(*pair):
                 continue
             best[pair] = max(score, best.get(pair, 0.0))
+            kept += 1
+            if kept >= k:
+                break
     ranked = sorted(best.items(), key=lambda item: (-item[1], item[0]))[:max_pairs]
     return [(a, b, score) for (a, b), score in ranked]
 
