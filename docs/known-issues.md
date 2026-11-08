@@ -553,8 +553,9 @@ derived segments changed for text, spreadsheet, presentation and drawing documen
 `archiv add` used to rebuild the whole entity graph after every batch. It now leaves the
 graph alone and each graph command rebuilds it first, only if the documents, their derived
 text or the face index have changed since it was built. The graph is never answered from an
-out-of-date copy, which is what S13 requires. What was measured on 9,634 supported mixed-format files
-(old Word files, spreadsheets, PDFs, pictures), added 1,000 at a time:
+out-of-date copy, which is what S13 requires. What was measured on a run that was meant to add
+9,634 supported mixed-format files (old Word files, spreadsheets, PDFs, pictures), 1,000 at
+a time. Six batches finished, about 6,600 documents, before the seventh was killed:
 
 - **Time.** The graph rebuild took 69 s at the first 1,000 files, 123 s at 5,000 and 194 s
   at 6,000: 56 to 65 percent of each batch, growing with the collection.
@@ -570,6 +571,10 @@ to write as it goes, or to add only the documents that are new. The institutiona
 path never reads this graph, and its design replaces the pattern matching that feeds it.
 Until this is done, run graph commands on a large collection only on a machine with
 memory to spare.
+
+**On upgrading.** A graph built before this change has no record of what it was built from,
+so the first graph command after upgrading rebuilds it in full. On a collection the size of
+the one above that rebuild does not fit in 8 GB.
 
 **What this changes in S13.** S13 asked that `archiv add` leave the entity graph reflecting
 every object it just ingested. It now does so on first use rather than at add time.

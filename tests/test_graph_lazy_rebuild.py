@@ -177,3 +177,33 @@ def test_entity_profile_is_never_served_from_a_stale_graph(
     _add(tmp_path / "more", home)
     get_entity_profile("Jordan Alvarez", home=home)
     assert rebuild_count == [1, 1]
+
+
+def test_a_confirmed_face_name_makes_the_graph_stale_even_if_the_file_looks_unchanged(
+    tmp_path: Path, rebuild_count: list[int]
+) -> None:
+    """A name changed to one of the same length can leave the face file's size and, when two
+    writes land in the same clock tick, its modification time exactly as they were."""
+    from archiv.faces.storage import confirm_cluster_name, connect_face_index, face_index_path
+
+    _write(tmp_path / "src", DOCS)
+    home = tmp_path / "home"
+    _add(tmp_path / "src", home)
+    layout = ArchivLayout.resolve(home)
+    path = face_index_path(layout)
+    with connect_face_index(path) as connection:
+        connection.execute(
+            "INSERT INTO face_clusters (cluster_id, label, member_count, centroid, created_at,"
+            " updated_at) VALUES ('c1', 'Cluster 1', 0, x'00', 'now', 'now')"
+        )
+        connection.commit()
+    confirm_cluster_name(layout, "c1", "Ada Lovelace")
+    _stats(home)
+    assert rebuild_count == [1]
+
+    stat = path.stat()
+    confirm_cluster_name(layout, "c1", "Bob Lovelace")  # same length as the name above
+    os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns))  # as if the clock had not moved on
+    assert path.stat().st_size == stat.st_size
+    _stats(home)
+    assert rebuild_count == [1, 1]

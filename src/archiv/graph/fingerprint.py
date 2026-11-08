@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import sqlite3
+from collections.abc import Iterator
 
 from archiv.faces.storage import face_index_path
 from archiv.storage.layout import ArchivLayout
@@ -48,10 +49,35 @@ def graph_inputs_fingerprint(layout: ArchivLayout) -> str:
             digest.update(f"object {sha256} {media_type} {state}\n".encode())
         for sha256, source_name in names:
             digest.update(f"name {sha256} {source_name}\n".encode())
-    faces = face_index_path(layout)
-    try:
-        stat = faces.stat()
-        digest.update(f"faces {stat.st_size}:{stat.st_mtime_ns}\n".encode())
-    except OSError:
-        digest.update(b"faces none\n")
+    for line in _face_data_lines(layout):
+        digest.update(line)
     return digest.hexdigest()
+
+
+# What the graph reads from the face index, by content. A file's size and modification time
+# are not enough: a name changed to one of the same length can leave both unchanged.
+_FACE_QUERIES = (
+    "SELECT face_id, object_sha256, source_name, bbox_json, confidence, cluster_id "
+    "FROM faces ORDER BY face_id",
+    "SELECT cluster_id, label, member_count FROM face_clusters ORDER BY cluster_id",
+    "SELECT cluster_id, confirmed_name, confirmed_at FROM confirmations ORDER BY cluster_id",
+)
+
+
+def _face_data_lines(layout: ArchivLayout) -> Iterator[bytes]:
+    faces = face_index_path(layout)
+    if not faces.is_file():
+        yield b"faces none\n"
+        return
+    connection = sqlite3.connect(f"file:{faces}?mode=ro", uri=True)
+    try:
+        for query in _FACE_QUERIES:
+            try:
+                rows = connection.execute(query).fetchall()
+            except sqlite3.OperationalError:
+                yield b"faces table missing\n"
+                continue
+            for row in rows:
+                yield ("face " + "|".join(str(value) for value in row) + "\n").encode()
+    finally:
+        connection.close()
