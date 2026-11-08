@@ -305,16 +305,26 @@ its similarity cut-offs set so that as many passages pass as pass with the curre
   one time in ten on this collection.
 - Limits: the current-model results were replayed from stored answers of the earlier run,
   so the first-step answer differed between the two; I set the cut-offs; one try; one genre;
-  the judge is a model. Nothing here tests another language.
-- **Decision (builder, under "you decide"):** the fast model becomes the default for
-  ingest because ingest speed is the stated first priority and the two measures that matter
-  most for finding things did not get worse. The current model stays selectable for
-  collections where time allows. Not built yet.
+  the judge is a model.
+- **Across languages.** For 40 random Arabic-script passages (from the 2,004-document
+  archive, where such text is only 0.25% of the passages), the best-matching English
+  passage out of 20,000 was judged by a model, once, in random order, to be about the same
+  subject: 5 of 40 with the current model, 0 of 40 with the fast one.
+- **What the alias test cannot show.** All 6 name pairs in it share word pieces ("mkt" and
+  "market", "majed" and "majid"), which is exactly what a word-averaging model is good at.
+  It says nothing about acronyms against full names, translations, or different names for
+  one thing. Those depend on the ability that dropped.
+- **Decision (builder, under "you decide"):** the fast model is **not** the default. The
+  goal names languages and meaning across wording, and on both checks it found nothing
+  where the current model found something (rarely, but not zero). It is offered as an
+  explicit setting for collections that are in one language and where speed matters most,
+  with these limits stated. The current model stays the default until there is a design
+  that gets both (for example fast vectors first so the collection can be used within
+  minutes, and the slower vectors filled in behind them). Not built yet.
 
 **Not tested yet:**
-- Whether the fast model finds the same subject across languages (an English question and
-  Arabic-script passages). It is built from a multilingual model, but that was not checked
-  here.
+- Acronyms against full names, and other variants that share no word pieces, with either
+  model.
 - Finding other forms of a name at 100 documents. The known cases are not in that set, and
   the one that is has 44 matching passages against 40 report slots, so it proves nothing.
 - Merging at question time (section 4). It does not exist yet.
