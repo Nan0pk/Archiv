@@ -5,9 +5,10 @@ that was the database waiting for the disk, four times per file. For a folder of
 Word files that wait alone was two minutes, in the one process that cannot be spread over
 workers. The records are still written one file at a time; what changes is when they reach
 the disk. When `add` returns, everything it wrote has been synced, exactly as before. The
-only difference is in a power cut or a kernel crash *during* an `add`: the last few finished
-files may be missing from the ledger, which is consistent either way, and running `add`
-again finishes them because files already stored are recognised.
+only difference is in a power cut or a kernel crash *during* an `add`: the files finished since
+SQLite last synced on its own (about every 1,000 pages of log, roughly 90 Word files) may be
+missing from the ledger, which is consistent either way, and running `add` again finishes
+them because files already stored are recognised.
 """
 
 from __future__ import annotations
@@ -119,6 +120,41 @@ def test_a_reader_that_blocks_the_checkpoint_does_not_lose_the_final_sync(
     assert any(name.endswith("ledger.sqlite3-wal") for name in synced), synced
     with database.connect() as connection:
         assert connection.execute("SELECT COUNT(*) FROM ingestion_failures").fetchone()[0] == 2
+
+
+def test_the_files_are_synced_even_when_the_final_checkpoint_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    synced: list[str] = []
+    real_fsync = os.fsync
+
+    def recording_fsync(fd: int) -> None:
+        synced.append(os.readlink(f"/proc/self/fd/{fd}"))
+        real_fsync(fd)
+
+    class FailingCheckpoint(sqlite3.Connection):
+        def execute(self, sql: str, *args: object) -> sqlite3.Cursor:  # pyright: ignore[reportIncompatibleMethodOverride]
+            if "wal_checkpoint" in sql:
+                raise sqlite3.OperationalError("disk I/O error")
+            return super().execute(sql, *args)  # pyright: ignore[reportArgumentType]
+
+    real_connect = sqlite3.connect
+    monkeypatch.setattr(os, "fsync", recording_fsync)
+    database = _database(tmp_path)
+
+    def failing_connect(database_path: Path, timeout: float = 5.0) -> sqlite3.Connection:
+        return real_connect(database_path, timeout=timeout, factory=FailingCheckpoint)
+
+    monkeypatch.setattr(sqlite3, "connect", failing_connect)
+    with pytest.raises(sqlite3.OperationalError, match="disk I/O error"), database.bulk_write():
+        _add_note(database, "kept")
+    monkeypatch.setattr(sqlite3, "connect", real_connect)
+    assert any(
+        name.endswith("ledger.sqlite3-wal") or name.endswith("ledger.sqlite3") for name in synced
+    )
+    assert _sync_mode(database) == 2
+    with database.connect() as connection:
+        assert connection.execute("SELECT COUNT(*) FROM ingestion_failures").fetchone()[0] == 1
 
 
 def test_bulk_write_inside_bulk_write_changes_nothing(tmp_path: Path) -> None:

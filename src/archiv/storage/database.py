@@ -203,10 +203,16 @@ class ArchivDatabase:
         before this returns, so a finished `add` is as durable as it always was.
 
         What is different: if the power fails or the kernel crashes *during* the block, the
-        last few finished files may be missing from the ledger. The ledger itself stays
-        consistent, and running `add` again finishes them, because files already stored are
-        recognised. A killed or interrupted process loses nothing, since the operating system
-        still holds the writes.
+        files finished since SQLite last synced on its own may be missing from the ledger.
+        It syncs by itself about every 1,000 pages of log, and a Word file takes roughly 11
+        pages (measured on 60 files), so the window is on the order of 90 files of that kind.
+        The ledger itself stays consistent, and running `add` again finishes them, because
+        files already stored are recognised. A killed or interrupted process loses nothing,
+        since the operating system still holds the writes.
+
+        There is a variant with no such window: keep the one connection open but leave every
+        write fully synced. It cost 4.1 ms per file here, against 12 ms now and 0.76 ms for
+        this version.
         """
 
         if self._synchronous != "FULL":
@@ -221,13 +227,18 @@ class ArchivDatabase:
         finally:
             self._synchronous = "FULL"
             try:
-                held.execute("PRAGMA synchronous = FULL")
-                held.execute("PRAGMA wal_checkpoint(FULL)").fetchone()
+                try:
+                    held.execute("PRAGMA synchronous = FULL")
+                    held.execute("PRAGMA wal_checkpoint(FULL)").fetchone()
+                finally:
+                    held.close()
             finally:
-                held.close()
-            # A reader open at the wrong moment can stop the checkpoint from finishing. The
-            # log still holds every write, so syncing the files themselves finishes the job.
-            _sync_to_disk(self.path.with_name(self.path.name + "-wal"), self.path, self.path.parent)
+                # A reader open at the wrong moment can stop the checkpoint from finishing, and
+                # the checkpoint can fail. The log still holds every write, so syncing the
+                # files themselves finishes the job whatever happened above.
+                _sync_to_disk(
+                    self.path.with_name(self.path.name + "-wal"), self.path, self.path.parent
+                )
 
     def schema_version(self) -> int:
         if not self.path.exists():
