@@ -618,3 +618,29 @@ by `add`, is rebuilt once after a change, is not rebuilt when nothing changed, a
 an explicit rebuild. `tests/test_graph_bounded_rebuild.py` checks the cases above and that
 writing out after every few edges gives the same graph, and that a failed write stops the
 rebuild, keeps the old graph and leaves no working file.
+
+## A folder add may lose its last finished files from the ledger if the power fails during it
+
+`archiv add` on a folder used to wait for the disk after every file's database records. That
+wait was 91 percent of the 12 ms it took to save one file's records, and in a real add, with
+the workers also writing, 23 to 26 ms per file. It happened one file at a time, in the one
+process that cannot be spread over workers, so 1,500 Word files took 36 to 40 seconds with
+the machine mostly idle. Inside `ArchivDatabase.bulk_write` the writes no longer wait for the
+disk after each file, and one sync ends the block. The same 1,500 files took 4.7 to 4.9
+seconds, with the same stored objects, the same rows in every table and the same search index.
+
+**What is different.** When `add` returns, everything it wrote has been synced, as before. If
+the power fails or the kernel crashes *during* an add of several files, the files finished
+since SQLite last synced on its own may be missing from the ledger. It syncs by itself about
+every 1,000 pages of log, and a Word file takes roughly 11 pages (measured on 60 files), so
+on the order of 90 files of that kind. The ledger stays consistent, and running `add` again
+finishes them, because files already stored are recognised. A killed or interrupted process
+loses nothing. Adding a single file keeps the full sync, and so do the original and derived
+files, which were never synced one by one.
+
+**The choice that was made.** Keeping the one connection open but leaving every write fully
+synced has no such window and cost 4.1 ms per file (against 12 ms before and 0.76 ms now).
+If a lost tail is not acceptable for the ledger, `bulk_write` can keep the full sync by
+removing the `synchronous = NORMAL` setting; the speed-up is then about threefold, not tenfold.
+
+**Not tested.** An actual power cut, and systems other than the laptop it was measured on.

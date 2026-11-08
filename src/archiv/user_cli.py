@@ -123,7 +123,9 @@ def _add_sources(
         candidate_order = {p: i for i, p in enumerate(candidates)}
         ordered_results: list[tuple[int, IngestionResult]] = []
 
-        with ProcessPoolExecutor(max_workers=num_workers) as executor:
+        # Records are saved one file at a time, but without waiting for the disk after each
+        # one; everything is synced once when this block ends (see ArchivDatabase.bulk_write).
+        with database.bulk_write(), ProcessPoolExecutor(max_workers=num_workers) as executor:
             future_to_cand = {
                 executor.submit(
                     _prepare_candidate_task,
