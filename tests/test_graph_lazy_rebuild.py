@@ -1,7 +1,7 @@
 """`archiv add` no longer rebuilds the whole entity graph; the graph is rebuilt when asked for.
 
 Measured before this change: the graph rebuild re-read every document on every `add` and
-took 56 to 65 percent of each batch (69 s at 1,000 files, 194 s at 6,000), and its memory
+took 49 to 67 percent of each batch (69 s at 1,000 files, 194 s at 6,000), and its memory
 use grew with the collection until the machine ran out. The rule from S13 still holds: the
 graph is never served out of date, because it is rebuilt before it is read.
 """
