@@ -93,7 +93,7 @@ def test_nothing_found_makes_no_exit_call(tmp_path: Path) -> None:
         model_label="fake",
         embedder=HashEmbedder(),
     )
-    assert report.text == NOTHING_FOUND
+    assert report.text.startswith(NOTHING_FOUND)
     assert report.cited == []
     assert len(calls) == 1
 
@@ -342,3 +342,22 @@ def test_ask_gives_the_entry_step_nearby_passages_and_the_report_step_names_and_
     assert "(a.txt)" in report
 
     assert "has 1 passage that mentions 'Alpha Works'" in report
+
+
+def test_nothing_found_says_what_was_searched_and_does_not_claim_absence(tmp_path: Path) -> None:
+    home = _built(tmp_path)
+
+    def complete(prompt: str) -> str:
+        return json.dumps({"forms": ["Zzyzx Qwerty", "Frobnicate Widget"], "related": []})
+
+    report = ask(
+        "quantum pancake zebra",
+        home=home,
+        complete=complete,
+        model_label="fake",
+        embedder=HashEmbedder(),
+    )
+    assert '"Zzyzx Qwerty"' in report.text
+    assert '"Frobnicate Widget"' in report.text
+    assert "may still hold" in report.text
+    assert "has nothing" not in report.text

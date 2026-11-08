@@ -26,7 +26,23 @@ if TYPE_CHECKING:
 
 ENTRY_PROMPT_VERSION = "2"
 EXIT_PROMPT_VERSION = "2"
-NOTHING_FOUND = "The collection has nothing that bears on this question."
+NOTHING_FOUND = "Nothing was found for the words that were searched"
+
+
+def nothing_found(forms: list[str]) -> str:
+    """The reply when the walk handed over nothing.
+
+    It says what was searched, not that the collection has nothing: all that is known is
+    that these words found nothing. The first step can leave out the words the question
+    itself used, and a passage can hold them even so.
+    """
+    shown = ", ".join(f'"{form}"' for form in forms[:8])
+    more = f" and {len(forms) - 8} more" if len(forms) > 8 else ""
+    searched = f": {shown}{more}." if shown else "."
+    return (
+        f"{NOTHING_FOUND}{searched} The collection may still hold something that uses other words."
+    )
+
 
 _LABELS = re.compile(r"\[(P\d+(?:\s*,\s*P\d+)*)\]")
 _HEADING = re.compile(r"\s*\*\*[^*]+\*\*:?\s*")  # a line that is only a bold heading
@@ -341,7 +357,7 @@ def ask(
             conn, forms=forms, question_vec=question_vec, vectors=vectors, by_id=by_id, home=home
         )
         if not found:
-            return Report(NOTHING_FOUND, [], [], 0)
+            return Report(nothing_found(forms), [], [], 0)
         prompt = exit_prompt(question, found, literal_totals(home, forms, found))
         key = cache_key(question, model_label, EXIT_PROMPT_VERSION, prompt)
         answer = cached(conn, key)

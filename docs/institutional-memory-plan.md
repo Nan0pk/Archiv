@@ -57,9 +57,11 @@ graph, contracts, validators or executor is touched until Task 9.
    two compositions of one name are one thing. Pinned in Task 3.
 4. **A re-run after an interruption or with unchanged inputs makes zero model calls.**
    Changing `--model-label` or a prompt version causes re-calls. Pinned in Task 3.
-5. **A question that matches nothing** produces the fixed text "The collection has
-   nothing that bears on this question." with no model exit call and no invented
-   content. Pinned in Task 6.
+5. **A question that matches nothing** produces a fixed sentence that names the words
+   that were searched and says the collection may still hold something under other words
+   (it no longer claims the collection has nothing, because the first step can leave out
+   the words the question used), with no model exit call and no invented content.
+   Pinned in Task 6.
 
 ---
 
@@ -301,7 +303,7 @@ graph, contracts, validators or executor is touched until Task 9.
   `first_json_object`.
 - Produces:
   - `ENTRY_PROMPT_VERSION = "1"`, `EXIT_PROMPT_VERSION = "1"`
-  - `NOTHING_FOUND = "The collection has nothing that bears on this question."`
+  - `NOTHING_FOUND = "Nothing was found for the words that were searched"  # followed by the words tried`
   - `def entry_prompt(question: str) -> str` asks for
     `{"forms": [...], "related": [...]}`: the ways the subject may be written, and
     things likely connected. `def parse_entry(answer: str) -> list[str]`.
