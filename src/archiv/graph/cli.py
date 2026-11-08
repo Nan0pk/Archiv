@@ -11,6 +11,7 @@ from rich.console import Console
 from rich.table import Table
 
 from archiv.graph.builder import rebuild_graph
+from archiv.graph.freshness import ensure_graph_current
 from archiv.graph.queries import get_entity_profile, query_cross_corpus
 from archiv.graph.storage import connect_graph_index, get_graph_stats, graph_index_path
 from archiv.storage.layout import ArchivLayout
@@ -59,6 +60,7 @@ def stats_command(
     json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
 ) -> None:
     """Show summary statistics of entities, relationships, and evidence edges."""
+    ensure_graph_current(home)
     layout = ArchivLayout.resolve(home)
     db_path = graph_index_path(layout)
     if not db_path.is_file():

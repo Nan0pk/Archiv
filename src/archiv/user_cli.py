@@ -25,7 +25,6 @@ from archiv.contracts import (
 )
 from archiv.cost_control import SpendLedgerUnreadableError, load_ledger, load_spend_policy
 from archiv.evaluation_config import ENV_OVERRIDE as EVALUATION_ENV_OVERRIDE
-from archiv.graph.builder import rebuild_graph
 from archiv.grounding import AskEvidenceUnwritableError, run_grounded_ask
 from archiv.images.index import update_image_index
 from archiv.ingestion import (
@@ -178,7 +177,8 @@ def _add_sources(
         image_digests = [r.object_sha256 for r in results if r.media_type.startswith("image/")]
         if image_digests or full_index:
             update_image_index(image_digests or None, home=home, full=full_index)
-        rebuild_graph(home=home)
+        # The entity graph is not rebuilt here: it is rebuilt, if the documents changed, the
+        # next time a graph command asks for it (see archiv.graph.freshness).
     else:
         index = None
 

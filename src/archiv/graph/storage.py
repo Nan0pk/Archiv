@@ -42,7 +42,16 @@ CREATE TABLE IF NOT EXISTS edges (
 CREATE INDEX IF NOT EXISTS idx_edges_source ON edges(source_node_id, relation_type);
 CREATE INDEX IF NOT EXISTS idx_edges_target ON edges(target_node_id, relation_type);
 CREATE INDEX IF NOT EXISTS idx_edges_rel ON edges(relation_type);
+
+CREATE TABLE IF NOT EXISTS graph_meta (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
 """
+
+
+# What the graph was built from, so it can be told apart from what is stored now.
+FINGERPRINT_KEY = "inputs_fingerprint"
 
 
 def graph_index_path(layout: ArchivLayout) -> Path:

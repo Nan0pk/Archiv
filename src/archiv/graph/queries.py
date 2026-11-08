@@ -13,6 +13,7 @@ from archiv.graph.contracts import (
     EntityProfile,
     GraphNode,
 )
+from archiv.graph.freshness import ensure_graph_current
 from archiv.graph.storage import (
     connect_graph_index,
     find_node_by_name,
@@ -27,7 +28,18 @@ def get_entity_profile(
     name_or_id: str,
     home: Path | None = None,
 ) -> EntityProfile | None:
-    """Retrieve 360-degree cross-corpus profile of an entity with evidence citations."""
+    """Retrieve 360-degree cross-corpus profile of an entity with evidence citations.
+
+    The graph is rebuilt first if the documents have changed since it was built.
+    """
+    ensure_graph_current(home)
+    return _entity_profile(name_or_id, home)
+
+
+def _entity_profile(
+    name_or_id: str,
+    home: Path | None,
+) -> EntityProfile | None:
     layout = ArchivLayout.resolve(home)
     db_path = graph_index_path(layout)
     if not db_path.is_file():
@@ -129,7 +141,10 @@ def query_cross_corpus(
 ) -> list[CrossCorpusQueryResult]:
     """Cross-corpus traversal: find persons in photos within date range
     and documents mentioning them.
+
+    The graph is rebuilt once, first, if the documents have changed since it was built.
     """
+    ensure_graph_current(home)
     layout = ArchivLayout.resolve(home)
     db_path = graph_index_path(layout)
     if not db_path.is_file():
@@ -157,7 +172,7 @@ def query_cross_corpus(
             ]
 
         for p in person_nodes:
-            profile = get_entity_profile(p.node_id, home=home)
+            profile = _entity_profile(p.node_id, home)
             if not profile or not profile.appearances:
                 continue
 
