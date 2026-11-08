@@ -97,18 +97,48 @@ def build_memory(
     )
 
 
+_COPY_CHUNK = 50_000
+
+
 def passage_vectors_base(layout: ArchivLayout) -> Path:
     return layout.indexes / "memory-passages"
 
 
 def embed_passages(layout: ArchivLayout, passages: list[Passage], embedder: Embedder) -> None:
-    """Embed every passage unless the stored vectors already match these passages."""
+    """Embed only the passages that have no stored vector yet, and keep the rest as they are.
+
+    A passage id includes a hash of the passage text, so a stored vector for an id is still
+    right for it. Adding one document to a large collection therefore embeds that document's
+    passages, not the whole collection again. Vectors made by a different embedder are not
+    reused, and neither are stored files whose row count does not match their id list (a
+    save that was cut off between the two files).
+    """
+    if not passages:
+        return
+    import numpy as np
+
     base = passage_vectors_base(layout)
     ids = [p.segment_id for p in passages]
+    stored: VectorIndex | None = None
     if Path(f"{base}.ids.json").is_file():
-        stored = VectorIndex.load(base)
-        if stored.ids == ids and stored.embedder == embedder.name:
-            return
-    VectorIndex(
-        ids=ids, vectors=embedder.embed([p.text for p in passages]), embedder=embedder.name
-    ).save(base)
+        candidate = VectorIndex.load(base)
+        if candidate.embedder == embedder.name and len(candidate.vectors) == len(candidate.ids):
+            if candidate.ids == ids:
+                return
+            stored = candidate
+    position = {identifier: row for row, identifier in enumerate(ids)}
+    reusable = [] if stored is None else [i for i in stored.ids if i in position]
+    have = set(reusable)
+    new = [p for p in passages if p.segment_id not in have]
+    fresh = embedder.embed([p.text for p in new]) if new else None
+    width = fresh.shape[1] if fresh is not None else stored.vectors.shape[1]  # type: ignore[union-attr]
+    # One output array, filled in place: a copy of every row at once would triple the memory.
+    out = np.empty((len(ids), width), dtype=np.float32)
+    if stored is not None and reusable:
+        source = {identifier: row for row, identifier in enumerate(stored.ids)}
+        for start in range(0, len(reusable), _COPY_CHUNK):
+            chunk = reusable[start : start + _COPY_CHUNK]
+            out[[position[i] for i in chunk]] = stored.vectors[[source[i] for i in chunk]]
+    if fresh is not None:
+        out[[position[p.segment_id] for p in new]] = fresh
+    VectorIndex(ids=ids, vectors=out, embedder=embedder.name).save(base)

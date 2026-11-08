@@ -61,3 +61,66 @@ def test_scores_gives_similarity_for_known_ids_only() -> None:
     assert set(got) == {"x", "z"}
     assert got["x"] > got["z"]
     assert _index().scores(["missing"], query) == {}
+
+
+class _CountingEmbedder(HashEmbedder):
+    """Remembers every text it was asked to embed."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.seen: list[str] = []
+
+    def embed(self, texts: list[str]):  # noqa: ANN201
+        self.seen.extend(texts)
+        return super().embed(texts)
+
+
+def _passage(name: str, text: str):  # noqa: ANN202
+    from archiv.memory.passages import Passage
+
+    return Passage(segment_id=name, object_sha256="o" * 64, source_name="s", locator={}, text=text)
+
+
+def test_embedding_only_does_the_new_passages(tmp_path: Path) -> None:
+    from archiv.memory.build import embed_passages
+    from archiv.storage.layout import ArchivLayout
+
+    layout = ArchivLayout.resolve(tmp_path / "home")
+    layout.ensure()
+    first = [_passage("a", "harbour board"), _passage("b", "bridge plan")]
+    embedder = _CountingEmbedder()
+    embed_passages(layout, first, embedder)
+    assert embedder.seen == ["harbour board", "bridge plan"]
+
+    # One passage added at the front, one existing passage dropped: only the new text is
+    # embedded, and every row still belongs to its own passage.
+    second = [_passage("c", "orchard group"), _passage("b", "bridge plan")]
+    embedder.seen.clear()
+    embed_passages(layout, second, embedder)
+    assert embedder.seen == ["orchard group"]
+
+    stored = VectorIndex.load(layout.indexes / "memory-passages")
+    assert stored.ids == ["c", "b"]
+    fresh = HashEmbedder().embed(["orchard group", "bridge plan"])
+    assert np.allclose(stored.vectors, fresh)
+
+
+def test_embedding_ignores_stored_vectors_that_do_not_match_their_ids(tmp_path: Path) -> None:
+    import json
+
+    from archiv.memory.build import embed_passages
+    from archiv.storage.layout import ArchivLayout
+
+    layout = ArchivLayout.resolve(tmp_path / "home")
+    layout.ensure()
+    passages = [_passage("a", "harbour board"), _passage("b", "bridge plan")]
+    embed_passages(layout, passages, HashEmbedder())
+    # A save cut off between its two files: three ids on disk, two rows of vectors.
+    ids_file = layout.indexes / "memory-passages.ids.json"
+    ids_file.write_text(
+        json.dumps({"ids": ["a", "b", "z"], "embedder": HashEmbedder.name}), encoding="utf-8"
+    )
+    embedder = _CountingEmbedder()
+    embed_passages(layout, passages, embedder)
+    assert embedder.seen == ["harbour board", "bridge plan"]
+    assert VectorIndex.load(layout.indexes / "memory-passages").ids == ["a", "b"]
