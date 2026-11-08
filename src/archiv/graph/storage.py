@@ -114,6 +114,68 @@ def save_edge(conn: sqlite3.Connection, edge: GraphEdge) -> None:
     )
 
 
+def add_node_if_absent(conn: sqlite3.Connection, node: GraphNode) -> None:
+    """Insert a node unless one with the same id is already stored; a stored node is kept."""
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO nodes (
+            node_id, entity_type, canonical_name, aliases_json, properties_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (
+            node.node_id,
+            node.entity_type,
+            node.canonical_name,
+            json.dumps(node.aliases),
+            json.dumps(node.properties),
+            node.created_at,
+        ),
+    )
+
+
+def upsert_edge(conn: sqlite3.Connection, edge: GraphEdge) -> None:
+    """Insert an edge, or overwrite the stored one with the same id, keeping its place."""
+    cits_payload = [c.model_dump(mode="json") for c in edge.citations]
+    conn.execute(
+        """
+        INSERT INTO edges (
+            edge_id, source_node_id, target_node_id, relation_type,
+            confidence, status, citations_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(edge_id) DO UPDATE SET
+            source_node_id = excluded.source_node_id,
+            target_node_id = excluded.target_node_id,
+            relation_type = excluded.relation_type,
+            confidence = excluded.confidence,
+            status = excluded.status,
+            citations_json = excluded.citations_json,
+            created_at = excluded.created_at
+        """,
+        (
+            edge.edge_id,
+            edge.source_node_id,
+            edge.target_node_id,
+            edge.relation_type,
+            edge.confidence,
+            edge.status,
+            json.dumps(cits_payload),
+            edge.created_at,
+        ),
+    )
+
+
+def node_exists(conn: sqlite3.Connection, node_id: str) -> bool:
+    return conn.execute("SELECT 1 FROM nodes WHERE node_id = ?", (node_id,)).fetchone() is not None
+
+
+def delete_node(conn: sqlite3.Connection, node_id: str) -> None:
+    conn.execute("DELETE FROM nodes WHERE node_id = ?", (node_id,))
+
+
+def delete_edge(conn: sqlite3.Connection, edge_id: str) -> None:
+    conn.execute("DELETE FROM edges WHERE edge_id = ?", (edge_id,))
+
+
 def _row_to_node(row: sqlite3.Row) -> GraphNode:
     return GraphNode(
         node_id=str(row["node_id"]),
@@ -162,6 +224,31 @@ def find_node_by_name(
             (clean_name,),
         ).fetchone()
     return _row_to_node(row) if row else None
+
+
+def get_edge(conn: sqlite3.Connection, edge_id: str) -> GraphEdge | None:
+    row = conn.execute("SELECT * FROM edges WHERE edge_id = ?", (edge_id,)).fetchone()
+    return _row_to_edge(row) if row else None
+
+
+def get_edges_of_node(conn: sqlite3.Connection, node_id: str) -> list[GraphEdge]:
+    """Every edge that starts or ends at the node, in the order they were first stored."""
+    rows = conn.execute(
+        "SELECT * FROM edges WHERE source_node_id = ? OR target_node_id = ? ORDER BY rowid",
+        (node_id, node_id),
+    ).fetchall()
+    return [_row_to_edge(r) for r in rows]
+
+
+def get_edges_from(
+    conn: sqlite3.Connection, source_id: str, relation_type: RelationType
+) -> list[GraphEdge]:
+    """Edges of one kind that start at the node, in the order they were first stored."""
+    rows = conn.execute(
+        "SELECT * FROM edges WHERE source_node_id = ? AND relation_type = ? ORDER BY rowid",
+        (source_id, relation_type),
+    ).fetchall()
+    return [_row_to_edge(r) for r in rows]
 
 
 def get_out_edges(

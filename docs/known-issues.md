@@ -548,7 +548,7 @@ derived segments changed for text, spreadsheet, presentation and drawing documen
   made against the earlier derivative then fail closed. Rebuild a document only when its
   new citations are wanted.
 
-## The entity graph is rebuilt in full, in memory, the first time it is asked for after a change
+## The entity graph is rebuilt in full the first time it is asked for after a change
 
 `archiv add` used to rebuild the whole entity graph after every batch. It now leaves the
 graph alone and each graph command rebuilds it first, only if the documents, their derived
@@ -564,26 +564,57 @@ a time. Six batches finished, about 6,600 documents, before the seventh was kill
   for 1,000 files each and 30 s for 634 files, and the main `add` process peaked at 280 to
   358 MB (one worker reached 1.1 GB). Re-adding a batch already stored took 280 s and peaked
   at 3.1 GB, 258 s of it re-indexing documents that were already indexed.
-- **Memory.** The same batch step was killed by the kernel at 7.9 GB while adding the
-  seventh batch. Run alone on the 6,630 documents then stored, under an 8 GB limit,
-  `rebuild_graph` was killed again at 8.37 GB after 2 minutes 9 seconds. So the rebuild needs
-  more than 8 GB for about 6,600 documents, and by how much more was not measured.
+- **Memory, before the second change below.** The same batch step was killed by the kernel
+  at 7.9 GB while adding the seventh batch. Run alone on the 6,630 documents then stored,
+  under an 8 GB limit, `rebuild_graph` was killed again at 8.37 GB after 2 minutes 9
+  seconds. The rebuild kept every node and every edge, with its citations, in memory until
+  the end.
 
-**What is still wrong.** The first graph command after a change still pays that whole cost,
-and on a collection this size it does not fit in 8 GB. The rebuild keeps every node and
-every edge in memory before writing any of them, and reads every document again. It needs
-to write as it goes, or to add only the documents that are new. The institutional-memory
-path never reads this graph, and its design replaces the pattern matching that feeds it.
-Until this is done, run graph commands on a large collection only on a machine with
-memory to spare.
+**The rebuild now writes as it goes.** `rebuild_graph` builds the graph in a working file in
+the home's temporary folder, one document at a time. An edge that turns up again in a later
+document is merged as before: the highest confidence wins, a citation is added unless that
+document and place is already cited, and a confirmed edge stays confirmed. The working file
+replaces the old graph in one step at the end.
+- **Same graph.** The old and the new builder were run on the same collections and every node
+  and edge was compared, in stored order, citations included: a generated collection (two
+  files with one name, a name seen twice in one passage, photographs, a confirmed name that
+  the text also mentions, an unconfirmed face cluster, an unreadable document, a document
+  that fails half way; run twice, the second time writing out after every edge), 1,864 stored
+  Word files (53,939 nodes, 671,836 edges) and 1,091 stored mixed office documents, from 1,112
+  files (9,498 nodes, 148,884 edges). All three were identical.
+- **Memory.** On the 1,864 Word files the new builder's process peaked at 167 MB (the old
+  one at 1.7 GB). On the whole mixed collection, 9,061 stored documents from 9,634 supported
+  files (the rest failed or were duplicates), it built 77,292 nodes and 3,873,385 edges,
+  with the process peaking at 1,034 MB inside a 3 GB limit; the graph file is 3.5 GB. What
+  the builder holds at once is one document's text, up to 20,000 edges waiting to be
+  written, and any one edge with all of its citations (and, for a confirmed name, all the
+  edges of the mention it replaces). What caused the 1,034 MB peak was not looked into; the
+  largest derived document there is 198 MB on disk.
+- **Time.** It is slower than the old builder, which kept everything in memory: 82 to 85 s
+  against 34 to 38 s on the 1,864 Word files (about 2.4 times as long), 7 s against 5 s on
+  the mixed 1,091, and 489 s (about 8 minutes) on the whole collection. The cost is mostly
+  re-reading edges already written, and writing them out.
+- **Not measured.** The old builder on the whole collection (it was only tried up to 6,630
+  documents, where it was killed above 8 GB); a rebuild with photographs and confirmed names
+  on anything larger than the generated collection.
+
+**What is still wrong.** The first graph command after a change still reads every document
+again, and on the whole 9,634 files that takes about 8 minutes with nothing shown while it
+runs. It would be quicker to add only the documents that are new. A rebuild that is killed
+(by the kernel, or by power loss) leaves its working file, up to the size of the graph, in
+the home's temporary folder, and the integrity check reports it as an orphan; any error the
+rebuild can catch removes it. While it runs, the old graph and the working file both exist: on
+the whole collection that is about 7 GB of disk at once. The institutional-memory path never reads this graph, and its
+design replaces the pattern matching that feeds it.
 
 **On upgrading.** A graph built before this change has no record of what it was built from,
-so the first graph command after upgrading rebuilds it in full. On a collection the size of
-the one above that rebuild does not fit in 8 GB.
+so the first graph command after upgrading rebuilds it in full, taking the time above.
 
 **What this changes in S13.** S13 asked that `archiv add` leave the entity graph reflecting
 every object it just ingested. It now does so on first use rather than at add time.
 `tests/test_index_freshness.py::test_add_refreshes_the_image_index_and_graph` still passes
 unchanged, and `tests/test_graph_lazy_rebuild.py` adds tests that the graph is not rebuilt
 by `add`, is rebuilt once after a change, is not rebuilt when nothing changed, and equals
-an explicit rebuild.
+an explicit rebuild. `tests/test_graph_bounded_rebuild.py` checks the cases above and that
+writing out after every few edges gives the same graph, and that a failed write stops the
+rebuild, keeps the old graph and leaves no working file.
