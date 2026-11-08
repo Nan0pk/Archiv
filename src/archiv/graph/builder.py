@@ -116,8 +116,8 @@ def _hash_id(prefix: str, value: str) -> str:
 
 
 # Edges held in memory are written to the working file after every document, and sooner when
-# this many are waiting. Memory therefore follows the largest single document, not the size of
-# the whole collection (it used to hold every node and edge until the very end).
+# this many are waiting. It used to hold every node and edge until the very end. What is held
+# at once now is one document's text, up to this many edges, and any one edge's citations.
 _FLUSH_EDGES = 20_000
 _CACHE_KIB = 65_536
 _LOOKUP_INDEXES = ("idx_nodes_type_name", "idx_edges_source", "idx_edges_target", "idx_edges_rel")
@@ -482,8 +482,9 @@ def _add_faces(work: _Work, layout: ArchivLayout) -> None:
 def rebuild_graph(home: Path | None = None) -> tuple[int, int]:
     """Rebuild the SQLite entity graph from canonical objects, derived segments, and faces.
 
-    The graph is built inside a working file, one document at a time, so the memory needed
-    follows the largest single document and not the size of the collection.
+    The graph is built inside a working file, one document at a time. It holds in memory one
+    document's text, a limited number of waiting edges, and any one edge with its citations,
+    rather than the whole graph.
     """
     layout = ArchivLayout.resolve(home)
     layout.ensure()

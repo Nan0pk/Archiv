@@ -579,26 +579,32 @@ replaces the old graph in one step at the end.
   and edge was compared, in stored order, citations included: a generated collection (two
   files with one name, a name seen twice in one passage, photographs, a confirmed name that
   the text also mentions, an unconfirmed face cluster, an unreadable document, a document
-  that fails half way), 1,864 Word files (53,939 nodes, 671,836 edges) and 1,091 mixed office
-  files (9,498 nodes, 148,884 edges). All four were identical.
+  that fails half way; run twice, the second time writing out after every edge), 1,864 stored
+  Word files (53,939 nodes, 671,836 edges) and 1,091 stored mixed office documents, from 1,112
+  files (9,498 nodes, 148,884 edges). All three were identical.
 - **Memory.** On the 1,864 Word files the new builder's process peaked at 167 MB (the old
-  one at 1.7 GB). On all 9,634 supported mixed-format files it built 77,292 nodes and
-  3,873,385 edges, with the process peaking at 1,034 MB inside a 3 GB limit, and the graph
-  file is 3.5 GB. The largest derived document in that collection is 198 MB on disk, so the
-  peak follows the largest single document, not the size of the collection.
+  one at 1.7 GB). On the whole mixed collection, 9,061 stored documents from 9,634 supported
+  files (the rest failed or were duplicates), it built 77,292 nodes and 3,873,385 edges,
+  with the process peaking at 1,034 MB inside a 3 GB limit; the graph file is 3.5 GB. What
+  the builder holds at once is one document's text, up to 20,000 edges waiting to be
+  written, and any one edge with all of its citations (and, for a confirmed name, all the
+  edges of the mention it replaces). What caused the 1,034 MB peak was not looked into; the
+  largest derived document there is 198 MB on disk.
 - **Time.** It is slower than the old builder, which kept everything in memory: 82 to 85 s
-  against 34 to 38 s on the 1,864 Word files, 7 s against 5 s on the mixed 1,091, and 489 s
-  (about 8 minutes) on the whole 9,634 that the old builder could not build at all. The cost
-  is mostly re-reading edges already written, and writing them out.
-- **Not measured.** A rebuild of a collection with photographs and confirmed names larger
-  than the generated one; the old builder on the whole 9,634 (it does not fit).
+  against 34 to 38 s on the 1,864 Word files (about 2.4 times as long), 7 s against 5 s on
+  the mixed 1,091, and 489 s (about 8 minutes) on the whole collection. The cost is mostly
+  re-reading edges already written, and writing them out.
+- **Not measured.** The old builder on the whole collection (it was only tried up to 6,630
+  documents, where it was killed above 8 GB); a rebuild with photographs and confirmed names
+  on anything larger than the generated collection.
 
 **What is still wrong.** The first graph command after a change still reads every document
 again, and on the whole 9,634 files that takes about 8 minutes with nothing shown while it
 runs. It would be quicker to add only the documents that are new. A rebuild that is killed
 (by the kernel, or by power loss) leaves its working file, up to the size of the graph, in
 the home's temporary folder, and the integrity check reports it as an orphan; any error the
-rebuild can catch removes it. The institutional-memory path never reads this graph, and its
+rebuild can catch removes it. While it runs, the old graph and the working file both exist: on
+the whole collection that is about 7 GB of disk at once. The institutional-memory path never reads this graph, and its
 design replaces the pattern matching that feeds it.
 
 **On upgrading.** A graph built before this change has no record of what it was built from,
