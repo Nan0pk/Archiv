@@ -322,33 +322,38 @@ its similarity cut-offs set so that as many passages pass as pass with the curre
   that gets both (for example fast vectors first so the collection can be used within
   minutes, and the slower vectors filled in behind them). Not built yet.
 
-**A mixed collection of office files and scans (2026-11-08), 1,112 documents.** One random
+**A mixed collection of office files and scans (2026-11-08), 1,112 files.** One random
 draw of 37 whole folders from a larger collection of word-processor files, spreadsheets,
-presentations and scanned pages; 10,178 passages. Nothing was built for it; this is the
-shipped code, one try per question, at most 40 model calls in all.
+presentations and scanned pages; 10,178 passages. The names and "appears with" links in the
+memory came from throwaway scripts outside the repository (a language tool picking out
+noun phrases and names, as in the cheap memory above). The question path (the walk, the two
+model steps and the report check) is the repository code at commit 6755c9c, which is before
+#240. One try per question; 35 model calls were used, out of at most 40.
 - **Acronyms against full names.** Pairs were found by a rule, not picked: text of the form
   "Long Name (ABBR)" where the letters of the abbreviation are the initials of the long name.
-  That gave 25 pairs and 15 usable cases. A case asks about one form and counts the passages
-  that use only the other form (125 passages in all).
+  That gave 25 pairs and 24 usable cases; 15 of the 24 were drawn at random. A case asks about
+  one form and counts the passages that use only the other form (125 passages in the 15).
   - By similarity alone (the 40 passages most similar to the question): 0 of 125 with the
     current model and 0 of 125 with the fast one. Neither finds an acronym from its full name,
     or the full name from its acronym.
   - Walking the memory, with no model call: 1 of 125.
   - The whole question path, run on 8 of the 15 cases with 2 model calls each: on the 6 small
     cases (13 passages) the report held 12. On the two large cases (67 and 27 passages) it held
-    1 and 8. A report holds at most 40 passages, which already caps the first of those; why
-    the second was not higher was not looked into.
-  - So the first model step, which writes out other forms of the name, is what finds them, not
-    the vectors. The fast model therefore loses nothing here, because neither model finds them
-    by similarity. Its losses on the two earlier checks (no shared word; across languages) are
-    not affected.
+    1 and 8, far short of the 40 a report can hold; why was not looked into.
+  - So on the similarity check neither model finds them, and the fast model gives up nothing
+    there. What found them on the whole path was most likely the first model step, which writes
+    out other forms of the name; that was not tested separately. The whole path was run only
+    with the current model, and the first step is grounded on the 5 nearest passages by vector,
+    so a different model could change what it writes. The fast model's losses on the two
+    earlier checks (no shared word; across languages) are not affected.
   - Limits: one draw, one collection; only abbreviations that are written out in the text
     can be found this way; 7 of the 15 cases were not put through the model; the check is
     whether the report holds a passage that uses the other form, not whether it answers the
     question.
 - **Passages with the exact words that were reported.** 20 of 30 on the 8 questions where
-  no more than 30 passages contain the words (counting whole words), against 27 of 29 on
-  the clean 100-document set above. Two bigger questions are left out of that count: one
+  no more than 30 passages contain the words, against 27 of 29 on the clean 100-document set
+  above. The two were counted differently (whole words in the passage text here; a
+  full-text phrase search there), so they are not strictly comparable. Two bigger questions are left out of that count: one
   where 79 passages contain the words (31 reported, in a report that holds at most 40), and
   one where 36 do (1 reported, see below).
   - In 3 of the 10 questions the first model step left the question's own words out of the
@@ -359,8 +364,8 @@ shipped code, one try per question, at most 40 model calls in all.
     fixed.
   - Other causes were not found: 4 missed passages (in two questions) where the first step
     had included the question's words and the passages still did not reach the report, and
-    one question where 36 passages contain the words but 1 was handed over (only 10 hits
-    are taken for each name form, and that question had 46 forms).
+    one question where 36 passages contain the words but 1 was handed over (a possible factor,
+    not confirmed: only 10 hits are taken for each name form, and that question had 46 forms).
   - The first step also pulls names out of the 5 grounding passages into the names it
     searches for.
 
