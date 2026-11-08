@@ -258,7 +258,8 @@ and once on a memory built by ordinary language tools with no model. One shared
 first-step answer per question.
 - Passages containing the exact words that were reported: 34 of 34 (model-built), 33 of 34
   (cheap).
-- Finding passages that use only another form of the name (17 cases): walking the memory
+- Finding passages that use only another form of the name (17 passages, in 6 pairs of
+  name forms; an earlier version of this line wrongly said 17 cases): walking the memory
   alone from one starting name, 12 (model-built) against 4 (cheap) passages handed over.
   Through the whole question path, 13 against 16 passages cited. The two numbers count
   different things. The gain for the cheap memory on the whole path most likely comes
@@ -285,7 +286,35 @@ first-step answer per question.
   is 27 of 29. Both missed passages belong to one question about an oddly hyphenated name;
   why they were missed was not looked into.
 
+**Faster meaning vectors (2026-11-08), 20 documents.** This laptop has no graphics card, so
+the vectors are a pure processor limit. The current model makes about 130 passages a second
+using about 16 of 24 cores; 6 arrangements of threads and processes were tried and none beat
+it, so 6 million passages is about 13 hours. A word-averaging ("static") model that ships
+with the same library, `minishlab/potion-multilingual-128M`, makes about 3,267 a second, 25
+times faster, about 30 minutes for 6 million. It was compared on the same cheap memory, with
+its similarity cut-offs set so that as many passages pass as pass with the current model:
+- Passages containing the exact words that were reported: 33 of 34 with each.
+- Finding passages that use only another form of the name (the 17 passages in 6 pairs):
+  walking the memory alone, 17 with the fast model against 4 with the current one; through
+  the whole question path, 17 against 16. The fast model matches shared word pieces ("mkt"
+  with "market"), which suits spelling and abbreviation variants.
+- **What it loses.** For 40 random passages, the best-matching other passage that shares no
+  word of five letters or more was judged by a model (once, in random order) to be about the
+  same subject: 4 of 40 with the current model, 0 of 40 with the fast one. So it gives up
+  most of what made meaning vectors worth having, though the current model found it only
+  one time in ten on this collection.
+- Limits: the current-model results were replayed from stored answers of the earlier run,
+  so the first-step answer differed between the two; I set the cut-offs; one try; one genre;
+  the judge is a model. Nothing here tests another language.
+- **Decision (builder, under "you decide"):** the fast model becomes the default for
+  ingest because ingest speed is the stated first priority and the two measures that matter
+  most for finding things did not get worse. The current model stays selectable for
+  collections where time allows. Not built yet.
+
 **Not tested yet:**
+- Whether the fast model finds the same subject across languages (an English question and
+  Arabic-script passages). It is built from a multilingual model, but that was not checked
+  here.
 - Finding other forms of a name at 100 documents. The known cases are not in that set, and
   the one that is has 44 matching passages against 40 report slots, so it proves nothing.
 - Merging at question time (section 4). It does not exist yet.
