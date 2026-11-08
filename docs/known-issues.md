@@ -547,3 +547,33 @@ derived segments changed for text, spreadsheet, presentation and drawing documen
   rebuilt automatically; `archiv rebuild-derived` changes the derived hash, and citations
   made against the earlier derivative then fail closed. Rebuild a document only when its
   new citations are wanted.
+
+## The entity graph is rebuilt in full, in memory, the first time it is asked for after a change
+
+`archiv add` used to rebuild the whole entity graph after every batch. It now leaves the
+graph alone and each graph command rebuilds it first, only if the documents, their derived
+text or the face index have changed since it was built. The graph is never answered from an
+out-of-date copy, which is what S13 requires. What was measured on 9,634 supported mixed-format files
+(old Word files, spreadsheets, PDFs, pictures), added 1,000 at a time:
+
+- **Time.** The graph rebuild took 69 s at the first 1,000 files, 123 s at 5,000 and 194 s
+  at 6,000: 56 to 65 percent of each batch, growing with the collection.
+- **Memory.** The same batch step was killed by the kernel at 7.9 GB while adding the
+  seventh batch. Run alone on the 6,630 documents then stored, under an 8 GB limit,
+  `rebuild_graph` was killed again at 8.37 GB after 2 minutes 9 seconds. So the rebuild needs
+  more than 8 GB for about 6,600 documents, and by how much more was not measured.
+
+**What is still wrong.** The first graph command after a change still pays that whole cost,
+and on a collection this size it does not fit in 8 GB. The rebuild keeps every node and
+every edge in memory before writing any of them, and reads every document again. It needs
+to write as it goes, or to add only the documents that are new. The institutional-memory
+path never reads this graph, and its design replaces the pattern matching that feeds it.
+Until this is done, run graph commands on a large collection only on a machine with
+memory to spare.
+
+**What this changes in S13.** S13 asked that `archiv add` leave the entity graph reflecting
+every object it just ingested. It now does so on first use rather than at add time.
+`tests/test_index_freshness.py::test_add_refreshes_the_image_index_and_graph` still passes
+unchanged, and `tests/test_graph_lazy_rebuild.py` adds tests that the graph is not rebuilt
+by `add`, is rebuilt once after a change, is not rebuilt when nothing changed, and equals
+an explicit rebuild.

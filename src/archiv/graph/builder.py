@@ -23,7 +23,14 @@ from archiv.graph.contracts import (
     NodeType,
     RelationType,
 )
-from archiv.graph.storage import connect_graph_index, graph_index_path, save_edge, save_node
+from archiv.graph.fingerprint import graph_inputs_fingerprint
+from archiv.graph.storage import (
+    FINGERPRINT_KEY,
+    connect_graph_index,
+    graph_index_path,
+    save_edge,
+    save_node,
+)
 from archiv.storage.layout import ArchivLayout
 
 _DISALLOWED_NAMES = {
@@ -103,6 +110,9 @@ def rebuild_graph(home: Path | None = None) -> tuple[int, int]:
     layout = ArchivLayout.resolve(home)
     layout.ensure()
     final_path = graph_index_path(layout)
+    # Taken before anything is read: if a document changes while the graph is being built,
+    # the next look sees a different fingerprint and rebuilds again.
+    inputs_fingerprint = graph_inputs_fingerprint(layout)
     tmp_path = layout.temporary / f"graph-{uuid4().hex[:12]}.sqlite3.tmp"
     tmp_path.parent.mkdir(parents=True, exist_ok=True)
     now = datetime.now(UTC).isoformat()
@@ -436,6 +446,10 @@ def rebuild_graph(home: Path | None = None) -> tuple[int, int]:
             save_node(g_conn, node)
         for edge in edges_by_id.values():
             save_edge(g_conn, edge)
+        g_conn.execute(
+            "INSERT OR REPLACE INTO graph_meta (key, value) VALUES (?, ?)",
+            (FINGERPRINT_KEY, inputs_fingerprint),
+        )
         g_conn.commit()
     os.replace(tmp_path, final_path)
     return len(nodes_by_id), len(edges_by_id)
