@@ -558,11 +558,12 @@ out-of-date copy, which is what S13 requires. What was measured on a run that wa
 a time. Six batches finished, about 6,600 documents, before the seventh was killed:
 
 - **Time.** The graph rebuild took 69 s at the first 1,000 files, 123 s at 5,000 and 194 s
-  at 6,000: between 49 and 67 percent of each batch (the six batches: 65, 49, 67, 59, 60 and
-  60 percent), growing with the collection. The graph file grew from 673 MB to 1.7 GB.
-  With the graph left out of `add`, the next three batches took 38, 125 and 30 s, and the
-  `add` process peaked at 280 to 358 MB. Re-adding a batch already stored took 280 s and
-  peaked at 3.1 GB, 258 s of it re-indexing documents that were already indexed.
+  at 6,000. Its time grew with the collection; its share of each batch stayed between 49 and
+  67 percent (the six batches: 65, 49, 67, 59, 60 and 60 percent). The graph file grew from
+  673 MB to 1.7 GB. With the graph left out of `add`, three new batches took 38 s and 125 s
+  for 1,000 files each and 30 s for 634 files, and the main `add` process peaked at 280 to
+  358 MB (one worker reached 1.1 GB). Re-adding a batch already stored took 280 s and peaked
+  at 3.1 GB, 258 s of it re-indexing documents that were already indexed.
 - **Memory.** The same batch step was killed by the kernel at 7.9 GB while adding the
   seventh batch. Run alone on the 6,630 documents then stored, under an 8 GB limit,
   `rebuild_graph` was killed again at 8.37 GB after 2 minutes 9 seconds. So the rebuild needs
