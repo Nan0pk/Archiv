@@ -767,3 +767,21 @@ this is for the owner to decide. Folding on the search side cannot undo reversed
 - Use `pypdf` for Arabic-script pages: the letters are in the right order but are presentation
   forms (which NFKC folds), there are no bounding boxes, and its words agree with PDFium's only
   0.74.
+
+## The desktop window's command schema does not work with Typer 0.29, so Typer is held below it
+
+Typer 0.29.0 (released 9 November 2026) stopped giving each command parameter a `type` object
+and keeps the information in a `type_descriptor` (its `annotation`, such as `pathlib.Path`)
+instead. `src/archiv/ui/console_schema.py` reads `parameter.type` to decide whether a parameter
+is a path, a choice, a number or a switch, so with 0.29 every parameter looked like plain text.
+Six tests in `tests/test_ui_console.py` failed on a clean install (for example a path argument
+read as text, and a choice read as text), which would also have made the desktop diagnostic
+console offer text boxes where it should offer file pickers and drop-downs. The ordinary
+commands were not affected: the failure was in how the window reads them.
+
+**What was done.** `pyproject.toml` now asks for `typer>=0.12,<0.29`. On the 0.28 that main was
+green with, the six tests pass. With 0.29 installed in a separate environment they fail as
+described; that was reproduced, not guessed.
+
+**What is not done.** `console_schema.py` has not been taught to read `type_descriptor`, so
+Archiv cannot yet use Typer 0.29 or later. Until it does, installs stay on 0.28.
