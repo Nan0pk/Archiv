@@ -692,15 +692,14 @@ eight workers sat at 4.9 GB with nothing big running. Eight big files at once ne
   used 2.2 cores. Size cannot tell a 14 MB scanned PDF (slow, 131 MB) from a
   27 MB spreadsheet (fast, 2.9 GB), so both wait behind the same limit and the slow one can end
   up last.
-- A worker that has read a text-heavy PDF can still reach 3 GB. It is not `pypdf`'s plain text
-  extraction: for the same 12 MB PDF that took 12.6 s and peaked at 130 MB, while `normalize()`
-  on the file (`normalize_pdf`, which builds the line segments; 42,948 of them here) took 46.1 s
-  and peaked at 2,920 MB in a fresh process. Character recognition is not involved, it runs later.
-  What inside `normalize_pdf` takes the memory has not been examined. (An earlier version of this
-  entry blamed the PDF reader; that was a guess, and it was wrong.)
-  Separately, reading the text of 100 sample PDFs took 49.7 s with `pypdf` and 6.0 s with
-  `pypdfium2` (the slowest file 12.6 s against 0.8 s, peak memory 130 MB against 52 MB). See the
-  entry below before switching readers.
+- A worker that has read a text-heavy PDF can still reach 3 GB. For a 12 MB PDF, `normalize()`
+  (`normalize_pdf`) took 46.1 s and peaked at 2,920 MB in a fresh process (42,948 line segments),
+  while plain `pypdf` text extraction of the same file took 12.6 s and peaked at 130 MB. But
+  `pypdf` is only the fallback: `normalize_pdf` reads words, lines and tables with `pdfplumber`,
+  which was not timed or measured for memory on its own, and what inside it takes the memory has
+  not been separated. Character recognition is not involved, it runs later. (An earlier version of
+  this entry blamed the PDF reader; that was a guess.) Reading 100 sample PDFs' text took 49.7 s
+  with `pypdf` and 6.0 s with `pypdfium2`; see the Arabic entry below before switching readers.
 - A spreadsheet is stored as one passage per cell, so one 27 MB file becomes 1.18 million
   passages and takes about 40 seconds to index in the one process that cannot be spread over
   workers. That part is not changed.
@@ -708,32 +707,57 @@ eight workers sat at 4.9 GB with nothing big running. Eight big files at once ne
   back. Only Linux was tried. Workers are forked, which Python 3.12 reports as deprecated when
   the parent already has threads; the older long-lived pool did the same.
 
-## Arabic-script text in PDFs is stored as presentation forms, so it cannot be found by typing ordinary letters
+## Arabic-script text in PDFs is stored mirror-spelled, so it cannot be found by typing ordinary letters
 
-`pypdf`, which reads the text of PDFs, returns Arabic as presentation forms: the glyph shapes
-for the initial, middle, final and isolated positions (Unicode U+FB50 to U+FEFF; for example the
-isolated kaf `ﻙ`, U+FED9, where the ordinary letter is `ك`, U+0643). Nothing in the ingestion
-pipeline normalizes them, and the search index does not fold them, so a search typed with
-ordinary letters does not match.
+The pipeline reads PDF text with `pdfplumber` (which uses `pdfminer.six`; the optional `pdf`
+extra), and with `pypdf` for a page where `pdfplumber` finds no words or when `pdfplumber` is not
+installed. For Arabic-script pages `pdfplumber` returns each word with its letters in visual
+(left-to-right) order and as presentation forms (Unicode U+FB50 to U+FEFF; for example the isolated
+kaf `ﻙ`, U+FED9, where the ordinary letter is `ك`, U+0643). The words of each line also come out
+left to right, but that part is our own code: `_cluster_words_into_lines` sorts every line by its
+left edge whatever the script. Nothing repairs this and the search index does not fold it, so a
+search typed with ordinary letters does not match. Quotations in reports are expected to read
+backwards for the same reason; that was not checked. (An earlier version of this entry blamed
+`pypdf` and described only the presentation forms; both were wrong or incomplete.)
 
-**Measured** on one Arabic PDF from the test collection, ingested with the shipped code: 40 of its
-words typed with ordinary Arabic letters found 0 documents, while 10 of 10 words copied straight
-from the stored text found it (so the search itself works). The stored text held 3,998
-presentation-form characters and 59 ordinary Arabic letters. 16 of the 40 words appear in the
-stored text once it is normalized with Unicode compatibility normalization (NFKC, in the standard
-library); that was a text check, not a search. The rest differ in other ways (letter variants, and
-`pypdf` returning each line's words in visual order) and were not examined. `pypdfium2` returns the same page in ordinary letters and
-reading order, and read 100 PDFs' text 8 times faster than `pypdf`, but over the 97 PDFs that
-had text its words matched `pypdf`'s by 95 percent or more on only 17; the other 80 differ (only
-the one above was looked at in detail), so which reader is right for citations and locators was
-not settled.
+**Measured** on a seeded sample of 100 PDFs drawn from all five folders of the test collection
+(the first one or two pages of each):
+- 75 of the 96 PDFs with text are Arabic-script; `pdfplumber` stored presentation forms in 63 of
+  them (so in 12 it did not).
+- Word-set agreement between readers (Dice coefficient, median over the Arabic-script PDFs, after
+  NFKC and folding the yeh, kaf and alef variants, tatweel and diacritics): PDFium and poppler,
+  two independent engines, 0.99; `pypdf` and PDFium 0.74; `pdfplumber` and each of the others
+  0.02 to 0.03.
+- An independent check with OCR (Tesseract, Arabic and English, 14 pages from 7 PDFs; imperfect,
+  for instance on Persian letters): the share of the OCR's words that each reader also has was
+  0.04 for `pdfplumber`, 0.65 for `pypdf`, 0.67 for PDFium and 0.65 for poppler.
+- The reversal, on the first page of 30 of those Arabic-script PDFs: `pdfplumber`'s words agree
+  with PDFium's 0.03 as stored (range 0.01 to 0.60) and 0.94 once the letters inside each Arabic
+  run are reversed.
+- A repair tried on the line segments the pipeline stores (first page of 40 Arabic-script PDFs,
+  against PDFium's text): reversing the letters inside each Arabic run after NFKC gives word
+  agreement 0.92 but keeps only 0.14 of adjacent word pairs; NFKC followed by the Unicode
+  bidirectional reordering (`python-bidi`) gives 0.92 and 0.87 (lowest file 0.68). It works on
+  each line's text, so the bounding boxes and page numbers stay as they are.
+- One Arabic PDF, shipped code: 40 of its words typed with ordinary letters found 0 documents,
+  while 10 of 10 words copied from the stored text found it, so the search itself works.
 
-**How much it affects.** In the 9,061 documents ingested from that collection, 38 of 78 PDFs (49%)
-hold such text, and so do 5 other documents (4 old Word files and 1 InPage file): 43 of 8,578
-indexed documents. The share in other collections depends on how many Arabic-script PDFs they
-hold.
+**How much it affects.** In the big test home (the 9,061 documents ingested from the AX folders
+only, a different set from the sample above), 38 of 78 PDFs (49%) hold presentation forms, and so
+do 5 other documents (4 old Word files and 1 InPage file): 43 of 8,578 indexed documents. That
+count is of presentation forms, not of reversal. The share elsewhere depends on how many
+Arabic-script PDFs a collection holds. Other right-to-left scripts (Hebrew, and Urdu or Pashto
+written in Arabic script) are likely to behave the same; they were not tested.
 
-**What is not done.** Nothing normalizes or folds these forms. The fix has to keep each segment's
-page and position (they are what a citation points to), so it is more than swapping the reader.
-It belongs with the language goal of the memory work: the same word has to be one thing whatever
-form the file stores it in.
+**What is not done, and the choices.** Changing what is stored changes what citations quote, so
+this is for the owner to decide. Folding on the search side cannot undo reversed letters.
+- Repair the lines `pdfplumber` already builds (NFKC and bidirectional reordering): keeps
+  bounding boxes and pages. It needs a reordering routine. `python-bidi` ships the GPL-3.0 and
+  LGPL-3.0 texts and its metadata says LGPL (this repository is Apache-2.0); PyICU wraps the C ICU
+  library (its licence was not checked here); a small routine of our own could cover the simple
+  cases.
+- Take the text from PDFium or poppler (ordinary letters, reading order): the lines and their
+  bounding boxes would have to be rebuilt.
+- Use `pypdf` for Arabic-script pages: the letters are in the right order but are presentation
+  forms (which NFKC folds), there are no bounding boxes, and its words agree with PDFium's only
+  0.74.
