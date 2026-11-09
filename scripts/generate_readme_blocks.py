@@ -218,9 +218,7 @@ def visible_commands() -> dict[str, Command]:
 # Where the command's own help text says more than has been verified, the README says less.
 # (The help text itself is source wording and is fixed separately.) Every key must be a real
 # command; render_commands stops if one is not.
-SUMMARY_OVERRIDES: dict[str, str] = {
-    "faces opt-in": "Turn on biometric face analysis. It stays off until you do this.",
-}
+SUMMARY_OVERRIDES: dict[str, str] = {}
 
 
 def _usage(path: str, command: Command) -> str:
