@@ -219,7 +219,7 @@ def visible_commands() -> dict[str, Command]:
 # (The help text itself is source wording and is fixed separately.) Every key must be a real
 # command; render_commands stops if one is not.
 SUMMARY_OVERRIDES: dict[str, str] = {
-    "faces opt-in": "Enable biometric face analysis (designed with GDPR Art. 9 and BIPA in mind).",
+    "faces opt-in": "Turn on biometric face analysis. It stays off until you do this.",
 }
 
 
@@ -248,6 +248,9 @@ def render_commands() -> str:
             "COMMAND_GROUPS in scripts/generate_readme_blocks.py is out of step with the "
             f"command tree. Missing: {missing}. Unknown: {unknown}. Listed twice: {duplicated}."
         )
+    stray = sorted(set(SUMMARY_OVERRIDES) - set(commands))
+    if stray:
+        raise SystemExit(f"SUMMARY_OVERRIDES names commands that do not exist: {stray}.")
     out = [
         NOTICE.format(
             source="the `archiv` command tree and the wording in `SUMMARY_OVERRIDES` in that script"

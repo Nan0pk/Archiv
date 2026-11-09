@@ -291,8 +291,9 @@ Being clear about limits is part of the point. The full, dated list is in
   two causes. With the optional `pdf` extra, the PDF reader hands back the letters of each
   word in reverse order, so quotations may read backwards. Without it, which is what the
   installer gives you, the order is right but the letters are stored as display shapes that
-  the search index does not fold. It was measured on Arabic-script PDFs; Urdu and Pashto
-  are likely affected but were not tested. A few old Word files and one InPage file in the
+  the search index does not fold; that follows from how the letters are stored, and a search
+  on that path was not tried. The failed search was measured on Arabic-script PDFs with the
+  extra. Urdu and Pashto are likely affected but were not tested. A few old Word files and one InPage file in the
   same test collection showed the same kind of stored letters. A repair has been measured but
   is not built yet.
 - **PDF layout and tables** come from an optional add-on (the `pdf` extra) that the installer
@@ -475,7 +476,7 @@ These read the same preserved originals and derived text as everything else. Non
 | `archiv images find-similar` | Find indexed images that look like the given image. |
 | `archiv images duplicates` | Refuse duplicate grouping until an evidence-backed replacement is available. |
 | `archiv images status` | Show the status of the image embedding index. |
-| `archiv faces opt-in` | Enable biometric face analysis (designed with GDPR Art. 9 and BIPA in mind). |
+| `archiv faces opt-in` | Turn on biometric face analysis. It stays off until you do this. |
 | `archiv faces opt-out` | Disable biometric face analysis. |
 | `archiv faces status` | Show face analysis configuration and database statistics. |
 | `archiv faces scan` | Scan ingested image objects for faces and update person clusters. |
