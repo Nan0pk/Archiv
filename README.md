@@ -216,9 +216,9 @@ Types Archiv does not accept are turned away **before** anything tries to parse 
 are never quietly accepted and half-read.
 
 <!-- formats:start -->
-<sub>This block is written by `scripts/generate_readme_blocks.py` from `docs/format-compatibility.json`. Edit the source, not the block.</sub>
+<sub>This block is written by `scripts/generate_readme_blocks.py` from `docs/format-compatibility.json` and the wording in `FAMILIES` in that script. Edit those, not the block.</sub>
 
-**45 file types** in 20 families are accepted. ✅ **Full** means the text is read and the matrix lists no gap that matters for most files. 🟡 **Partial** means a real part of the file is not read, or not guaranteed; the last column names the main one, and `archiv formats TYPE` lists them all.
+**45 file types** in 20 families are accepted. The support level of each family is as recorded in the matrix: ✅ **Full** or 🟡 **Partial**. The last column names the main limit, and `archiv formats TYPE` lists them all.
 
 | Kind | Extensions | Support | How the text is read | Worth knowing |
 | --- | --- | --- | --- | --- |
@@ -248,9 +248,9 @@ Turned away before any parsing: `.docm` (macro-enabled Word document), `.mp3` (c
 
 **Scans and photos.** Local OCR runs by itself during `archiv add` when Tesseract and its
 language packs are installed (the installer sets up English, Arabic and Urdu). Set
-`ARCHIV_OCR=off` to switch it off. When Tesseract is missing, the picture is kept and
-searchable by its details, but no text is produced and none is invented. Every OCR result is
-labelled as OCR and carries its page, pixel region, engine, languages and confidence.
+`ARCHIV_OCR=off` to switch it off. When Tesseract is missing, the picture is kept but no text
+is produced, and none is invented. Every OCR result is labelled as OCR and carries its page,
+pixel region, engine and languages, and usually a confidence.
 
 <details>
 <summary><b>For engineers:</b> the authoritative matrix and its guarantees</summary>
@@ -265,7 +265,8 @@ locator shapes, macro policy, encryption handling and known limits. Run `archiv 
 the installed version's view.
 
 - **Detection fails closed.** Plain text requires bounded UTF-8 decoding; undecodable content
-  fails rather than degrading. Malformed PDFs fail closed through `pypdf` structure parsing.
+  fails rather than degrading. The format matrix records the same for PDFs: malformed files
+  fail closed.
 - **Content is never executed.** Macro-enabled formats are rejected by suffix, before parsing.
 - **OCR segments are attributed.** Images and PDF pages without native text produce explicitly
   labelled `visual_ocr` segments, never mixed silently with native text.
@@ -286,11 +287,14 @@ Deeper reading: [Immutable ingestion](docs/ingestion.md) ·
 Being clear about limits is part of the point. The full, dated list is in
 [known issues](docs/known-issues.md).
 
-- **Arabic-script text in PDFs is often stored with its letters in the wrong order.** This
-  covers Arabic, Persian, Urdu and Pashto. Typing ordinary letters then finds nothing, and
-  quotations may read backwards. It was measured on PDFs; a few old Word files and one InPage
-  file in the same test collection showed the same kind of stored letters. A repair has been
-  measured but is not built yet.
+- **Arabic-script text in PDFs can often not be found by typing ordinary letters.** There are
+  two causes. With the optional `pdf` extra, the PDF reader hands back the letters of each
+  word in reverse order, so quotations may read backwards. Without it, which is what the
+  installer gives you, the order is right but the letters are stored as display shapes that
+  the search index does not fold. It was measured on Arabic-script PDFs; Urdu and Pashto
+  are likely affected but were not tested. A few old Word files and one InPage file in the
+  same test collection showed the same kind of stored letters. A repair has been measured but
+  is not built yet.
 - **PDF layout and tables** come from an optional add-on (the `pdf` extra) that the installer
   does not include. Without it PDFs are read with a basic reader.
 - **Scanned PDF pages** need `pdftoppm` from Poppler as well as Tesseract.
@@ -435,7 +439,7 @@ archive other than the default (`$ARCHIV_HOME` if set, otherwise `~/.local/share
 <br>
 
 <!-- commands:start -->
-<sub>This block is written by `scripts/generate_readme_blocks.py` from the `archiv` command tree. Edit the source, not the block.</sub>
+<sub>This block is written by `scripts/generate_readme_blocks.py` from the `archiv` command tree and the wording in `SUMMARY_OVERRIDES` in that script. Edit those, not the block.</sub>
 
 #### Everyday use
 
@@ -471,7 +475,7 @@ These read the same preserved originals and derived text as everything else. Non
 | `archiv images find-similar` | Find indexed images that look like the given image. |
 | `archiv images duplicates` | Refuse duplicate grouping until an evidence-backed replacement is available. |
 | `archiv images status` | Show the status of the image embedding index. |
-| `archiv faces opt-in` | Enable biometric face analysis (GDPR Art. 9 / BIPA compliant). |
+| `archiv faces opt-in` | Enable biometric face analysis (designed with GDPR Art. 9 and BIPA in mind). |
 | `archiv faces opt-out` | Disable biometric face analysis. |
 | `archiv faces status` | Show face analysis configuration and database statistics. |
 | `archiv faces scan` | Scan ingested image objects for faces and update person clusters. |

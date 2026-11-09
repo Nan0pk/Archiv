@@ -30,8 +30,8 @@ README = ROOT / "README.md"
 MATRIX = ROOT / "docs" / "format-compatibility.json"
 
 NOTICE = (
-    "<sub>This block is written by `scripts/generate_readme_blocks.py` from "
-    "{source}. Edit the source, not the block.</sub>"
+    "<sub>This block is written by `scripts/generate_readme_blocks.py` from {source}. "
+    "Edit those, not the block.</sub>"
 )
 
 # How each family is named for a reader, and the one limit worth knowing before relying on it.
@@ -215,6 +215,14 @@ def visible_commands() -> dict[str, Command]:
     return found
 
 
+# Where the command's own help text says more than has been verified, the README says less.
+# (The help text itself is source wording and is fixed separately.) Every key must be a real
+# command; render_commands stops if one is not.
+SUMMARY_OVERRIDES: dict[str, str] = {
+    "faces opt-in": "Enable biometric face analysis (designed with GDPR Art. 9 and BIPA in mind).",
+}
+
+
 def _usage(path: str, command: Command) -> str:
     words = [path]
     for param in command.params:
@@ -240,7 +248,12 @@ def render_commands() -> str:
             "COMMAND_GROUPS in scripts/generate_readme_blocks.py is out of step with the "
             f"command tree. Missing: {missing}. Unknown: {unknown}. Listed twice: {duplicated}."
         )
-    out = [NOTICE.format(source="the `archiv` command tree"), ""]
+    out = [
+        NOTICE.format(
+            source="the `archiv` command tree and the wording in `SUMMARY_OVERRIDES` in that script"
+        ),
+        "",
+    ]
     for title, intro, paths in COMMAND_GROUPS:
         out.append(f"#### {title}")
         out.append("")
@@ -249,7 +262,8 @@ def render_commands() -> str:
         out += ["| Command | What it does |", "| --- | --- |"]
         for path in paths:
             command = commands[path]
-            out.append(f"| `{_usage(path, command)}` | {_summary(command)} |")
+            summary = SUMMARY_OVERRIDES.get(path) or _summary(command)
+            out.append(f"| `{_usage(path, command)}` | {summary} |")
         out.append("")
     return "\n".join(out).rstrip() + "\n"
 
@@ -268,12 +282,14 @@ def render_formats() -> str:
     suffixes = sorted({s for f in families for s in cast(list[str], f["suffixes"])})
     rejected = cast(list[dict[str, str]], matrix["rejected_examples"])
     out = [
-        NOTICE.format(source="`docs/format-compatibility.json`"),
+        NOTICE.format(
+            source="`docs/format-compatibility.json` and the wording in `FAMILIES` in that script"
+        ),
         "",
         f"**{len(suffixes)} file types** in {len(families)} families are accepted. "
-        "✅ **Full** means the text is read and the matrix lists no gap that matters for most "
-        "files. 🟡 **Partial** means a real part of the file is not read, or not guaranteed; the "
-        "last column names the main one, and `archiv formats TYPE` lists them all.",
+        "The support level of each family is as recorded in the matrix: ✅ **Full** or "
+        "🟡 **Partial**. The last column names the main limit, and `archiv formats TYPE` "
+        "lists them all.",
         "",
         "| Kind | Extensions | Support | How the text is read | Worth knowing |",
         "| --- | --- | --- | --- | --- |",
