@@ -692,13 +692,48 @@ eight workers sat at 4.9 GB with nothing big running. Eight big files at once ne
   used 2.2 cores. Size cannot tell a 14 MB scanned PDF (slow, 131 MB) from a
   27 MB spreadsheet (fast, 2.9 GB), so both wait behind the same limit and the slow one can end
   up last.
-- A worker that has read a text-heavy PDF can still reach 3 GB: the PDF reader is the cause, not
-  the scheduling. A faster reader that is already installed (`pypdfium2`, in the `pdf` extra)
-  was 8 to 30 times quicker than `pypdf` in public benchmarks (py-pdf, and one blog test); it has not been
-  tried on this collection.
+- A worker that has read a text-heavy PDF can still reach 3 GB. It is not `pypdf`'s plain text
+  extraction: for the same 12 MB PDF that took 12.6 s and peaked at 130 MB, while `normalize()`
+  on the file (`normalize_pdf`, which builds the line segments; 42,948 of them here) took 46.1 s
+  and peaked at 2,920 MB in a fresh process. Character recognition is not involved, it runs later.
+  What inside `normalize_pdf` takes the memory has not been examined. (An earlier version of this
+  entry blamed the PDF reader; that was a guess, and it was wrong.)
+  Separately, reading the text of 100 sample PDFs took 49.7 s with `pypdf` and 6.0 s with
+  `pypdfium2` (the slowest file 12.6 s against 0.8 s, peak memory 130 MB against 52 MB). See the
+  entry below before switching readers.
 - A spreadsheet is stored as one passage per cell, so one 27 MB file becomes 1.18 million
   passages and takes about 40 seconds to index in the one process that cannot be spread over
   workers. That part is not changed.
 - Memory is read from `/proc` and the cgroup files, so on a system without them nothing is held
   back. Only Linux was tried. Workers are forked, which Python 3.12 reports as deprecated when
   the parent already has threads; the older long-lived pool did the same.
+
+## Arabic-script text in PDFs is stored as presentation forms, so it cannot be found by typing ordinary letters
+
+`pypdf`, which reads the text of PDFs, returns Arabic as presentation forms: the glyph shapes
+for the initial, middle, final and isolated positions (Unicode U+FB50 to U+FEFF; for example the
+isolated kaf `ﻙ`, U+FED9, where the ordinary letter is `ك`, U+0643). Nothing in the ingestion
+pipeline normalizes them, and the search index does not fold them, so a search typed with
+ordinary letters does not match.
+
+**Measured** on one Arabic PDF from the test collection, ingested with the shipped code: 40 of its
+words typed with ordinary Arabic letters found 0 documents, while 10 of 10 words copied straight
+from the stored text found it (so the search itself works). The stored text held 3,998
+presentation-form characters and 59 ordinary Arabic letters. 16 of the 40 words appear in the
+stored text once it is normalized with Unicode compatibility normalization (NFKC, in the standard
+library); that was a text check, not a search. The rest differ in other ways (letter variants, and
+`pypdf` returning each line's words in visual order) and were not examined. `pypdfium2` returns the same page in ordinary letters and
+reading order, and read 100 PDFs' text 8 times faster than `pypdf`, but over the 97 PDFs that
+had text its words matched `pypdf`'s by 95 percent or more on only 17; the other 80 differ (only
+the one above was looked at in detail), so which reader is right for citations and locators was
+not settled.
+
+**How much it affects.** In the 9,061 documents ingested from that collection, 38 of 78 PDFs (49%)
+hold such text, and so do 5 other documents (4 old Word files and 1 InPage file): 43 of 8,578
+indexed documents. The share in other collections depends on how many Arabic-script PDFs they
+hold.
+
+**What is not done.** Nothing normalizes or folds these forms. The fix has to keep each segment's
+page and position (they are what a citation points to), so it is more than swapping the reader.
+It belongs with the language goal of the memory work: the same word has to be one thing whatever
+form the file stores it in.
