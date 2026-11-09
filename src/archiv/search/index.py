@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 from uuid import uuid4
 
@@ -37,6 +37,48 @@ def segment_id_for(
     return sha256_bytes(payload)
 
 
+_INSERT_SEGMENT = """
+INSERT INTO segments (
+    segment_id, segment_index, object_sha256, source_name,
+    media_type, kind, locator_json, text, text_sha256,
+    normalized_path, normalized_sha256
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+"""
+
+# The page cache is only a speed setting. With SQLite's default (2 MB) the five b-trees of the
+# segments table thrash while a large document goes in: a 1.18 million passage load took 28.0 s
+# at the default, 22.3 s at 16 MB and 13.0 s at 64 MB; more than 64 MB bought little.
+_PAGE_CACHE_KIB = 65_536
+
+
+def _segment_rows(
+    document: NormalizedDocument,
+    digest: str,
+    normalized_path: Path,
+    normalized_sha256: str,
+) -> Iterator[tuple[str, int, str, str, str, str, str, str, str, str, str]]:
+    """The rows of one document's segments table, skipping passages with no text."""
+
+    for segment_index, segment in enumerate(document.segments):
+        if not segment.text.strip():
+            continue
+        locator_json = json.dumps(segment.locator, sort_keys=True, separators=(",", ":"))
+        text_sha256 = sha256_bytes(segment.text.encode("utf-8"))
+        yield (
+            segment_id_for(digest, segment_index, locator_json, text_sha256),
+            segment_index,
+            digest,
+            document.source_name,
+            document.media_type,
+            document.kind,
+            locator_json,
+            segment.text,
+            text_sha256,
+            str(normalized_path),
+            normalized_sha256,
+        )
+
+
 def rebuild_search_index(*, home: Path | None = None) -> SearchIndexBuild:
     """Atomically rebuild FTS5 from canonical originals and normalized documents."""
 
@@ -49,6 +91,7 @@ def rebuild_search_index(*, home: Path | None = None) -> SearchIndexBuild:
 
     try:
         with connect_index(temporary) as index_connection:
+            index_connection.execute(f"PRAGMA cache_size = -{_PAGE_CACHE_KIB}")
             try:
                 index_connection.executescript(SCHEMA)
             except sqlite3.OperationalError as error:
@@ -84,44 +127,12 @@ def rebuild_search_index(*, home: Path | None = None) -> SearchIndexBuild:
                     raise SearchIndexIntegrityError(f"normalized object digest mismatch: {digest}")
 
                 object_count += 1
-                for segment_index, segment in enumerate(document.segments):
-                    if not segment.text.strip():
-                        continue
-                    locator_json = json.dumps(
-                        segment.locator,
-                        sort_keys=True,
-                        separators=(",", ":"),
-                    )
-                    text_sha256 = sha256_bytes(segment.text.encode("utf-8"))
-                    segment_id = segment_id_for(
-                        digest,
-                        segment_index,
-                        locator_json,
-                        text_sha256,
-                    )
-                    index_connection.execute(
-                        """
-                        INSERT INTO segments (
-                            segment_id, segment_index, object_sha256, source_name,
-                            media_type, kind, locator_json, text, text_sha256,
-                            normalized_path, normalized_sha256
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """,
-                        (
-                            segment_id,
-                            segment_index,
-                            digest,
-                            document.source_name,
-                            document.media_type,
-                            document.kind,
-                            locator_json,
-                            segment.text,
-                            text_sha256,
-                            str(normalized_path),
-                            normalized_sha256,
-                        ),
-                    )
-                    segment_count += 1
+                before = index_connection.total_changes
+                index_connection.executemany(
+                    _INSERT_SEGMENT,
+                    _segment_rows(document, digest, normalized_path, normalized_sha256),
+                )
+                segment_count += index_connection.total_changes - before
 
             index_connection.execute("INSERT INTO segments_fts(segments_fts) VALUES('rebuild')")
             index_connection.executemany(
@@ -163,6 +174,7 @@ def update_search_index(
 
     try:
         with connect_index(final) as index_connection:
+            index_connection.execute(f"PRAGMA cache_size = -{_PAGE_CACHE_KIB}")
             try:
                 tables = {
                     row[0]
@@ -236,47 +248,17 @@ def update_search_index(
                         (digest,),
                     )
 
-                for segment_index, segment in enumerate(document.segments):
-                    if not segment.text.strip():
-                        continue
-                    locator_json = json.dumps(
-                        segment.locator,
-                        sort_keys=True,
-                        separators=(",", ":"),
-                    )
-                    text_sha256 = sha256_bytes(segment.text.encode("utf-8"))
-                    segment_id = segment_id_for(
-                        digest,
-                        segment_index,
-                        locator_json,
-                        text_sha256,
-                    )
-                    cursor = index_connection.execute(
-                        """
-                        INSERT INTO segments (
-                            segment_id, segment_index, object_sha256, source_name,
-                            media_type, kind, locator_json, text, text_sha256,
-                            normalized_path, normalized_sha256
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """,
-                        (
-                            segment_id,
-                            segment_index,
-                            digest,
-                            document.source_name,
-                            document.media_type,
-                            document.kind,
-                            locator_json,
-                            segment.text,
-                            text_sha256,
-                            str(normalized_path),
-                            normalized_sha256,
-                        ),
-                    )
-                    index_connection.execute(
-                        "INSERT INTO segments_fts(rowid, text) VALUES (?, ?)",
-                        (cursor.lastrowid, segment.text),
-                    )
+                index_connection.executemany(
+                    _INSERT_SEGMENT,
+                    _segment_rows(document, digest, normalized_path, normalized_sha256),
+                )
+                # One statement, run inside SQLite, instead of one call per passage: a
+                # spreadsheet is a passage per cell, 1.18 million for one 27 MB file.
+                index_connection.execute(
+                    "INSERT INTO segments_fts(rowid, text) "
+                    "SELECT rowid, text FROM segments WHERE object_sha256 = ?",
+                    (digest,),
+                )
 
             counts_row = index_connection.execute(
                 "SELECT "

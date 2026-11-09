@@ -703,8 +703,12 @@ eight workers sat at 4.9 GB with nothing big running. Eight big files at once ne
   Reading 100 sample PDFs' text took 49.7 s with `pypdf` and 6.0 s with `pypdfium2`; see the Arabic
   entry below before switching readers.
 - A spreadsheet is stored as one passage per cell, so one 27 MB file becomes 1.18 million
-  passages and takes about 40 seconds to index in the one process that cannot be spread over
-  workers. That part is not changed.
+  passages, and indexing them happens in the one process that cannot be spread over workers.
+  Loading those passages into the search index took 28.0 s in a separate benchmark and takes
+  13.0 s with batched inserts and a 64 MB page cache. For the 480-file sample the search-index
+  step went from 121.4 s to 83.9 s when the index is built from scratch, and from 88.1 s to
+  59.4 s for the second half added to a home (one run each, not interleaved), with an identical
+  index. The storage of one passage per cell is not changed.
 - Memory is read from `/proc` and the cgroup files, so on a system without them nothing is held
   back. Only Linux was tried. Workers are forked, which Python 3.12 reports as deprecated when
   the parent already has threads; the older long-lived pool did the same.
