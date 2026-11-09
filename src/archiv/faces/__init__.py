@@ -1,4 +1,4 @@
-"""Biometric-compliant face detection, clustering, and identity resolution."""
+"""Opt-in face detection, clustering, and identity resolution."""
 
 from archiv.faces.attributions import (
     attribute_all_clusters,
