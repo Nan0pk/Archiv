@@ -43,7 +43,7 @@ console = Console()
 def opt_in_command(
     home: Annotated[Path | None, typer.Option("--home", file_okay=False)] = None,
 ) -> None:
-    """Enable biometric face analysis (GDPR Art. 9 / BIPA compliant)."""
+    """Turn on biometric face analysis. It stays off until you do this."""
     cfg = load_face_config(home)
     cfg.opt_in = True
     cfg.opt_in_at = datetime.now(UTC).isoformat()

@@ -24,7 +24,7 @@ from archiv.format_matrix import (
 
 _EXTRACTION_TEXT = {
     "native": "native text extraction",
-    "visual_ocr_conditional": "visual OCR only when explicitly enabled",
+    "visual_ocr_conditional": "visual OCR when Tesseract and its language data are installed",
     "metadata_only": "metadata only; no document text",
 }
 

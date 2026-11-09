@@ -93,7 +93,7 @@ FAMILIES: dict[str, tuple[str, str]] = {
 
 HOW_READ = {
     "native": "Read directly",
-    "visual_ocr_conditional": "Local OCR, when Tesseract is installed",
+    "visual_ocr_conditional": "Local OCR, when Tesseract and its language data are installed",
     "metadata_only": "Details only, no text",
 }
 SUPPORT = {"full": "✅ Full", "partial": "🟡 Partial"}
@@ -218,9 +218,7 @@ def visible_commands() -> dict[str, Command]:
 # Where the command's own help text says more than has been verified, the README says less.
 # (The help text itself is source wording and is fixed separately.) Every key must be a real
 # command; render_commands stops if one is not.
-SUMMARY_OVERRIDES: dict[str, str] = {
-    "faces opt-in": "Turn on biometric face analysis. It stays off until you do this.",
-}
+SUMMARY_OVERRIDES: dict[str, str] = {}
 
 
 def _usage(path: str, command: Command) -> str:
