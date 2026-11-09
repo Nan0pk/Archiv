@@ -4,6 +4,7 @@ import json
 import sqlite3
 import sys
 from pathlib import Path
+from typing import Any
 
 from memory_support import FakeModel, HashEmbedder, make_archive
 from typer.testing import CliRunner
@@ -16,6 +17,7 @@ from archiv.memory.ask import (
     entry_prompt,
     exit_prompt,
     parse_entry,
+    question_terms,
     walk,
 )
 from archiv.memory.build import build_memory
@@ -43,7 +45,7 @@ def _thing(conn: sqlite3.Connection, form: str) -> int:
     return int(conn.execute("SELECT thing_id FROM things WHERE form = ?", (form,)).fetchone()[0])
 
 
-def _walk(home: Path, forms: list[str], hops: int = 2, **options: int) -> list[Passage]:
+def _walk(home: Path, forms: list[str], hops: int = 2, **options: Any) -> list[Passage]:
     layout = ArchivLayout.resolve(home)
     by_id = {p.segment_id: p for p in load_passages(home)}
     with open_memory(layout) as conn:
@@ -361,3 +363,188 @@ def test_nothing_found_says_what_was_searched_and_does_not_claim_absence(tmp_pat
     assert '"Frobnicate Widget"' in report.text
     assert "may still hold" in report.text
     assert "has nothing" not in report.text
+
+
+def test_question_terms_keep_the_subject_and_drop_words_that_only_describe_asking() -> None:
+    terms = question_terms("What does the collection hold about the Pier Guild?")
+    assert "pier guild" in terms
+    assert "pier" in terms
+    assert "guild" in terms
+    for word in ("collection", "hold", "what", "the"):
+        assert word not in terms
+    assert question_terms("What does the collection hold?") == []
+    assert question_terms("   ") == []
+    # a differently worded question gives its own subject, not a fixed template
+    assert "river bank" in question_terms("Tell me about the river bank in spring")
+
+
+def _own_words_archive(tmp_path: Path, own: int = 12, other: int = 3) -> Path:
+    """`own` passages use the asked-for name; `other` use only a second form of it."""
+    docs = {
+        f"o{i}.txt": f"The Orchard Society met on day {i} to plan the new harvest festival."
+        for i in range(own)
+    }
+    docs.update(
+        {
+            f"x{i}.txt": f"The OS Group opened its store room on day {i} for the winter stock."
+            for i in range(other)
+        }
+    )
+    return make_archive(tmp_path, docs)
+
+
+def test_walk_searches_the_questions_own_words_when_the_first_step_leaves_them_out(
+    tmp_path: Path,
+) -> None:
+    home = _own_words_archive(tmp_path)
+    without = _walk(home, ["Zzyzx"], hops=0)
+    assert without == []
+    own = question_terms("What does the collection hold about the Orchard Society?")
+    got = _walk(home, ["Zzyzx"], hops=0, own=own)
+    assert len(got) == 12
+    assert all("Orchard Society" in p.text for p in got)
+
+
+def test_the_questions_own_words_do_not_crowd_out_the_first_steps_other_forms(
+    tmp_path: Path,
+) -> None:
+    home = _own_words_archive(tmp_path)
+    got = _walk(home, ["OS Group"], hops=0, own=["orchard society"], max_passages=8)
+    assert len(got) == 8
+    # each side gets its own quota of the exact-match half, so neither is shut out
+    assert sum("OS Group" in p.text for p in got) >= 2
+    assert sum("Orchard Society" in p.text for p in got) >= 4
+
+
+def test_a_quota_the_question_words_do_not_use_goes_to_the_first_steps_forms(
+    tmp_path: Path,
+) -> None:
+    home = _own_words_archive(tmp_path, own=1, other=6)
+    got = _walk(home, ["OS Group"], hops=0, own=["orchard society"], max_passages=8)
+    assert sum("Orchard Society" in p.text for p in got) == 1
+    assert sum("OS Group" in p.text for p in got) == 6
+
+
+def test_a_word_or_phrase_found_in_too_many_passages_is_not_used_as_an_own_word(
+    tmp_path: Path,
+) -> None:
+    home = _own_words_archive(tmp_path)
+    # "society" is in 12 passages, more than the limit of 5, so it says nothing
+    assert _walk(home, ["Zzyzx"], hops=0, own=["society"], own_limit=5) == []
+    assert _walk(home, ["Zzyzx"], hops=0, own=["orchard society"], own_limit=5) == []
+    assert len(_walk(home, ["Zzyzx"], hops=0, own=["orchard society"], own_limit=50)) == 12
+
+
+def test_the_questions_own_words_must_be_held_together_not_one_by_one(tmp_path: Path) -> None:
+    home = make_archive(
+        tmp_path,
+        {
+            "a.txt": "The harbour pilots met at the old pier before the storm season began.",
+            "b.txt": "Harbour fees rose again this spring across all of the northern ports.",
+            "c.txt": "The pilots trained twelve new recruits during the long winter months.",
+            "d.txt": "Harbour fees were settled in full by the senior pilots last autumn.",
+        },
+    )
+    # the two words side by side: only the passage that has them side by side counts
+    together = _walk(home, ["Zzyzx"], hops=0, own=question_terms("harbour pilots"))
+    assert [p.source_name for p in together] == ["a.txt"]
+    # no passage has them side by side, so a passage has to hold both words anywhere
+    apart = _walk(home, ["Zzyzx"], hops=0, own=["pilots harbour", "harbour", "pilots"])
+    assert sorted(p.source_name for p in apart) == ["a.txt", "d.txt"]
+
+
+def test_a_longer_name_needs_its_whole_phrase_not_a_common_part_of_it(tmp_path: Path) -> None:
+    home = make_archive(
+        tmp_path,
+        {
+            "a.txt": "The Westgate Valley Water Authority inspected the northern pumping station.",
+            "b.txt": "The Westgate Valley Water Board spoke to the press about the closure.",
+            "c.txt": "The Eastgate Valley Water Authority was named the new owner of the station.",
+        },
+    )
+    own = question_terms("Westgate Valley Water Authority")
+    assert [p.source_name for p in _walk(home, ["Zzyzx"], hops=0, own=own)] == ["a.txt"]
+
+
+def test_a_window_that_is_in_too_many_passages_is_dropped_from_what_a_long_name_needs(
+    tmp_path: Path,
+) -> None:
+    docs = {
+        f"b{i}.txt": f"The Westgate Valley Water Board met on day {i} to review the pump plans."
+        for i in range(4)
+    }
+    docs["a.txt"] = "The Westgate Valley Water Authority inspected the northern pumping station."
+    home = make_archive(tmp_path, docs)
+    own = question_terms("Westgate Valley Water Authority")
+    # the first three-word window is in five passages, more than the limit of three, so it is
+    # not required; the full name is still found through the other window
+    got = _walk(home, ["Zzyzx"], hops=0, own=own, own_limit=3)
+    assert [p.source_name for p in got] == ["a.txt"]
+
+
+def test_without_own_word_hits_the_walk_is_unchanged(tmp_path: Path) -> None:
+    home = _guild_archive(tmp_path)
+    plain = _walk(home, ["Pier Guild"], hops=1, max_passages=8, text_limit=20)
+    with_words = _walk(
+        home,
+        ["Pier Guild"],
+        hops=1,
+        max_passages=8,
+        text_limit=20,
+        own=["no such words anywhere"],
+    )
+    assert [p.segment_id for p in with_words] == [p.segment_id for p in plain]
+
+
+def test_ask_searches_the_questions_own_words_even_when_the_first_step_misses_them(
+    tmp_path: Path,
+) -> None:
+    home = _own_words_archive(tmp_path, own=3, other=0)
+    prompts: list[str] = []
+
+    def complete(prompt: str) -> str:
+        prompts.append(prompt)
+        if "Answer with JSON only" in prompt:
+            return json.dumps({"forms": ["Zzyzx"], "related": []})
+        return "The society met several times [P1]."
+
+    report = ask(
+        "Tell me about the Orchard Society",
+        home=home,
+        complete=complete,
+        model_label="fake",
+        embedder=None,
+    )
+    assert not report.text.startswith(NOTHING_FOUND)
+    assert len(prompts) == 2
+    assert "Orchard Society" in prompts[1]
+
+
+def test_own_word_matches_that_do_not_fit_take_turns_with_graph_and_meaning_passages(
+    tmp_path: Path,
+) -> None:
+    home = _guild_archive(tmp_path)
+    layout = ArchivLayout.resolve(home)
+    by_id = {p.segment_id: p for p in load_passages(home)}
+    embedder = HashEmbedder()
+    build_memory(home=home, complete=FakeModel([]), model_label="fake", embedder=embedder)
+    index = VectorIndex.load(layout.indexes / "memory-passages")
+    question = "river bank yard fence"
+    with open_memory(layout) as conn:
+        got = walk(
+            conn,
+            forms=["Pier Guild"],
+            question_vec=embedder.embed([question])[0],
+            vectors=index,
+            by_id=by_id,
+            home=home,
+            hops=1,
+            max_passages=8,
+            text_limit=20,
+            own=["yard"],  # found in 6 of 9 passages here: far more than the places left over
+        )
+    assert len(got) == 8
+    own_matches = sum("yard" in p.text for p in got)
+    other = len(got) - own_matches
+    assert own_matches >= 4
+    assert other >= 2  # the passages reached through meaning still get places
