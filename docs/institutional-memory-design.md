@@ -360,12 +360,46 @@ model steps and the report check) is the repository code at commit 6755c9c, whic
     names it searched for. That accounts for 6 of the 10 missed passages. In one question
     the report said nothing bore on it, although 2 passages contain the exact words. Since
     #240 an empty answer says what was searched and does not claim the
-    collection holds nothing; the cause (the first step dropping the question's words) is not
-    fixed.
-  - Other causes were not found: 4 missed passages (in two questions) where the first step
-    had included the question's words and the passages still did not reach the report, and
-    one question where 36 passages contain the words but 1 was handed over (a possible factor,
-    not confirmed: only 10 hits are taken for each name form, and that question had 46 forms).
+    collection holds nothing. The cause is now fixed as well: the walk searches the question's
+    own words directly, whatever the first step lists.
+  - The other misses had causes too, found by replaying the stored answers with no model
+    call. The walk pooled the text matches of every form the first step listed and ranked them
+    together, so matches for the question's own words competed equally with matches for forms
+    the model had invented. It also searched only the first 10 forms, so a question whose own
+    words came after forms in other languages got no text search at all. Now the walk also
+    searches the question's own words, and the own words and the first step's forms each get a
+    quota of the exact-match half (a quota one of them does not use goes to the other); own-word
+    matches that do not fit take turns with the passages reached through the graph or through
+    meaning. A passage counts as holding the question's own words only when it holds them
+    together: the question's longest phrase that is found, or else at least 80% of its
+    informative single words. A word or phrase found in 100 or more passages is ignored.
+  - Measured on the same 10 questions, by replaying stored answers with no model call. Passages
+    with the exact words that were handed to the report step: 53 of 145 before, 76 of 145 after
+    (about 106 is the most that 40 places allow here). Passages that hold only one word of a
+    longer name: 75 before and after. Passages reached only through the graph or through
+    meaning: 164 before, 156 after, and none of the 10 questions was left without any. Passages
+    that use another form of the name, in the 8 cases run through the whole path: 21 of 107
+    handed before, 20 after (the quota costs one passage in one case). Two earlier versions were
+    measured and rejected: taking the own words without a quota raised the first number but cut
+    the other-form passages from 21 to 2, and letting a passage in on one word of the name
+    raised the one-word passages from 75 to 138 and left four questions with no graph or meaning
+    passages at all.
+  - Limits. The way the places are shared was chosen by comparing versions on these same
+    questions, so these numbers are not a held-out test. The counts are of passages handed
+    over, not of passages the report cited. One collection, English questions: the lists of
+    words that are left out are English, and on a question in another language the rule finds
+    no passage and the walk behaves as before. On the full collection (190,921 passages) a
+    single subject word is often found in 100 passages or more and is then ignored: 4 of these
+    10 questions had no usable own words there, so the gain will be smaller on a large
+    collection. All 10 questions use one wording ("What does the collection hold about ...?"),
+    and the words that are left out as only describing asking are exactly that wording's, so the
+    gain is measured on that wording only. The first step's forms are still capped as before
+    (only the first 10 forms are searched, 10 hits each). The first step's stored answers were
+    replayed, so a change to the first step's prompt needs new model calls to measure, and
+    report answers stored by earlier runs no longer match whenever the handed passages changed.
+  - A cost that was already there: searching for a common word with ranked results took 26 to
+    140 seconds each on the full collection, so every form the first step lists pays that on
+    every question. The new own-word search avoids it by counting to 100 first.
   - The first step also pulls names out of the 5 grounding passages into the names it
     searches for.
 

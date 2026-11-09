@@ -18,6 +18,9 @@ from archiv.memory.model import Complete
 from archiv.memory.passages import Passage, count_literal_passages, load_passages
 from archiv.memory.store import cache_key, cached, open_memory, remember
 from archiv.memory.vectors import Embedder, VectorIndex
+from archiv.search.index import search_index_path
+from archiv.search.retrieval import derive_query_variants
+from archiv.search.schema import connect_index
 from archiv.search.service import search_documents
 from archiv.storage.layout import ArchivLayout
 
@@ -76,6 +79,40 @@ def entry_prompt(question: str, samples: list[str] | None = None) -> str:
     )
 
 
+# Words that only describe asking a collection something, not what is being asked about. Left in,
+# a word like "collection" is found in many passages and fills the places meant for the
+# subject's own text. The list is English and short on purpose: a word that can also be a
+# subject ("list", "files", "information") is left alone.
+_ASKING_WORDS = re.compile(
+    r"\b(?:collections?|hold|holds|held|know|knows|say|says|said|tell|mention|mentions|"
+    r"mentioned)\b",
+    re.IGNORECASE,
+)
+
+
+def question_terms(question: str) -> list[str]:
+    """The question's own search words: its phrases, longest first, then its single words.
+
+    The first step is a model, and it can leave out the words the user actually typed, or list
+    them after forms in other languages (only the first few forms are searched). These words
+    come straight from the question, so they are always searched. Words such as "what" or "the"
+    are left out by the same rule the ordinary search uses, and so are words that only describe
+    asking ("collection", "hold", "tell").
+    """
+    cleaned = " ".join(_ASKING_WORDS.sub(" ", question).split())
+    if not cleaned:
+        return []
+    specs, derived_terms, _concepts = derive_query_variants(cleaned)
+    if not derived_terms:
+        return []  # nothing but words like "what" and "the" is left
+    # When the whole question is only a few words, the helper files it as the "exact" search and
+    # drops the same phrase from the derived ones, so it is taken from there.
+    whole = [spec.query for spec in specs if spec.kind == "exact-objective"]
+    kinds = ("derived-3-term-phrase", "derived-2-term-phrase", "derived-term")
+    derived = [spec.query for kind in kinds for spec in specs if spec.kind == kind]
+    return list(dict.fromkeys([q for q in whole if len(q.split()) <= 3] + derived))
+
+
 def parse_entry(answer: str) -> list[str]:
     data = first_json_object(answer)
     if data is None:
@@ -104,6 +141,25 @@ def _document_order(passage: Passage) -> tuple[str, str]:
     return passage.source_name, json.dumps(passage.locator, sort_keys=True, default=str)
 
 
+def _found_in_at_least(home: Path | None, term: str, cap: int) -> bool:
+    """Whether the exact phrase `term` is in at least `cap` passages.
+
+    Counting stops at `cap`, so it stays fast for a word that is everywhere. A search that
+    ranks its results has to rank every match first: on a collection of 190,921 passages it took
+    26 to 140 seconds for three common words, every time, with the index already in memory.
+    """
+    path = search_index_path(ArchivLayout.resolve(home))
+    if not path.is_file():
+        raise FileNotFoundError("search index missing; run rebuild-search-index")
+    quoted = '"' + term.replace('"', '""') + '"'
+    with connect_index(path) as connection:
+        row = connection.execute(
+            "SELECT count(*) FROM (SELECT 1 FROM segments_fts WHERE segments_fts MATCH ? LIMIT ?)",
+            (quoted, cap),
+        ).fetchone()
+    return int(row[0]) >= cap
+
+
 def walk(
     conn: sqlite3.Connection,
     *,
@@ -119,11 +175,15 @@ def walk(
     text_limit: int = 10,
     max_forms: int = 10,
     derived_seeds: int = 15,
+    own: list[str] | None = None,
+    own_limit: int = 100,
 ) -> list[Passage]:
     """Collect the passages to hand to the report step. No model is involved.
 
     Three kinds of passage compete for `max_passages` slots:
-    - exact text matches of the starting names, taking at most half the slots;
+    - exact text matches, taking at most half the slots. The question's own words (`own`) come
+      first, the more of them a passage holds the better; exact matches of the starting names
+      fill what is left of that half;
     - passages reached by following the web outward from those names;
     - passages whose meaning is close to the question.
     Everything except the exact matches is ranked by similarity to the question when
@@ -153,6 +213,53 @@ def walk(
             if result.citation.segment_id in by_id
         )
     )
+    # The question's own words. A passage counts as holding them when it holds the question's
+    # words together, not just one of them. Longest phrases first: the question's three-word
+    # phrases, then its two-word phrases, and a passage has to hold at least 80% of the windows of
+    # the size used. When no phrase is found, it has to hold at least 80% of the question's single
+    # words. A word or phrase found in `own_limit` passages or more is in too many to tell
+    # anything apart and is not counted; one found nowhere cannot be required.
+    own_terms = own or []
+    found_by: dict[str, set[str]] = {}
+    too_common: set[str] = set()
+    for term in own_terms:
+        if _found_in_at_least(home, term, own_limit):
+            too_common.add(term)
+            found_by[term] = set()
+            continue
+        found_by[term] = {
+            result.citation.segment_id
+            for result in search_documents(term, home=home, limit=own_limit)
+            if result.citation.segment_id in by_id
+        }
+    by_size: dict[int, list[str]] = {}
+    for term in own_terms:
+        by_size.setdefault(len(term.split()), []).append(term)
+
+    def holding(size: int) -> dict[str, int]:
+        """Passages that hold at least 80% of the question's terms of this size, and how many.
+
+        A term found in too many passages is left out of what is required. A phrase found
+        nowhere is still required, so a part of a longer name cannot stand in for the whole
+        name; a single word found nowhere cannot be required.
+        """
+        terms = [t for t in by_size.get(size, []) if t not in too_common]
+        if size == 1:
+            terms = [t for t in terms if found_by[t]]
+        count: dict[str, int] = {}
+        for term in terms:
+            for segment_id in found_by[term]:
+                count[segment_id] = count.get(segment_id, 0) + 1
+        needed = -(-4 * len(terms) // 5)
+        return {s: size * 1000 + c for s, c in count.items() if c >= needed}
+
+    own_hits: dict[str, int] = {}
+    for size in sorted((n for n in by_size if n > 1), reverse=True):
+        own_hits = holding(size)
+        if own_hits:
+            break
+    if not own_hits:
+        own_hits = holding(1)
     meaning: list[str] = []
     if vectors is not None and question_vec is not None:
         meaning = [
@@ -221,13 +328,44 @@ def walk(
 
     scores: dict[str, float] = {}
     if vectors is not None and question_vec is not None:
-        scores = vectors.scores(list(dict.fromkeys(literal + graph + meaning)), question_vec)
+        scores = vectors.scores(
+            list(dict.fromkeys(list(own_hits) + literal + graph + meaning)), question_vec
+        )
 
     def ranked(ids: list[str]) -> list[str]:
         return sorted(ids, key=lambda s: -scores.get(s, -1.0)) if scores else ids
 
-    exact = ranked(literal)[: max_passages // 2]
-    rest = ranked([s for s in dict.fromkeys(meaning + graph + literal) if s not in exact])
+    half = max_passages // 2
+    if not own_hits:
+        exact = ranked(literal)[:half]
+        rest = ranked([s for s in dict.fromkeys(meaning + graph + literal) if s not in exact])
+        return [by_id[s] for s in (exact + rest)[:max_passages]]
+    quota = half // 2
+    own_order = sorted(own_hits, key=lambda s: (-own_hits[s], -scores.get(s, -1.0), s))
+    text_order = [s for s in ranked(literal) if s not in own_hits]
+    # The exact-match half is shared: the question's own words and the text matches of the
+    # first step's forms get a quota each, and a quota that one of them does not use goes to
+    # the other. Without the quota, a question whose own words are found in many passages
+    # would crowd out the passages that use another form of the name, which is the point.
+    exact = own_order[:quota] + text_order[:quota]
+    if len(own_order) < quota:
+        exact += text_order[quota : quota + (quota - len(own_order))]
+    if len(text_order) < quota:
+        exact += own_order[quota : quota + (quota - len(text_order))]
+    exact = list(dict.fromkeys(exact))
+    # Own-word matches that did not fit take turns with the passages reached through the graph
+    # or through meaning, so neither kind can shut the other out.
+    overflow = [s for s in own_order if s not in exact]
+    others = ranked(
+        [
+            s
+            for s in dict.fromkeys(meaning + graph + literal)
+            if s not in exact and s not in own_hits
+        ]
+    )
+    rest: list[str] = []
+    for position in range(max(len(overflow), len(others))):
+        rest += overflow[position : position + 1] + others[position : position + 1]
     return [by_id[s] for s in (exact + rest)[:max_passages]]
 
 
@@ -354,7 +492,13 @@ def ask(
                 remember(conn, key, answer)
         forms = parse_entry(answer)
         found = walk(
-            conn, forms=forms, question_vec=question_vec, vectors=vectors, by_id=by_id, home=home
+            conn,
+            forms=forms,
+            question_vec=question_vec,
+            vectors=vectors,
+            by_id=by_id,
+            home=home,
+            own=question_terms(question),
         )
         if not found:
             return Report(nothing_found(forms), [], [], 0)
