@@ -644,3 +644,61 @@ If a lost tail is not acceptable for the ledger, `bulk_write` can keep the full 
 removing the `synchronous = NORMAL` setting; the speed-up is then about threefold, not tenfold.
 
 **Not tested.** An actual power cut, and systems other than the laptop it was measured on.
+
+## A folder add holds big files back when memory is short, and the biggest ones still run mostly one at a time
+
+`archiv add` on a folder used to start files in path order, all at once, in eight long-lived
+workers. Two things went wrong on a mixed collection. Slow files near the end of the list left
+most workers idle (one scanned PDF took 32 seconds while the rest waited). And a few files take
+far more memory than their size suggests: one 27 MB spreadsheet took 2.9 GB, a 12 MB PDF
+took 3.0 GB while a 14 MB scanned PDF took 131 MB, and a worker never gives memory back, so
+eight workers sat at 4.9 GB with nothing big running. Eight big files at once needed more than
+7 GB, which a memory limit then killed.
+
+**What it does now** (`src/archiv/ingestion/scheduling.py`, used by `_add_sources`):
+- The biggest files start first. For zip-based formats the size once unpacked is used.
+- Files of 1 MB or more each get a forked process of their own that ends with the file, so
+  their memory goes back to the system. A forked process costs about 3 ms to start (measured
+  with a trivial task). Smaller files share long-lived workers. Fork is used on purpose: a
+  spawned or forkserver process runs the program's main module again before it starts its
+  task, which would make every program that calls the folder add in-process need a main guard.
+- At most two files of 8 MB or more run at once, and nothing new starts while less than 3 GB is
+  available or while the files already running could still grow into it. Each running file
+  keeps a reserve until it ends (3 GB for a big file, 400 MB for a sizable one, measured). The
+  figure is the machine's available memory, or the room under a memory limit if there is one
+  (real memory only, not file cache). If nothing is running, one file always starts.
+- A finished worker no longer sends the whole document text back to the main process; the text
+  is already on disk and committing never used it. For a big spreadsheet that copy was 2.7 to
+  4.3 GB.
+
+**Measured** (one laptop, 24 threads, 8 workers; old and new runs interleaved):
+- 346 mixed files (PDFs, scanned images, Word files), three runs each: 52.4, 55.1 and 53.5 s
+  against 69.1, 69.2 and 71.2 s (the ranges do not overlap), with 6.2 to 6.3 cores busy against
+  4.5, and real memory at 2.9 GB against 4.5 GB. The add's own report was the same every time
+  (2 failed, 317 new, 27 duplicates).
+- A 480-file sample that includes four 16 to 27 MB spreadsheets and several 6 to 14 MB PDFs. The
+  old code with 8 workers was killed in a 7 GB limit at 7.49 GB of real memory, and with only 2
+  workers it passed 7.2 GB. The new code finishes in that limit: real memory peak 4.5 GB, no
+  memory-pressure event, 375 s (the same files in one process took 713 s).
+- The same records come out. Against a single process on that sample: the same 418 stored
+  objects, the same ingestion statuses, the same search index (389 documents, 4.2 million
+  passages) and the same 35 unreadable files (33 old `.ppt`, 2 `.txt`). The text files under
+  `derived/` are byte-identical except for 13 that are content stored under more than one name
+  in the sample: the file records one of the names, and which one was already a race (see the
+  comment in `commit_candidate`). The ledger records every name.
+
+**What is still wrong.**
+- It is cautious. In the 480-file run the add held files back for 216 of about 250 seconds and
+  used 2.2 cores. Size cannot tell a 14 MB scanned PDF (slow, 131 MB) from a
+  27 MB spreadsheet (fast, 2.9 GB), so both wait behind the same limit and the slow one can end
+  up last.
+- A worker that has read a text-heavy PDF can still reach 3 GB: the PDF reader is the cause, not
+  the scheduling. A faster reader that is already installed (`pypdfium2`, in the `pdf` extra)
+  was 8 to 30 times quicker than `pypdf` in public benchmarks (py-pdf, and one blog test); it has not been
+  tried on this collection.
+- A spreadsheet is stored as one passage per cell, so one 27 MB file becomes 1.18 million
+  passages and takes about 40 seconds to index in the one process that cannot be spread over
+  workers. That part is not changed.
+- Memory is read from `/proc` and the cgroup files, so on a system without them nothing is held
+  back. Only Linux was tried. Workers are forked, which Python 3.12 reports as deprecated when
+  the parent already has threads; the older long-lived pool did the same.

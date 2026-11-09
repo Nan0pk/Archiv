@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import functools
 import json
+import multiprocessing
 import os
 import sqlite3
+import time
 from collections.abc import Callable
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wait
+from contextlib import ExitStack
+from dataclasses import replace
 from pathlib import Path
-from typing import Annotated, cast
+from typing import Annotated, Any, cast
 from uuid import uuid4
 
 import typer
@@ -33,6 +37,7 @@ from archiv.ingestion import (
     ingest_file,
     prepare_candidate,
     record_ingestion_failure,
+    scheduling,
 )
 from archiv.ingestion.formats import UnsupportedFormatError, suffix_for
 from archiv.ingestion.ledger import now_iso, record_processing
@@ -84,7 +89,11 @@ def _prepare_candidate_task(
     layout = ArchivLayout.resolve(home)
     try:
         prepared = prepare_candidate(candidate, layout, rebuild_derived=rebuild_derived)
-        return candidate, prepared, None
+        # The text and tables are already written under derived/. Committing needs only what
+        # kind of file it is and its metadata, so they are not sent back to this process:
+        # for a big spreadsheet that copy was 2.7 to 4.3 GB here.
+        light = prepared.normalized.model_copy(update={"segments": [], "tables": []})
+        return candidate, replace(prepared, normalized=light), None
     except Exception as error:
         return candidate, None, error
 
@@ -122,50 +131,106 @@ def _add_sources(
         num_workers = min(os.cpu_count() or 4, 8, len(candidates))
         candidate_order = {p: i for i, p in enumerate(candidates)}
         ordered_results: list[tuple[int, IngestionResult]] = []
+        # The biggest files start first and only a few big ones run at once; nothing new
+        # starts while memory is short (see archiv.ingestion.scheduling for why).
+        pending = scheduling.rank_for_start(candidates)
+        in_flight: dict[
+            Future[tuple[Path, PreparedCandidate | None, Exception | None]], tuple[bool, int]
+        ] = {}
+        scheduling.STATS.update(held_back_seconds=0.0, max_in_flight=0, max_big_in_flight=0)
 
         # Records are saved one file at a time, but without waiting for the disk after each
         # one; everything is synced once when this block ends (see ArchivDatabase.bulk_write).
-        with database.bulk_write(), ProcessPoolExecutor(max_workers=num_workers) as executor:
-            future_to_cand = {
-                executor.submit(
-                    _prepare_candidate_task,
-                    cand,
-                    home,
-                    rebuild_derived,
-                ): cand
-                for cand in candidates
-            }
-            for future in as_completed(future_to_cand):
-                cand, prepared, error = future.result()
-                if error is not None:
-                    if isinstance(error, UnsupportedFormatError):
-                        rejected += 1
-                    else:
-                        failed += 1
-                        record_ingestion_failure(
-                            database,
-                            source=cand,
-                            digest=None,
-                            error=error,
-                        )
-                    continue
-
-                assert prepared is not None
-                try:
-                    result = commit_candidate(
-                        database,
-                        layout,
-                        prepared,
-                        rebuild_derived=rebuild_derived,
+        # Forked on purpose, and said so: Python 3.14 stops forking by default, and a spawned
+        # worker runs the program's main module again before it starts its task.
+        fork = multiprocessing.get_context("fork")
+        with database.bulk_write(), ExitStack() as pools:
+            small_files = pools.enter_context(
+                ProcessPoolExecutor(max_workers=num_workers, mp_context=fork)
+            )
+            # A file of 1 MB or more gets a pool, and so a process, of its own that is shut down
+            # when the file is done: a long-lived worker keeps the memory of the biggest file it
+            # ever read. A forked process costs about 3 ms and, unlike a spawned one, does not
+            # run the program's main module again.
+            single_use: dict[Future[Any], ProcessPoolExecutor] = {}
+            pools.callback(lambda: [pool.shutdown(wait=True) for pool in single_use.values()])
+            while pending or in_flight:
+                held_back = False
+                while pending and len(in_flight) < num_workers:
+                    big_running = sum(big for big, _reserve in in_flight.values())
+                    reserved = sum(reserve for _big, reserve in in_flight.values())
+                    index = scheduling.pick_next(
+                        pending,
+                        len(in_flight),
+                        big_running,
+                        scheduling.available_memory_mb(),
+                        reserved,
                     )
-                    ordered_results.append((candidate_order[cand], result))
-                    processor_skipped = any(item.status == "skipped" for item in result.processing)
-                    skipped += processor_skipped
-                    degraded += processor_skipped
-                except UnsupportedFormatError:
-                    rejected += 1
-                except (OSError, RuntimeError, ValueError):
-                    failed += 1
+                    if index is None:
+                        held_back = True
+                        break
+                    cand, cost = pending.pop(index)
+                    if scheduling.is_sizable(cost):
+                        executor = ProcessPoolExecutor(max_workers=1, mp_context=fork)
+                        future = executor.submit(
+                            _prepare_candidate_task, cand, home, rebuild_derived
+                        )
+                        single_use[future] = executor
+                    else:
+                        future = small_files.submit(
+                            _prepare_candidate_task, cand, home, rebuild_derived
+                        )
+                    in_flight[future] = (scheduling.is_big(cost), scheduling.reserve_mb(cost))
+                    scheduling.STATS["max_in_flight"] = max(
+                        scheduling.STATS["max_in_flight"], len(in_flight)
+                    )
+                    scheduling.STATS["max_big_in_flight"] = max(
+                        scheduling.STATS["max_big_in_flight"],
+                        sum(big for big, _reserve in in_flight.values()),
+                    )
+                waited = time.perf_counter()
+                done, _ = wait(
+                    in_flight, timeout=0.25 if pending else None, return_when=FIRST_COMPLETED
+                )
+                if held_back:
+                    scheduling.STATS["held_back_seconds"] += time.perf_counter() - waited
+                for future in done:
+                    del in_flight[future]
+                    finished_pool = single_use.pop(future, None)
+                    if finished_pool is not None:
+                        finished_pool.shutdown(wait=True)
+                    cand, prepared, error = future.result()
+                    if error is not None:
+                        if isinstance(error, UnsupportedFormatError):
+                            rejected += 1
+                        else:
+                            failed += 1
+                            record_ingestion_failure(
+                                database,
+                                source=cand,
+                                digest=None,
+                                error=error,
+                            )
+                        continue
+
+                    assert prepared is not None
+                    try:
+                        result = commit_candidate(
+                            database,
+                            layout,
+                            prepared,
+                            rebuild_derived=rebuild_derived,
+                        )
+                        ordered_results.append((candidate_order[cand], result))
+                        processor_skipped = any(
+                            item.status == "skipped" for item in result.processing
+                        )
+                        skipped += processor_skipped
+                        degraded += processor_skipped
+                    except UnsupportedFormatError:
+                        rejected += 1
+                    except (OSError, RuntimeError, ValueError):
+                        failed += 1
 
         ordered_results.sort(key=lambda item: item[0])
         results = [res for _, res in ordered_results]
