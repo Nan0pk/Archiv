@@ -167,6 +167,13 @@ re-planning, not an exception.
   line when there is one.
 - Failure states get tests, not just success paths.
 - No step is merged on its author's own judgement. See the reviewer below.
+- **Keep the README true.** After any substantial change, and before ending a session, make
+  `README.md` match the code. Run
+  `python scripts/generate_readme_blocks.py` (it rewrites the file-type table and the command
+  list from the code), then read the README's own sentences — limits, install, quick start —
+  against what changed. `tests/test_readme_matches_code.py` catches the mechanical drift
+  (generated blocks, version badge, links, command names). It cannot judge the prose, so that
+  read is still yours to do. The owner asked for this to happen without being reminded.
 
 ---
 
