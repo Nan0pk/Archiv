@@ -238,7 +238,7 @@ are never quietly accepted and half-read.
 | OpenDocument formula | `.odf` | ✅ Full | Read directly | The formula source is kept; no rendered equation |
 | OpenDocument database | `.odb` | 🟡 Partial | Details only, no text | Only the names of database objects are searchable |
 | InPage (Urdu) | `.inp` | 🟡 Partial | Read directly | Text only; page layout is not rebuilt |
-| Images | `.png` `.jpg` `.jpeg` `.gif` `.bmp` `.tiff` `.tif` `.webp` | 🟡 Partial | Local OCR, when Tesseract is installed | Needs Tesseract and language data; without them the picture is kept but has no text |
+| Images | `.png` `.jpg` `.jpeg` `.gif` `.bmp` `.tiff` `.tif` `.webp` | 🟡 Partial | Local OCR, when Tesseract and its language data are installed | Needs Tesseract and language data; without them the picture is kept but has no text |
 | SVG drawings | `.svg` | ✅ Full | Read directly | Text drawn as shapes is not read |
 | Audio | `.wav` | 🟡 Partial | Details only, no text | Details only; the sound is not transcribed |
 | Archives | `.zip` `.tar` `.tar.gz` `.tgz` `.tar.bz2` `.tbz2` `.tar.xz` `.txz` | ✅ Full | Read directly | Opened up to 8 levels and 128 MB; encrypted archives are not opened |

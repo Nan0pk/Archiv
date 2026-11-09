@@ -93,7 +93,7 @@ FAMILIES: dict[str, tuple[str, str]] = {
 
 HOW_READ = {
     "native": "Read directly",
-    "visual_ocr_conditional": "Local OCR, when Tesseract is installed",
+    "visual_ocr_conditional": "Local OCR, when Tesseract and its language data are installed",
     "metadata_only": "Details only, no text",
 }
 SUPPORT = {"full": "✅ Full", "partial": "🟡 Partial"}
