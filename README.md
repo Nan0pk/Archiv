@@ -554,7 +554,7 @@ Read [Evaluation archives](#evaluation-archives) before using any of these.
 
 ## Evidence it works
 
-Claims in this README are backed by measured runs, not assertions.
+The figures below come from measured runs.
 
 **Field trial.** Against a frozen, public-safe corpus of 12 generated documents and 22
 machine-readable questions spanning TXT, Markdown, PDF, DOCX, XLSX and PPTX evidence, Archiv
