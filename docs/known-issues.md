@@ -692,14 +692,16 @@ eight workers sat at 4.9 GB with nothing big running. Eight big files at once ne
   used 2.2 cores. Size cannot tell a 14 MB scanned PDF (slow, 131 MB) from a
   27 MB spreadsheet (fast, 2.9 GB), so both wait behind the same limit and the slow one can end
   up last.
-- A worker that has read a text-heavy PDF can still reach 3 GB. For a 12 MB PDF, `normalize()`
-  (`normalize_pdf`) took 46.1 s and peaked at 2,920 MB in a fresh process (42,948 line segments),
-  while plain `pypdf` text extraction of the same file took 12.6 s and peaked at 130 MB. But
-  `pypdf` is only the fallback: `normalize_pdf` reads words, lines and tables with `pdfplumber`,
-  which was not timed or measured for memory on its own, and what inside it takes the memory has
-  not been separated. Character recognition is not involved, it runs later. (An earlier version of
-  this entry blamed the PDF reader; that was a guess.) Reading 100 sample PDFs' text took 49.7 s
-  with `pypdf` and 6.0 s with `pypdfium2`; see the Arabic entry below before switching readers.
+- A worker that read a text-heavy PDF used to reach 3 GB: `pdfplumber`, which `normalize_pdf` uses
+  for words, lines and tables, kept every character and layout object of every page for as long
+  as the document was open. For a 12 MB PDF (42,948 line segments) `normalize()` peaked at 2,951 MB.
+  Pages are now closed once read: the same file peaks at 243 MB, the largest peak in a 100-PDF
+  sample fell from 2,951 MB to 289 MB, and the normalized output is byte-identical for all 100.
+  Time: 152 s to 142 s for the 100, one run each and not interleaved, so no speed-up is claimed.
+  The reserve the scheduler keeps for a big file (3 GB) was set by this PDF and by a 27 MB
+  spreadsheet (2.9 GB); spreadsheets still need it, and it is not changed here. (An earlier version of this entry blamed the PDF reader `pypdf`; that was a guess.)
+  Reading 100 sample PDFs' text took 49.7 s with `pypdf` and 6.0 s with `pypdfium2`; see the Arabic
+  entry below before switching readers.
 - A spreadsheet is stored as one passage per cell, so one 27 MB file becomes 1.18 million
   passages and takes about 40 seconds to index in the one process that cannot be spread over
   workers. That part is not changed.
