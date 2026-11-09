@@ -305,6 +305,7 @@ def normalize_pdf(
 
             page_tables: list[NormalizedTable] = []
             page_table_bboxes: list[tuple[float, float, float, float]] = []
+            plumber_page = None
 
             if plumber_doc is not None and page_idx - 1 < len(plumber_doc.pages):
                 plumber_page = plumber_doc.pages[page_idx - 1]
@@ -370,6 +371,12 @@ def normalize_pdf(
                             text=text,
                         )
                     )
+
+            if plumber_page is not None:
+                # pdfplumber keeps every character, line and layout object of a page for as long
+                # as the document is open, so a long text-heavy PDF held all of its pages at once
+                # (2.9 GB for a 12 MB file). Everything this page needed has been read.
+                plumber_page.close()
     finally:
         if plumber_doc is not None:
             with contextlib.suppress(Exception):
