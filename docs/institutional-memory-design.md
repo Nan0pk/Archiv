@@ -414,11 +414,41 @@ model steps and the report check) is the repository code at commit 6755c9c, whic
     the code uses no single words when one is ignored; on the same 36 questions it gives 86 to 124
     on the heavy set, no question worse than before the change, and it changes nothing on the
     light set. Because that fix was made after seeing these questions, they are no longer a
-    held-out test. What is still missing: wordier questions gain nothing yet (they behave as
-    before the change), because finding their subject needs the first step to say which words of
-    the question name it; and a subject that is not in the collection at all, with padding words
+    held-out test. Wordier questions gained nothing from that version (they behaved as before the
+    change); the first-step change below fixes that. A subject that is not in the collection at all, with padding words
     that are in it, can still hand over a few passages about the padding. A final check with new
     names and new wordings is planned after this fix.
+  - The first step now also copies, word for word, the words of the question that name its
+    subject ("asked"). The code accepts them only if they appear in the question as whole words
+    (capitals and spacing aside); they are then searched as the question's own words, in place
+    of the whole question, and the walk starts from them. Words that fail the check are still
+    searched as a name but not trusted as the question's own words (a first step that put the
+    subject only in "asked" would otherwise lose it). This is the practice of the systems that
+    extract a query's keywords or entities with a model before retrieval (LightRAG, HippoRAG),
+    with the grounded-extraction check of LangExtract added; nothing was copied from them. It
+    is the same model call as before, but the first step's prompt changed, so every stored
+    first-step answer stops matching.
+  - Measured on fresh random names the change was never tuned on (two sets of 6 names, four
+    wordings each, 48 questions; every question run twice on both sides with the real first step,
+    because the prompt differs and a replay cannot be paired): passages with the exact words
+    that were handed went from 244 to 372 of 372 on names found in 11 or more passages and from
+    138 to 224 of 380 on the other set. The plain wording was unchanged (93 and 56, both sides);
+    the three natural wordings went from 151 to 279 of 279 and from 82 to 168 of 285. No
+    question handed fewer, and the model's subject words passed the check 96 times in 96 (names
+    with invisible control characters inside them were left out of the draw, since a question
+    with one is not realistic; on the development questions those failed the check, which falls
+    back to the old behaviour). Passages reached only through the graph or meaning fell to 0.73
+    and 0.82 times what they were, because the exact matches now take the places.
+  - What was tried and dropped: a floor that keeps 30, 40 or 50% of the places for graph and
+    meaning passages. It kept those passages but took exact-match places from the plain wording
+    (0.90 and 0.83 times what it had at 40%), so it was removed. Whether the graph and meaning
+    passages help the report is not measured (that needs a judge), so the loss is a trade, not
+    a proven harm.
+  - Not seen before: with the graph (names and relations) emptied, the walk hands about 23
+    passages per question instead of 40, and recall of exact-word and other-form passages did
+    not change (heavy set 223 with the graph, 245 without; other-form 41 against 42 of 214 over
+    two tries; 8 cases, one collection). So the graph's value for retrieval recall is not
+    shown; its value for the report is not measured.
   - A cost that was already there: searching for a common word with ranked results took 26 to
     140 seconds each on the full collection, so every form the first step lists pays that on
     every question. The new own-word search avoids it by counting to 100 first.
