@@ -181,6 +181,8 @@ def ingest_command(
             return
 
         def _is_supported_candidate(p: Path) -> bool:
+            if p.name.startswith("~$"):
+                return False  # an Office lock file: it only says someone has the document open
             try:
                 suffix_for(p.name)
                 return True
