@@ -85,7 +85,13 @@ def abbreviation_pairs(passages: list[Passage]) -> list[tuple[str, str, Passage]
                 continue
             seen.add((ident(long), short))
             pairs.append((long, short, passage))
-    return pairs
+    # An abbreviation written out in different ways is kept only when the ways are spellings of
+    # one name (they start alike); otherwise it stands for more than one thing here and joining
+    # them would join unrelated names.
+    starts: dict[str, set[str]] = {}
+    for long, short, _ in pairs:
+        starts.setdefault(short, set()).add(ident(long)[:3])
+    return [pair for pair in pairs if len(starts[pair[1]]) == 1]
 
 
 def _words(text: str) -> list[str]:

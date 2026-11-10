@@ -183,3 +183,37 @@ def test_with_partners_adds_the_other_written_forms_of_a_merged_thing(tmp_path: 
         assert with_partners(conn, ["OS", "Zzyzx"]) == ["OS", "Orchard Society", "Zzyzx"]
         assert with_partners(conn, ["Zzyzx"]) == ["Zzyzx"]  # nothing known: unchanged
         assert with_partners(conn, ["os"]) == ["os", "Orchard Society"]  # form spelling is free
+
+
+def test_an_abbreviation_that_stands_for_unlike_names_is_not_merged(tmp_path: Path) -> None:
+    from archiv.memory.offline import abbreviation_pairs
+
+    docs = {
+        "a.txt": "The Orchard Society (OS) met to plan the new harvest festival.",
+        "b.txt": "The Ocean Station (OS) met to plan the new coastal mapping.",
+        "c.txt": "The Harbour Pilots Union (HPU) met to plan the new winter timetable.",
+        "d.txt": "The Harbour Pilots Unions (HPU) met to plan the new spring timetable.",
+    }
+    found = {
+        (long, short)
+        for long, short, _ in abbreviation_pairs(load_passages(make_archive(tmp_path, docs)))
+    }
+    assert not any(short == "OS" for _, short in found)  # two different names: left alone
+    assert {short for _, short in found} == {"HPU"}  # spellings of one name: kept
+
+
+def test_a_rebuild_drops_a_merge_the_text_no_longer_supports(tmp_path: Path) -> None:
+    home = make_archive(tmp_path, _defined_docs())
+    build_memory_offline(home=home, embedder=None)
+    with sqlite3.connect(memory_path(ArchivLayout.resolve(home))) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM merges").fetchone()[0] == 1
+    (home.parent / "unused").mkdir(exist_ok=True)
+    layout = ArchivLayout.resolve(home)
+    with sqlite3.connect(memory_path(layout)) as conn:
+        conn.execute('UPDATE merges SET reason = \'the text defines "X" as "gone"\'')
+        conn.commit()
+    # a stale merge written by an earlier build is removed and the current pair is written again
+    build_memory_offline(home=home, embedder=None)
+    with sqlite3.connect(memory_path(layout)) as conn:
+        reasons = [row[0] for row in conn.execute("SELECT reason FROM merges")]
+    assert reasons == ['the text defines "OS" as "Orchard Society"']

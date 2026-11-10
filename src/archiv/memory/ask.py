@@ -145,10 +145,16 @@ def parse_asked(answer: str, question: str) -> str:
 
 
 def with_partners(
-    conn: sqlite3.Connection, forms: list[str], *, first: int = 5, most: int = 3
+    conn: sqlite3.Connection,
+    forms: list[str],
+    *,
+    first: int = 3,
+    most: int = 2,
+    total: int = 4,
 ) -> list[str]:
     """Add, after each of the first `first` forms, the other written forms the memory holds for
-    the same thing (merges confirmed at build time or by a model), at most `most` each."""
+    the same thing (merges confirmed at build time or by a model): at most `most` each and
+    `total` in all, so they cannot push the first step's own forms out of the ones searched."""
     canon = canonical_ids(conn)
     if len(set(canon.values())) == len(canon):
         return forms  # nothing is merged
@@ -160,12 +166,14 @@ def with_partners(
         for thing_id, ident_ in conn.execute("SELECT thing_id, ident FROM things")
     }
     out: list[str] = []
+    added = 0
     for position, form in enumerate(forms):
         out.append(form)
         thing_id = names.get(ident(form))
         if position >= first or thing_id is None:
             continue
-        group = [m for m in members[canon[thing_id]] if m != thing_id][:most]
+        group = [m for m in members[canon[thing_id]] if m != thing_id][: min(most, total - added)]
+        added += len(group)
         for member in group:
             row = conn.execute("SELECT form FROM things WHERE thing_id = ?", (member,)).fetchone()
             if row is not None:

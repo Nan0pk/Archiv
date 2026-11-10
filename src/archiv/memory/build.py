@@ -120,7 +120,9 @@ def build_memory_offline(*, home: Path | None, embedder: Embedder | None = None)
             extraction = extractions.get(object_sha256, Extraction((), (), 0))
             store_extraction(conn, object_sha256, extraction)
         # Where the text defines an abbreviation ("Long Name (LN)"), both written forms are the
-        # same thing, so that is stored as a confirmed merge.
+        # same thing, so that is stored as a confirmed merge. A rebuild starts from none of its own
+        # earlier merges, so a pair the text no longer supports does not stay.
+        conn.execute("DELETE FROM merges WHERE reason LIKE 'the text defines %'")
         for long, short, passage in abbreviation_pairs(passages):
             ids = [thing_id_for(conn, form) for form in (long, short)]
             for form, thing_id in zip((long, short), ids, strict=True):
