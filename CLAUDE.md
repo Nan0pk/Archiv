@@ -89,15 +89,15 @@ If you cannot run these checks where you are working, say so plainly in the pull
 rather than substituting a push for a run. Getting a real checkout is the cheaper fix: the
 venv above installs in about two minutes.
 
-**Known-good baseline** measured on `1edeb92`, the head of
-[#139](https://github.com/Nan0pk/Archiv/pull/139), run as
-`PATH="$PWD/.venv/bin:$PATH" pytest -q`: **491 passed, 0 failed**, 2 skipped; ruff clean;
-pyright clean. There is no expected failure any more — the one that was called
-environmental was a real leak this file's own test was catching, and it is fixed. Keep
-this current, and treat any failure as real: a tolerated red test is how the next one gets
-ignored. Name the commit when you update it. The baseline this replaced named `ec96869`,
-which is not reachable in this repository, so nobody could tell whether it had gone
-stale.
+**Known-good baseline** measured on `a752170`, the head of `main` after
+[#263](https://github.com/Nan0pk/Archiv/pull/263), run as
+`PATH="$PWD/.venv/bin:$PATH" pytest -q`: **858 passed, 0 failed**, no skips reported;
+`Fast checks` (ruff, pyright, pytest) succeeded on that commit in CI. The `Field trial`
+workflow fails on `main` because its `current CoWork compatibility` job checks CoWork-OS
+`main`, which has drifted from what this repository expects; see `docs/known-issues.md`.
+There is no expected failure in the test suite: treat any failure as real, because a
+tolerated red test is how the next one gets ignored. Keep this current and name the commit
+when you update it. The baseline this replaced named `1edeb92`, an old head of #139.
 
 ---
 
