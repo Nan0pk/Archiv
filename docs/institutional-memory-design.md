@@ -372,7 +372,10 @@ model steps and the report check) is the repository code at commit 6755c9c, whic
     matches that do not fit take turns with the passages reached through the graph or through
     meaning. A passage counts as holding the question's own words only when it holds them
     together: the question's longest phrase that is found, or else at least 80% of its
-    informative single words. A word or phrase found in 100 or more passages is ignored.
+    informative single words. A word or phrase found in 100 or more passages is ignored, and
+    when a single word is ignored for that reason no single words are used at all: the words
+    that are left could be padding such as "everything" and not the subject (see the held-out
+    check below).
   - Measured on the same 10 questions, by replaying stored answers with no model call. Passages
     with the exact words that were handed to the report step: 53 of 145 before, 76 of 145 after
     (about 106 is the most that 40 places allow here). Passages that hold only one word of a
@@ -393,10 +396,29 @@ model steps and the report check) is the repository code at commit 6755c9c, whic
     10 questions had no usable own words there, so the gain will be smaller on a large
     collection. All 10 questions use one wording ("What does the collection hold about ...?"),
     and the words that are left out as only describing asking are exactly that wording's, so the
-    gain is measured on that wording only. The first step's forms are still capped as before
+    gain was first measured on that wording only. The first step's forms are still capped as before
     (only the first 10 forms are searched, 10 hits each). The first step's stored answers were
     replayed, so a change to the first step's prompt needs new model calls to measure, and
     report answers stored by earlier runs no longer match whenever the handed passages changed.
+  - A held-out check of the first version of this change, on fresh random names with three
+    wordings each (36 questions; the first step was answered once and the old and new code were
+    compared on the same answers, so only the walk differs). Names found in fewer than 11
+    passages: nothing could improve, all 51 passages with the exact words were already handed
+    before, and none was lost. Names found in 11 or more passages (where the old cap of 10 hits
+    per form applies): passages with the exact words handed went from 86 to 114 of 342, but only
+    for the plain wording (32 to 70); for "Tell me everything the documents say about ..." they
+    went from 39 to 30, one question from 10 to 4. Cause: when the subject words are each in 100
+    or more passages they are ignored, and padding words that are rarer in the collection than the
+    subject ("me", "everything", "come", "up") were then the only words required, so passages
+    about nothing asked took half of the places meant for the exact-match half. The version now in
+    the code uses no single words when one is ignored; on the same 36 questions it gives 86 to 124
+    on the heavy set, no question worse than before the change, and it changes nothing on the
+    light set. Because that fix was made after seeing these questions, they are no longer a
+    held-out test. What is still missing: wordier questions gain nothing yet (they behave as
+    before the change), because finding their subject needs the first step to say which words of
+    the question name it; and a subject that is not in the collection at all, with padding words
+    that are in it, can still hand over a few passages about the padding. A final check with new
+    names and new wordings is planned after this fix.
   - A cost that was already there: searching for a common word with ranked results took 26 to
     140 seconds each on the full collection, so every form the first step lists pays that on
     every question. The new own-word search avoids it by counting to 100 first.

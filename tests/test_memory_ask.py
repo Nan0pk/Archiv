@@ -482,6 +482,23 @@ def test_a_window_that_is_in_too_many_passages_is_dropped_from_what_a_long_name_
     assert [p.source_name for p in got] == ["a.txt"]
 
 
+def test_padding_words_do_not_become_the_questions_own_words_when_the_subject_is_too_common(
+    tmp_path: Path,
+) -> None:
+    docs = {
+        f"o{i}.txt": f"The Orchard Society met on day {i} to plan the new harvest festival."
+        for i in range(8)
+    }
+    docs["n1.txt"] = "Everyone read everything on the notice board before the vote."
+    docs["n2.txt"] = "She wrote down everything the guide said about the old bridge."
+    home = make_archive(tmp_path, docs)
+    own = question_terms("Tell me everything the documents say about the orchard society")
+    # "orchard" and "society" are in 8 passages, more than the limit of 5, so they say nothing.
+    # What is left, "everything", is rarer than they are, but it is padding, not the subject:
+    # nothing is used and the walk goes on as it did without the question's words.
+    assert _walk(home, ["Zzyzx"], hops=0, own=own, own_limit=5) == []
+
+
 def test_without_own_word_hits_the_walk_is_unchanged(tmp_path: Path) -> None:
     home = _guild_archive(tmp_path)
     plain = _walk(home, ["Pier Guild"], hops=1, max_passages=8, text_limit=20)

@@ -217,8 +217,11 @@ def walk(
     # words together, not just one of them. Longest phrases first: the question's three-word
     # phrases, then its two-word phrases, and a passage has to hold at least 80% of the windows of
     # the size used. When no phrase is found, it has to hold at least 80% of the question's single
-    # words. A word or phrase found in `own_limit` passages or more is in too many to tell
-    # anything apart and is not counted; one found nowhere cannot be required.
+    # words, but not if one of them is in `own_limit` passages or more: such a word is in too many
+    # to tell anything apart and is not counted, and the words that are left may be mere padding
+    # around the subject ("tell me everything about ...") that happen to be rarer than it. Then
+    # no own hit is used and the walk goes on as it did before. A word found nowhere cannot be
+    # required, and one that is padding costs nothing.
     own_terms = own or []
     found_by: dict[str, set[str]] = {}
     too_common: set[str] = set()
@@ -258,7 +261,7 @@ def walk(
         own_hits = holding(size)
         if own_hits:
             break
-    if not own_hits:
+    if not own_hits and not any(term in too_common for term in by_size.get(1, [])):
         own_hits = holding(1)
     meaning: list[str] = []
     if vectors is not None and question_vec is not None:
