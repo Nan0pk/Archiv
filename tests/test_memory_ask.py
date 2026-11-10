@@ -555,6 +555,39 @@ def test_ask_searches_the_asked_words_when_padding_hides_the_subject(tmp_path: P
     assert len(without) == 1  # nothing found, so no report step
 
 
+def test_graph_and_meaning_passages_keep_a_floor_of_the_places(tmp_path: Path) -> None:
+    home = _guild_archive(tmp_path, untagged=8)
+    layout = ArchivLayout.resolve(home)
+    by_id = {p.segment_id: p for p in load_passages(home)}
+    embedder = HashEmbedder()
+    build_memory(home=home, complete=FakeModel([]), model_label="fake", embedder=embedder)
+    index = VectorIndex.load(layout.indexes / "memory-passages")
+    question = "river bank yard fence"
+
+    def others(floor: float) -> int:
+        with open_memory(layout) as conn:
+            got = walk(
+                conn,
+                forms=["Pier Guild"],
+                question_vec=embedder.embed([question])[0],
+                vectors=index,
+                by_id=by_id,
+                home=home,
+                hops=1,
+                max_passages=8,
+                text_limit=20,
+                own=["yard"],  # in far more passages than the places left over
+                others_floor=floor,
+            )
+        assert len(got) == 8
+        return sum("yard" not in p.text for p in got)
+
+    # a higher floor never gives the other passages fewer places, and it gives them at least
+    # the share it names
+    assert others(0.75) > others(0.0)
+    assert others(0.75) == 6
+
+
 def test_without_own_word_hits_the_walk_is_unchanged(tmp_path: Path) -> None:
     home = _guild_archive(tmp_path)
     plain = _walk(home, ["Pier Guild"], hops=1, max_passages=8, text_limit=20)
