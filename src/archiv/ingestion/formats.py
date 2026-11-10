@@ -117,6 +117,10 @@ COMPOUND_SUFFIXES = (
 def suffix_for(source_name: str) -> str:
     """Return a validated lowercase suffix for a logical source name."""
 
+    if Path(source_name).name.startswith("~$"):
+        # What Word and other Office programs leave beside a document that is open. It is not
+        # a document, so it counts with the unsupported files and is not tried and rejected.
+        raise UnsupportedFormatError("Office lock file, not a document")
     lower = source_name.lower()
     for compound in COMPOUND_SUFFIXES:
         if lower.endswith(compound):

@@ -35,3 +35,15 @@ def test_cli_ingest_directory_leaves_out_office_lock_files(tmp_path: Path) -> No
     assert result.exit_code == 0, result.output
     ingested = json.loads(result.output)["ingested"]
     assert len(ingested) == 1  # the lock file is not tried and rejected as a broken document
+
+
+def test_add_counts_office_lock_files_with_the_unsupported_files(tmp_path: Path) -> None:
+    from archiv.user_cli import _candidates
+
+    source = tmp_path / "inbox"
+    source.mkdir()
+    (source / "notes.txt").write_text("Meeting notes.\n", encoding="utf-8")
+    (source / "~$report.docx").write_bytes(b"\x07lock")
+    supported, ignored = _candidates(source)
+    assert [path.name for path in supported] == ["notes.txt"]
+    assert ignored == 1
