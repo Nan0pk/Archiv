@@ -27,7 +27,7 @@ from archiv.storage.layout import ArchivLayout
 if TYPE_CHECKING:
     from archiv.memory.vectors import Vectors
 
-ENTRY_PROMPT_VERSION = "2"
+ENTRY_PROMPT_VERSION = "3"
 EXIT_PROMPT_VERSION = "2"
 NOTHING_FOUND = "Nothing was found for the words that were searched"
 
@@ -74,7 +74,10 @@ def entry_prompt(question: str, samples: list[str] | None = None) -> str:
         "subject of the question might be written in those documents: other names, "
         "spellings, abbreviations, translations or descriptions. Also list other things "
         "that are likely to be connected to it.\n"
-        'Answer with JSON only: {"forms": ["..."], "related": ["..."]}\n\n'
+        "Also copy, exactly as it is written in the question and without changing a letter, "
+        "the words that name what the question is about. Leave out the words that only ask, "
+        'such as "what", "tell me", "everything", "documents" or "where".\n'
+        'Answer with JSON only: {"forms": ["..."], "related": ["..."], "asked": "..."}\n\n'
         f"Question: {question}"
     )
 
@@ -111,6 +114,29 @@ def question_terms(question: str) -> list[str]:
     kinds = ("derived-3-term-phrase", "derived-2-term-phrase", "derived-term")
     derived = [spec.query for kind in kinds for spec in specs if spec.kind == kind]
     return list(dict.fromkeys([q for q in whole if len(q.split()) <= 3] + derived))
+
+
+def parse_asked(answer: str, question: str) -> str:
+    """The words the first step says name the question's subject, if they are really in it.
+
+    The first step is a model, so its copy is checked and not trusted: it counts only when it
+    appears in the question word for word (capital letters and spacing aside), as whole words.
+    What comes back is the question's own spelling of it, or "" when there is nothing usable.
+    """
+    data = first_json_object(answer)
+    value = None if data is None else data.get("asked")
+    if not isinstance(value, str):
+        return ""
+    words = value.strip().strip("\"'\u201c\u201d\u2018\u2019").split()
+    if not words:
+        return ""
+    pattern = r"\s+".join(re.escape(word) for word in words)
+    if words[0][0].isalnum():
+        pattern = r"(?<!\w)" + pattern
+    if words[-1][-1].isalnum():
+        pattern += r"(?!\w)"
+    found = re.search(pattern, question, re.IGNORECASE)
+    return " ".join(found.group(0).split()) if found else ""
 
 
 def parse_entry(answer: str) -> list[str]:
@@ -494,6 +520,13 @@ def ask(
             if first_json_object(answer) is not None:
                 remember(conn, key, answer)
         forms = parse_entry(answer)
+        # The first step says which words of the question name its subject. Those words, once
+        # checked against the question, are what is searched as the question's own words (so
+        # padding such as "tell me everything" cannot take their place) and where the walk
+        # starts. When the first step gives nothing usable, the whole question is used.
+        asked = parse_asked(answer, question)
+        if asked:
+            forms = [asked, *(form for form in forms if form.casefold() != asked.casefold())]
         found = walk(
             conn,
             forms=forms,
@@ -501,7 +534,7 @@ def ask(
             vectors=vectors,
             by_id=by_id,
             home=home,
-            own=question_terms(question),
+            own=(question_terms(asked) if asked else []) or question_terms(question),
         )
         if not found:
             return Report(nothing_found(forms), [], [], 0)

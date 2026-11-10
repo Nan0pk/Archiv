@@ -16,6 +16,7 @@ from archiv.memory.ask import (
     check_report,
     entry_prompt,
     exit_prompt,
+    parse_asked,
     parse_entry,
     question_terms,
     walk,
@@ -497,6 +498,61 @@ def test_padding_words_do_not_become_the_questions_own_words_when_the_subject_is
     # What is left, "everything", is rarer than they are, but it is padding, not the subject:
     # nothing is used and the walk goes on as it did without the question's words.
     assert _walk(home, ["Zzyzx"], hops=0, own=own, own_limit=5) == []
+
+
+def test_the_entry_prompt_asks_for_the_question_words_that_name_the_subject() -> None:
+    prompt = entry_prompt("Tell me everything about the Orchard Society")
+    assert '"asked"' in prompt
+    assert "without changing a letter" in prompt
+
+
+def test_asked_words_count_only_when_they_are_in_the_question_word_for_word() -> None:
+    question = "Tell me everything the documents say about the  Orchard   Society?"
+    ok = parse_asked(json.dumps({"forms": [], "asked": "orchard society"}), question)
+    assert ok == "Orchard Society"  # the question's own spelling, spacing tidied
+    assert parse_asked(json.dumps({"asked": '"Orchard Society"'}), question) == "Orchard Society"
+    # not in the question, a fragment of a word, wrong type, empty, missing, not JSON
+    assert parse_asked(json.dumps({"asked": "Pier Guild"}), question) == ""
+    assert parse_asked(json.dumps({"asked": "Orchard Soc"}), question) == ""
+    assert parse_asked(json.dumps({"asked": ["Orchard Society"]}), question) == ""
+    assert parse_asked(json.dumps({"asked": "  "}), question) == ""
+    assert parse_asked(json.dumps({"forms": ["a"]}), question) == ""
+    assert parse_asked("no json here", question) == ""
+    # a name that ends in punctuation is kept as written
+    assert parse_asked(json.dumps({"asked": "JuA."}), "What is JuA. in the files?") == "JuA."
+
+
+def test_ask_searches_the_asked_words_when_padding_hides_the_subject(tmp_path: Path) -> None:
+    docs = {
+        f"o{i}.txt": f"The Orchard Society met on day {i} to plan the new harvest festival."
+        for i in range(8)
+    }
+    docs["n1.txt"] = "Everyone read everything on the notice board before the vote."
+    docs["n2.txt"] = "She wrote down everything the guide said about the old bridge."
+    home = make_archive(tmp_path, docs)
+    question = "Tell me everything the documents say about the orchard society"
+    reports: dict[str, list[str]] = {}
+
+    def run(answer: dict[str, object]) -> list[str]:
+        prompts: list[str] = []
+
+        def complete(prompt: str) -> str:
+            prompts.append(prompt)
+            if '"forms"' in prompt:
+                return json.dumps(answer)
+            return "Noted [P1]."
+
+        ask(question, home=home, complete=complete, model_label=str(answer), embedder=None)
+        return prompts
+
+    with_asked = run({"forms": ["Zzyzx"], "related": [], "asked": "orchard society"})
+    without = run({"forms": ["Zzyzx"], "related": []})
+    reports["with"], reports["without"] = with_asked, without
+    # with the asked words the report step is given the orchard passages; without them the
+    # padding words find nothing and the first step's one useless form finds nothing either
+    assert len(with_asked) == 2
+    assert "Orchard Society met" in with_asked[1]
+    assert len(without) == 1  # nothing found, so no report step
 
 
 def test_without_own_word_hits_the_walk_is_unchanged(tmp_path: Path) -> None:
