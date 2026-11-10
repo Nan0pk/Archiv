@@ -12,7 +12,7 @@ from typing import Annotated
 import typer
 
 from archiv.memory.ask import ask
-from archiv.memory.build import build_memory, passage_vectors_base
+from archiv.memory.build import build_memory, build_memory_offline, passage_vectors_base
 from archiv.memory.model import Complete, command_completer
 from archiv.memory.probe import draw_probes
 from archiv.memory.store import open_memory
@@ -64,8 +64,15 @@ def _embedder() -> Embedder | None:
 
 @memory_app.command("build")
 def build_command(
-    model_label: ModelLabelOption,
     home: HomeOption = None,
+    model_label: Annotated[
+        str | None,
+        typer.Option(
+            "--model-label",
+            help="Read every document through a model instead (slow); the name of that model. "
+            "Without it the build needs no model.",
+        ),
+    ] = None,
     model_cmd: ModelCmdOption = None,
     max_chars: Annotated[int, typer.Option("--max-chars", min=200)] = 6000,
     max_merge_pairs: Annotated[
@@ -78,7 +85,28 @@ def build_command(
     ] = 500,
     json_output: Annotated[bool, typer.Option("--json", help="Emit JSON.")] = False,
 ) -> None:
-    """Read every document through the model and store what it mentions and how it connects."""
+    """Store what the collection mentions and how it connects, and its meaning vectors.
+
+    By default no model is used: the collection's own repeated phrases become the things, and
+    nothing is merged. With --model-label every document is read through a model (slow).
+    """
+    if model_label is None:
+        if model_cmd is not None:
+            typer.echo(
+                "--model-cmd was given without --model-label. The build uses no model unless "
+                "you also pass --model-label (the name of that model).",
+                err=True,
+            )
+            raise typer.Exit(2)
+        summary = build_memory_offline(home=home, embedder=_embedder())
+        if json_output:
+            typer.echo(json.dumps(asdict(summary), indent=2))
+            return
+        typer.echo(
+            f"Read {summary.documents} documents with no model. The memory now holds "
+            f"{summary.things} things and {summary.relations} relations."
+        )
+        return
     summary = build_memory(
         home=home,
         complete=_completer(model_cmd),

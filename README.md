@@ -490,11 +490,11 @@ These read the same preserved originals and derived text as everything else. Non
 
 #### Memory (separate, optional track)
 
-See [the design](docs/institutional-memory-design.md). The `--model-cmd` you give these commands decides where document text goes; see the privacy section of the README.
+See [the design](docs/institutional-memory-design.md). `archiv memory build` uses no model unless you pass `--model-label` (that slow option reads every document through a model). `archiv memory ask` always uses one: the `--model-cmd` you give it decides where document text goes; see the privacy section of the README.
 
 | Command | What it does |
 | --- | --- |
-| `archiv memory build` | Read every document through the model and store what it mentions and how it connects. |
+| `archiv memory build` | Store what the collection mentions and how it connects, and its meaning vectors. |
 | `archiv memory ask QUESTION` | Answer a question from what the memory holds, with a cited source for every claim. |
 | `archiv memory probe` | Ask random questions drawn from the data and set each answer beside plain search. |
 
