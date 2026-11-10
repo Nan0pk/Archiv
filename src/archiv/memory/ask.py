@@ -392,6 +392,11 @@ def walk(
             if s not in exact and s not in own_hits
         ]
     )
+    # Passages reached through the graph or through meaning keep a floor of 30% of the places
+    # (when there are that many), so a question whose words are in very many passages still
+    # shows what is connected to them and does not hand over only the exact matches.
+    keep = min(len(others), max_passages * 3 // 10)
+    overflow = overflow[: max(0, max_passages - len(exact) - keep)]
     rest: list[str] = []
     for position in range(max(len(overflow), len(others))):
         rest += overflow[position : position + 1] + others[position : position + 1]
