@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -16,9 +17,16 @@ from archiv.memory.extract import (
 )
 from archiv.memory.merge import confirm_pairs, propose_pairs
 from archiv.memory.model import Complete
-from archiv.memory.offline import offline_extractions
+from archiv.memory.offline import abbreviation_pairs, offline_extractions
 from archiv.memory.passages import Passage, load_passages, passages_by_object
-from archiv.memory.store import cache_key, cached, open_memory, remember, store_extraction
+from archiv.memory.store import (
+    cache_key,
+    cached,
+    open_memory,
+    remember,
+    store_extraction,
+    thing_id_for,
+)
 from archiv.memory.vectors import Embedder, VectorIndex
 from archiv.storage.layout import ArchivLayout
 
@@ -111,6 +119,26 @@ def build_memory_offline(*, home: Path | None, embedder: Embedder | None = None)
         for object_sha256 in sorted(passages_by_object(passages)):
             extraction = extractions.get(object_sha256, Extraction((), (), 0))
             store_extraction(conn, object_sha256, extraction)
+        # Where the text defines an abbreviation ("Long Name (LN)"), both written forms are the
+        # same thing, so that is stored as a confirmed merge.
+        for long, short, passage in abbreviation_pairs(passages):
+            ids = [thing_id_for(conn, form) for form in (long, short)]
+            for form, thing_id in zip((long, short), ids, strict=True):
+                conn.execute(
+                    "INSERT INTO forms (thing_id, form, kind, segment_id, object_sha256) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (thing_id, form, "", passage.segment_id, passage.object_sha256),
+                )
+            conn.execute(
+                "INSERT OR REPLACE INTO merges (a_id, b_id, same, reason, segment_ids_json) "
+                "VALUES (?, ?, 1, ?, ?)",
+                (
+                    ids[0],
+                    ids[1],
+                    f'the text defines "{short}" as "{long}"',
+                    json.dumps([passage.segment_id]),
+                ),
+            )
         conn.commit()
         things = int(conn.execute("SELECT COUNT(*) FROM things").fetchone()[0])
         relation_count = int(conn.execute("SELECT COUNT(*) FROM relations").fetchone()[0])
