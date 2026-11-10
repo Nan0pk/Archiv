@@ -139,8 +139,10 @@ COMMAND_GROUPS: list[tuple[str, str, list[str]]] = [
     ),
     (
         "Memory (separate, optional track)",
-        "See [the design](docs/institutional-memory-design.md). The `--model-cmd` you give these "
-        "commands decides where document text goes; see the privacy section of the README.",
+        "See [the design](docs/institutional-memory-design.md). `archiv memory build` uses no "
+        "model unless you pass `--model-label` (that slow option reads every document through "
+        "a model). `archiv memory ask` always uses one: the `--model-cmd` you give it decides "
+        "where document text goes; see the privacy section of the README.",
         ["memory build", "memory ask", "memory probe"],
     ),
     (

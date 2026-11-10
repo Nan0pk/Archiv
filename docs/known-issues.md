@@ -785,3 +785,11 @@ described; that was reproduced, not guessed.
 
 **What is not done.** `console_schema.py` has not been taught to read `type_descriptor`, so
 Archiv cannot yet use Typer 0.29 or later. Until it does, installs stay on 0.28.
+
+## Memory: building without a model over a collection that was read by a model
+
+- `archiv memory build` (no `--model-label`) replaces the names and connections of every
+  document it covers, but it does not clear the table of forms a model confirmed to be the
+  same thing. If a collection was first built with `--model-label`, those confirmations stay
+  in force and keep joining those names wherever the new build finds them again. Start a
+  fresh home (or delete `memory.sqlite3`) when switching between the two builds.

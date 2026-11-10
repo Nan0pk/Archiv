@@ -16,6 +16,7 @@ from archiv.memory.extract import (
 )
 from archiv.memory.merge import confirm_pairs, propose_pairs
 from archiv.memory.model import Complete
+from archiv.memory.offline import offline_extractions
 from archiv.memory.passages import Passage, load_passages, passages_by_object
 from archiv.memory.store import cache_key, cached, open_memory, remember, store_extraction
 from archiv.memory.vectors import Embedder, VectorIndex
@@ -94,6 +95,34 @@ def build_memory(
         things=things,
         relations=relation_count,
         merges_confirmed=merged,
+    )
+
+
+def build_memory_offline(*, home: Path | None, embedder: Embedder | None = None) -> BuildSummary:
+    """Build the memory with no model: the collection's own repeated phrases, and meaning vectors.
+
+    Nothing is read by a model and nothing is merged here; whether two written forms are the same
+    thing is left to the question-time walk. The model-reading build is `build_memory`.
+    """
+    layout = ArchivLayout.resolve(home)
+    passages = load_passages(home)
+    extractions = offline_extractions(passages)
+    with open_memory(layout) as conn:
+        for object_sha256 in sorted(passages_by_object(passages)):
+            extraction = extractions.get(object_sha256, Extraction((), (), 0))
+            store_extraction(conn, object_sha256, extraction)
+        conn.commit()
+        things = int(conn.execute("SELECT COUNT(*) FROM things").fetchone()[0])
+        relation_count = int(conn.execute("SELECT COUNT(*) FROM relations").fetchone()[0])
+    if embedder is not None:
+        embed_passages(layout, passages, embedder)
+    return BuildSummary(
+        documents=len(passages_by_object(passages)),
+        model_calls=0,
+        cache_hits=0,
+        failed_batches=0,
+        things=things,
+        relations=relation_count,
     )
 
 
