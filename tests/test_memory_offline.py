@@ -207,7 +207,6 @@ def test_a_rebuild_drops_a_merge_the_text_no_longer_supports(tmp_path: Path) -> 
     build_memory_offline(home=home, embedder=None)
     with sqlite3.connect(memory_path(ArchivLayout.resolve(home))) as conn:
         assert conn.execute("SELECT COUNT(*) FROM merges").fetchone()[0] == 1
-    (home.parent / "unused").mkdir(exist_ok=True)
     layout = ArchivLayout.resolve(home)
     with sqlite3.connect(memory_path(layout)) as conn:
         conn.execute('UPDATE merges SET reason = \'the text defines "X" as "gone"\'')

@@ -154,7 +154,8 @@ def with_partners(
 ) -> list[str]:
     """Add, after each of the first `first` forms, the other written forms the memory holds for
     the same thing (merges confirmed at build time or by a model): at most `most` each and
-    `total` in all, so they cannot push the first step's own forms out of the ones searched."""
+    `total` in all. The walk searches only the first ten forms, so up to `total` of the first
+    step's own forms can be pushed out, and only when the memory holds merges for the first forms."""
     canon = canonical_ids(conn)
     if len(set(canon.values())) == len(canon):
         return forms  # nothing is merged
