@@ -59,3 +59,12 @@ def test_a_home_that_cannot_be_written_still_loads(tmp_path: Path) -> None:
         assert len(load_passages(home)) == 2
     finally:
         os.chmod(folder, 0o755)
+
+
+def test_the_forms_table_can_be_searched_by_segment(tmp_path: Path) -> None:
+    from archiv.memory.store import open_memory
+
+    home = make_archive(tmp_path, DOCS)
+    with open_memory(ArchivLayout.resolve(home)) as conn:
+        indexes = {row[1] for row in conn.execute("PRAGMA index_list(forms)")}
+    assert "forms_segment" in indexes
