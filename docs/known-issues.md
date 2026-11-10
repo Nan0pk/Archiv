@@ -801,4 +801,7 @@ Archiv cannot yet use Typer 0.29 or later. Until it does, installs stay on 0.28.
   step's model time is added, almost all of it the walk reading the connections. Every question
   loads all passages into memory. See the design document, section 8, for the breakdown.
 - The passages are kept in a file next to the search index (`search.passages-40.json`). It is
-  rewritten when the index file changes and is safe to delete.
+  rewritten when the index file changes and is safe to delete. It holds a full copy of the
+  passages' text outside the index, so deleting it is part of removing a collection from disk.
+  No command removes a single document's text from the index today, so nothing else needs to
+  remove it.
