@@ -487,8 +487,13 @@ three extra rules to keep out table rows and phrases (the letters have to start 
 name, bar one; the name has to be printable text that is mostly letters; at most eight words).
 Each pair found is stored as a confirmed merge, and at question time the first step's forms get
 the other written forms of a merged thing added right after them, so the exact-text half of the
-places searches both. In the development home it finds 49 pairs; by eye about 27 of 30 sampled
-were right, and the wrong ones were a phrase that happens to fit the letters.
+places searches both (at most two extra forms for each of the first three forms, four in all). An
+abbreviation written out in ways that do not start alike (for example two different bodies with the
+same initials) is left alone, because joining them would join unrelated names; a rebuild removes
+its own earlier merges first. In the development home it finds 47 pairs and in the whole
+collection 645. Twenty pairs drawn at random from the whole collection were each read with their
+defining sentence: 20 were right, 0 wrong (my reading, not the owner's; with 20 samples this is weak
+evidence).
 - Measured on the same stored first-step answers, with and without the merges, so only the
   merges differ: passages in the other form of a name, 69 to 81 of 122 on one set of 12 cases and
   65 to 71 of 284 on a second; on the 8 development cases 41 to 43 of 214. Passages with the exact
