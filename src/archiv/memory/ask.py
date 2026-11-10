@@ -116,6 +116,15 @@ def question_terms(question: str) -> list[str]:
     return list(dict.fromkeys([q for q in whole if len(q.split()) <= 3] + derived))
 
 
+def _asked_value(answer: str) -> str:
+    """What the first step wrote as the question's subject, unchecked, or "" when it wrote none."""
+    data = first_json_object(answer)
+    value = None if data is None else data.get("asked")
+    if not isinstance(value, str):
+        return ""
+    return " ".join(value.strip().strip("\"'\u201c\u201d\u2018\u2019").split())
+
+
 def parse_asked(answer: str, question: str) -> str:
     """The words the first step says name the question's subject, if they are really in it.
 
@@ -123,11 +132,7 @@ def parse_asked(answer: str, question: str) -> str:
     appears in the question word for word (capital letters and spacing aside), as whole words.
     What comes back is the question's own spelling of it, or "" when there is nothing usable.
     """
-    data = first_json_object(answer)
-    value = None if data is None else data.get("asked")
-    if not isinstance(value, str):
-        return ""
-    words = value.strip().strip("\"'\u201c\u201d\u2018\u2019").split()
+    words = _asked_value(answer).split()
     if not words:
         return ""
     pattern = r"\s+".join(re.escape(word) for word in words)
@@ -531,8 +536,12 @@ def ask(
         # padding such as "tell me everything" cannot take their place) and where the walk
         # starts. When the first step gives nothing usable, the whole question is used.
         asked = parse_asked(answer, question)
-        if asked:
-            forms = [asked, *(form for form in forms if form.casefold() != asked.casefold())]
+        # Words that failed the check are still worth searching as a name (a search that finds
+        # nothing costs nothing), but are not trusted as the question's own words. A first step
+        # that put the subject only in "asked" would otherwise lose it from the search.
+        lead = asked or (_asked_value(answer) if len(_asked_value(answer).split()) <= 8 else "")
+        if lead:
+            forms = [lead, *(form for form in forms if form.casefold() != lead.casefold())]
         found = walk(
             conn,
             forms=forms,

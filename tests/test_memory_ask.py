@@ -588,6 +588,31 @@ def test_graph_and_meaning_passages_keep_a_floor_of_the_places(tmp_path: Path) -
     assert others(0.75) == 6
 
 
+def test_asked_words_that_fail_the_check_are_still_searched_as_a_name(tmp_path: Path) -> None:
+    home = _own_words_archive(tmp_path, own=3, other=0)
+    prompts: list[str] = []
+
+    def complete(prompt: str) -> str:
+        prompts.append(prompt)
+        if '"forms"' in prompt:
+            # the first step put the subject only in "asked", and wrote it without the stray
+            # character the question has, so the check against the question refuses it
+            return json.dumps({"forms": ["Zzyzx"], "related": [], "asked": "Orchard Society"})
+        return "The society met several times [P1]."
+
+    report = ask(
+        "What does the collection hold about Orchard\u0007Society?",
+        home=home,
+        complete=complete,
+        model_label="fake",
+        embedder=None,
+    )
+    assert parse_asked(json.dumps({"asked": "Orchard Society"}), "Orchard\u0007Society") == ""
+    assert not report.text.startswith(NOTHING_FOUND)
+    assert len(prompts) == 2
+    assert "Orchard Society" in prompts[1]
+
+
 def test_without_own_word_hits_the_walk_is_unchanged(tmp_path: Path) -> None:
     home = _guild_archive(tmp_path)
     plain = _walk(home, ["Pier Guild"], hops=1, max_passages=8, text_limit=20)
