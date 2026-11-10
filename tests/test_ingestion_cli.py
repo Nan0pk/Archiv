@@ -27,7 +27,9 @@ def test_cli_ingest_and_rebuild(ingestion_corpus: Path, tmp_path: Path) -> None:
 def test_cli_ingest_directory_leaves_out_office_lock_files(tmp_path: Path) -> None:
     source = tmp_path / "inbox"
     source.mkdir()
-    (source / "notes.txt").write_text("Meeting notes about the harvest festival.\n", encoding="utf-8")
+    (source / "notes.txt").write_text(
+        "Meeting notes about the harvest festival.\n", encoding="utf-8"
+    )
     (source / "~$report.docx").write_bytes(b"\x07lock")  # what Word leaves beside an open file
     result = CliRunner().invoke(app, ["ingest", str(source), "--home", str(tmp_path / "home")])
     assert result.exit_code == 0, result.output
