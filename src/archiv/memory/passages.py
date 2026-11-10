@@ -11,6 +11,8 @@ from pathlib import Path
 from archiv.search.index import search_index_path
 from archiv.storage.layout import ArchivLayout
 
+_CACHE_VERSION = 1
+
 
 @dataclass(frozen=True)
 class Passage:
@@ -25,11 +27,61 @@ def _collapse(text: str) -> str:
     return " ".join(text.split())
 
 
+def _fingerprint(path: Path, min_chars: int) -> list[object]:
+    """What the loaded passages depend on: the search index file as it is now, and `min_chars`."""
+    parts: list[object] = [_CACHE_VERSION, min_chars]
+    for name in (path.name, f"{path.name}-wal"):
+        try:
+            stat = (path.parent / name).stat()
+            parts += [name, stat.st_size, stat.st_mtime_ns]
+        except OSError:
+            parts += [name, None, None]
+    return parts
+
+
+def _read_cache(cache: Path, fingerprint: list[object]) -> list[Passage] | None:
+    try:
+        data = json.loads(cache.read_text(encoding="utf-8"))
+        if data["fingerprint"] != fingerprint:
+            return None
+        return [Passage(row[0], row[1], row[2], row[3], row[4]) for row in data["passages"]]
+    except (OSError, ValueError, KeyError, IndexError, TypeError):
+        return None
+
+
+def _write_cache(cache: Path, fingerprint: list[object], passages: list[Passage]) -> None:
+    rows = [[p.segment_id, p.object_sha256, p.source_name, p.locator, p.text] for p in passages]
+    try:
+        temporary = cache.with_suffix(".tmp")
+        temporary.write_text(
+            json.dumps({"fingerprint": fingerprint, "passages": rows}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        temporary.replace(cache)
+    except (OSError, ValueError):
+        pass  # a read-only home still works, it just reads the index each time
+
+
 def load_passages(home: Path | None = None, *, min_chars: int = 40) -> list[Passage]:
-    """Read every segment once, skipping short ones and exact repeats of earlier text."""
+    """Read every segment once, skipping short ones and exact repeats of earlier text.
+
+    On a large collection this takes seconds, so the result is kept in a file next to the index
+    and used again while the index file is unchanged (same size and modification time).
+    """
     path = search_index_path(ArchivLayout.resolve(home))
     if not path.is_file():
         raise FileNotFoundError("search index missing; run rebuild-search-index")
+    cache = path.with_name(f"{path.stem}.passages-{min_chars}.json")
+    fingerprint = _fingerprint(path, min_chars)
+    cached = _read_cache(cache, fingerprint)
+    if cached is not None:
+        return cached
+    passages = _read_passages(path, min_chars)
+    _write_cache(cache, fingerprint, passages)
+    return passages
+
+
+def _read_passages(path: Path, min_chars: int) -> list[Passage]:
     connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
     try:
         rows = connection.execute(
