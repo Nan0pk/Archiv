@@ -507,6 +507,27 @@ evidence).
   matches, not by finding the form. An abbreviation that is never written out is not found.
   Wrong pairs are possible and nothing checks them against a second source.
 
+**Question time on the largest home measured.** The whole-collection home (126,382 passages,
+146,018 things, 4,877,328 relations, built with no model in 1,411 s including meaning vectors,
+4.3 GB peak) was asked four plain questions with a stand-in first step and no report step, so
+this is everything except the model's own time. Before any change a question took 32 to 46
+seconds and peaked at 3.4 GB: 10 to 13 s reading every passage out of the search index, and 21 to
+32 s inside the walk. Two changes that cannot alter what is handed over were made: an index on
+the segment id of the forms table (the walk looks forms up by segment), and a copy of the loaded
+passages kept in a file next to the search index and used again while the index file is
+unchanged. A question now takes about 20 to 22 s once warm (the first one after the index
+changes, about 24 s, writes the copy), and 3.4 GB; the plan's limit is 20 s and 4 GB, so time is
+at its edge and memory is inside it.
+- What remains is the walk reading the connections. Each question reads about 4.4 million
+  relation rows in each direction and 1.8 million form rows, which is nearly the whole graph,
+  because within two steps the neighbourhood of any name reaches almost every other name in a
+  collection this size (8.5 s of SQL for the relations, 2.9 s counting passages per thing, 2.7 s
+  for the forms). Making that cheaper means limiting how far or how wide the walk expands, which
+  changes what is handed over and needs its own measurement; the graph's own value for recall
+  is not shown (see above), so that is a design decision, not a speed fix, and it is not made.
+- Loading every passage into memory for every question is still the memory limit; fetching
+  passages by id would remove it but was not done.
+
 **Not tested yet:**
 - Acronyms whose long form is never written out in the collection (the pairs above only
   cover ones that are), and other variants that share no word pieces.

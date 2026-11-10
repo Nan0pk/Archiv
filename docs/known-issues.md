@@ -793,3 +793,15 @@ Archiv cannot yet use Typer 0.29 or later. Until it does, installs stay on 0.28.
   same thing. If a collection was first built with `--model-label`, those confirmations stay
   in force and keep joining those names wherever the new build finds them again. Start a
   fresh home (or delete `memory.sqlite3`) when switching between the two builds.
+
+## Memory: a question on a very large collection takes about 20 seconds before the model
+
+- On the largest collection measured (126,382 passages, 146,018 things, 4.9 million
+  connections) answering a question takes about 20 to 22 seconds and 3.4 GB before the report
+  step's model time is added, almost all of it the walk reading the connections. Every question
+  loads all passages into memory. See the design document, section 8, for the breakdown.
+- The passages are kept in a file next to the search index (`search.passages-40.json`). It is
+  rewritten when the index file changes and is safe to delete. It holds a full copy of the
+  passages' text outside the index, so deleting it is part of removing a collection from disk.
+  No command removes a single document's text from the index today, so nothing else needs to
+  remove it.

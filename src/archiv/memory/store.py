@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS forms (
 );
 CREATE INDEX IF NOT EXISTS forms_thing ON forms(thing_id);
 CREATE INDEX IF NOT EXISTS forms_object ON forms(object_sha256);
+CREATE INDEX IF NOT EXISTS forms_segment ON forms(segment_id);
 CREATE TABLE IF NOT EXISTS relations (
     source_id INTEGER NOT NULL, phrase TEXT NOT NULL, target_id INTEGER NOT NULL,
     segment_id TEXT NOT NULL, object_sha256 TEXT NOT NULL
