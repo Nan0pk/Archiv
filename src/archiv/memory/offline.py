@@ -22,6 +22,76 @@ from archiv.memory.passages import Passage
 
 _WORD = re.compile(r"\w+(?:[-'’.]\w+)*")
 _LETTER = re.compile(r"[^\W\d_]")
+_BRACKETED = re.compile(r"\(([^()\n]{2,12})\)")
+
+
+def _long_form(short: str, before: str) -> str | None:
+    """Match the letters of `short` from the end of `before`, each against the start of a word
+    (the first letter has to start a word): the method of Schwartz and Hearst (2003)."""
+    words = before.split()[-min(len(short) + 5, len(short) * 2) :]
+    candidate = " ".join(words)
+    s_index, l_index = len(short) - 1, len(candidate) - 1
+    letters = sum(ch.isalnum() for ch in short)
+    at_word_start = 0
+    while s_index >= 0:
+        letter = short[s_index].casefold()
+        if not letter.isalnum():
+            s_index -= 1
+            continue
+        while l_index >= 0 and (
+            candidate[l_index].casefold() != letter
+            or (s_index == 0 and l_index > 0 and candidate[l_index - 1].isalnum())
+        ):
+            l_index -= 1
+        if l_index < 0:
+            return None
+        at_word_start += l_index == 0 or not candidate[l_index - 1].isalnum()
+        l_index -= 1
+        s_index -= 1
+    if at_word_start < letters - (1 if letters >= 3 else 0):
+        return None  # the letters of an abbreviation start the words of its name, bar one
+    start = candidate.rfind(" ", 0, l_index + 1) + 1
+    found = candidate[start:].strip()
+    return found if len(found.split()) >= 2 and found.casefold() != short.casefold() else None
+
+
+def _plain_name(text: str) -> bool:
+    """A written-out name is printable text that is mostly letters (not a table row or a date)."""
+    letters = sum(ch.isalpha() for ch in text)
+    return text.isprintable() and len(text.split()) <= 8 and letters * 3 >= len(text) * 2
+
+
+def abbreviation_pairs(passages: list[Passage]) -> list[tuple[str, str, Passage]]:
+    """Names the text itself defines an abbreviation for, written "Long Name (LN)".
+
+    The short form has to hold two capital letters and be at most two words; the long form is found
+    by matching the short form's letters against the start of the words before the bracket. The
+    first passage that defines a pair is kept with it.
+    """
+    seen: set[tuple[str, str]] = set()
+    pairs: list[tuple[str, str, Passage]] = []
+    for passage in passages:
+        text = " ".join(passage.text.split())
+        for match in _BRACKETED.finditer(text):
+            short = match.group(1).strip()
+            if (
+                len(short.split()) > 2
+                or not short[:1].isalnum()
+                or sum(ch.isupper() for ch in short) < 2
+            ):
+                continue
+            long = _long_form(short, text[: match.start()])
+            if long is None or (ident(long), short) in seen or not _plain_name(long):
+                continue
+            seen.add((ident(long), short))
+            pairs.append((long, short, passage))
+    # An abbreviation written out in different ways is kept only when the ways are spellings of
+    # one name (they start alike); otherwise it stands for more than one thing here and joining
+    # them would join unrelated names.
+    starts: dict[str, set[str]] = {}
+    for long, short, _ in pairs:
+        starts.setdefault(short, set()).add(ident(long)[:3])
+    return [pair for pair in pairs if len(starts[pair[1]]) == 1]
 
 
 def _words(text: str) -> list[str]:

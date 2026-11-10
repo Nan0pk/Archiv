@@ -144,6 +144,45 @@ def parse_asked(answer: str, question: str) -> str:
     return " ".join(found.group(0).split()) if found else ""
 
 
+def with_partners(
+    conn: sqlite3.Connection,
+    forms: list[str],
+    *,
+    first: int = 3,
+    most: int = 2,
+    total: int = 4,
+) -> list[str]:
+    """Add, after each of the first `first` forms, the other written forms the memory holds for
+    the same thing (merges confirmed at build time or by a model): at most `most` each and
+    `total` in all. The walk searches only the first ten forms, so up to `total` of the first
+    step's own forms can be pushed out, and only when the memory holds merges for the first
+    forms."""
+    canon = canonical_ids(conn)
+    if len(set(canon.values())) == len(canon):
+        return forms  # nothing is merged
+    members: dict[int, list[int]] = {}
+    for thing_id, root in canon.items():
+        members.setdefault(root, []).append(thing_id)
+    names = {
+        str(ident_): int(thing_id)
+        for thing_id, ident_ in conn.execute("SELECT thing_id, ident FROM things")
+    }
+    out: list[str] = []
+    added = 0
+    for position, form in enumerate(forms):
+        out.append(form)
+        thing_id = names.get(ident(form))
+        if position >= first or thing_id is None:
+            continue
+        group = [m for m in members[canon[thing_id]] if m != thing_id][: min(most, total - added)]
+        added += len(group)
+        for member in group:
+            row = conn.execute("SELECT form FROM things WHERE thing_id = ?", (member,)).fetchone()
+            if row is not None:
+                out.append(str(row[0]))
+    return list(dict.fromkeys(out))
+
+
 def parse_entry(answer: str) -> list[str]:
     data = first_json_object(answer)
     if data is None:
@@ -536,6 +575,7 @@ def ask(
         lead = asked or (_asked_value(answer) if len(_asked_value(answer).split()) <= 8 else "")
         if lead:
             forms = [lead, *(form for form in forms if form.casefold() != lead.casefold())]
+        forms = with_partners(conn, forms)
         found = walk(
             conn,
             forms=forms,
