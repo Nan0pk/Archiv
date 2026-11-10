@@ -480,6 +480,28 @@ stays as the slow option (`--model-label`).
   the same documents is kept with them. Merging forms of one name is left to question time and
   is not built yet.
 
+**Abbreviations that the text defines.** The no-model build also reads "Long Name (LN)" out of
+the text: the letters of the bracketed short form (at least two capitals, at most two words) are
+matched from the end of the words before it, as Schwartz and Hearst described in 2003, with
+three extra rules to keep out table rows and phrases (the letters have to start the words of the
+name, bar one; the name has to be printable text that is mostly letters; at most eight words).
+Each pair found is stored as a confirmed merge, and at question time the first step's forms get
+the other written forms of a merged thing added right after them, so the exact-text half of the
+places searches both. In the development home it finds 49 pairs; by eye about 27 of 30 sampled
+were right, and the wrong ones were a phrase that happens to fit the letters.
+- Measured on the same stored first-step answers, with and without the merges, so only the
+  merges differ: passages in the other form of a name, 69 to 81 of 122 on one set of 12 cases and
+  65 to 71 of 284 on a second; on the 8 development cases 41 to 43 of 214. Passages with the exact
+  words handed did not change on any set and no question was lower. Cases such as an abbreviation
+  the collection defines once and uses many times went from 0 of 9 to 8 of 9.
+- Limits, and they matter. The test cases are the same kind of pair the miner looks for, so their
+  recall is optimistic for this method by construction: it shows the method works when the text
+  defines the abbreviation, not how often collections do. The sets overlap (7 of the 12 questions
+  in the second set repeat an earlier draw, because the collection has few defined pairs). Two
+  large cases (67 and 27 passages in the other form) stay limited by the 20 places for exact
+  matches, not by finding the form. An abbreviation that is never written out is not found.
+  Wrong pairs are possible and nothing checks them against a second source.
+
 **Not tested yet:**
 - Acronyms whose long form is never written out in the collection (the pairs above only
   cover ones that are), and other variants that share no word pieces.
