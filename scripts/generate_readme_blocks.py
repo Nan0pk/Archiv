@@ -142,7 +142,15 @@ COMMAND_GROUPS: list[tuple[str, str, list[str]]] = [
         "See [the design](docs/institutional-memory-design.md). `archiv memory build` uses no "
         "model unless you pass `--model-label` (that slow option reads every document through "
         "a model). `archiv memory ask` always uses one: the `--model-cmd` you give it decides "
-        "where document text goes; see the privacy section of the README.",
+        "where document text goes; see the privacy section of the README. A first run: "
+        "`archiv add ./folder`, then `archiv memory build`, then "
+        '`archiv memory ask "your question" --model-cmd "<a command that reads a prompt on '
+        'standard input and prints the answer>" --model-label <its name>`. The meaning vectors '
+        "need the embedding model files to be on this machine already, in the folder named by "
+        "`ARCHIV_EMBED_CACHE` (the default, `/tmp/fastembed_cache`, is cleared on reboot on many "
+        "systems, so set it to a folder that stays); Archiv never downloads them. Without them "
+        "the build still finishes, says that the meaning vectors were skipped, and questions use "
+        "text search and names only.",
         ["memory build", "memory ask", "memory probe"],
     ),
     (
