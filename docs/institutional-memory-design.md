@@ -464,14 +464,14 @@ are connected as "appears with". Nothing is merged at build time. The model-read
 stays as the slow option (`--model-label`).
 - Measured against the English-only spaCy names it replaces, on the same stored first-step
   answers (so only the names differ): passages with the exact words that were handed 223.5
-  with the spaCy names and 222.0 with these, no question lower; passages in the other form of
+  with the spaCy names and 222.0 with these, no question more than 1.5 lower; passages in the other form of
   a name 41 and 41 (of 214 over two tries; 8 cases, one collection). With the names removed
   altogether the figures were 245 and 42, so the names do not improve recall here (see above);
   what they add is about 17 of the 40 places in a report, whose value is not measured. The
   questions were drawn from names the spaCy build found, which if anything favours it, so the
   tie is a cautious one. Arabic-script passages: 18.9 phrases each (spaCy: 10.0, mostly Latin
   words and numbers).
-- Cost on the whole collection (126,382 passages): 36 s to load the passages, 34 s to find
+- Cost on the largest home measured (9,061 stored original files, 126,382 passages as the memory loader reads them; the full collection is larger): 36 s to load the passages, 34 s to find
   the names (peak 2.7 GB, set by loading), 103 s to store 145,293 things and 4,877,328
   relations (about 39 per passage) in a 1.9 GB database. Collections several times larger were
   not run; loading all passages at once is the limit to watch (plan phase 5).
