@@ -337,9 +337,10 @@ Being clear about limits is part of the point. The full, dated list is in
 
 ## Memory, an optional separate track
 
-`archiv memory build` reads every document through a model command that you name, and stores
-what the documents mention and how those things connect, each with the passage it came from.
-`archiv memory ask` then answers from that memory with a cited source for every claim. It
+`archiv memory build` finds the names in the collection itself, with no model: words and short
+phrases the documents repeat, and abbreviations the text spells out, each stored with the passage
+it came from, and how they appear together. (Passing `--model-label` reads every document through
+a model command that you name instead; that is slow.) `archiv memory ask` then answers from that memory with a cited source for every claim. It
 needs the optional `memory` extra (meaning vectors) and its model files already on disk;
 Archiv never downloads a model. This track is still being evaluated and runs outside the
 ordinary `ask` path. Design: [institutional memory](docs/institutional-memory-design.md).
@@ -616,8 +617,11 @@ read it from. The secret itself is never written into Archiv's configuration.
 [Evaluation archives](#evaluation-archives) below. Never mark an archive that holds private
 documents.
 
-**`archiv memory` works differently.** Its `build`, `ask` and `probe` commands hand text to a
-command that *you* name with `--model-cmd`, and Archiv does not look inside that command. If
+**`archiv memory` works differently.** Its `ask` and `probe` commands, and `build` only when you
+pass `--model-label`, hand text to a command that *you* name with `--model-cmd`, and Archiv does
+not look inside that command. A plain `archiv memory build` hands text to no model command: its
+meaning vectors are made on this machine by the embedding model files you installed, and nothing
+is sent anywhere. If
 your command talks to a service on the internet, the document text it is given goes there.
 Archiv itself sends nothing and never downloads a model, but this one door is yours to choose.
 For private documents, name a command that talks only to your own machine.
