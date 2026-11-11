@@ -17,7 +17,7 @@ from archiv.memory.merge import canonical_ids
 from archiv.memory.model import Complete
 from archiv.memory.passages import Passage, count_literal_passages, load_passages
 from archiv.memory.store import cache_key, cached, open_memory, remember
-from archiv.memory.vectors import Embedder, VectorIndex
+from archiv.memory.vectors import Embedder, VectorIndex, vectors_match
 from archiv.search.index import search_index_path
 from archiv.search.retrieval import derive_query_variants
 from archiv.search.schema import connect_index
@@ -545,7 +545,7 @@ def ask(
         base = passage_vectors_base(layout)
         if embedder is not None and Path(f"{base}.ids.json").is_file():
             stored = VectorIndex.load(base)
-            if stored.embedder == embedder.name:
+            if vectors_match(stored, embedder):
                 vectors, question_vec = stored, embedder.embed([question])[0]
         # Show the entry step what this collection says near the question, so that a term is
         # read the way the collection uses it and not the way everyday use does.

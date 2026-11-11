@@ -27,7 +27,7 @@ from archiv.memory.store import (
     store_extraction,
     thing_id_for,
 )
-from archiv.memory.vectors import Embedder, VectorIndex
+from archiv.memory.vectors import Embedder, VectorIndex, vectors_match, weights_of
 from archiv.storage.layout import ArchivLayout
 
 
@@ -181,7 +181,7 @@ def embed_passages(layout: ArchivLayout, passages: list[Passage], embedder: Embe
     stored: VectorIndex | None = None
     if Path(f"{base}.ids.json").is_file():
         candidate = VectorIndex.load(base)
-        if candidate.embedder == embedder.name and len(candidate.vectors) == len(candidate.ids):
+        if vectors_match(candidate, embedder) and len(candidate.vectors) == len(candidate.ids):
             if candidate.ids == ids:
                 return
             stored = candidate
@@ -200,4 +200,13 @@ def embed_passages(layout: ArchivLayout, passages: list[Passage], embedder: Embe
             out[[position[i] for i in chunk]] = stored.vectors[[source[i] for i in chunk]]
     if fresh is not None:
         out[[position[p.segment_id] for p in new]] = fresh
-    VectorIndex(ids=ids, vectors=out, embedder=embedder.name).save(base)
+    # The hash is recorded only when every row was made by these weights. Rows reused from vectors
+    # that carried no hash may have been made by other weights of the same name, so the file is
+    # then left unhashed and a hash is never certified for rows that were not checked.
+    certain = not reusable or (stored is not None and bool(stored.weights))
+    VectorIndex(
+        ids=ids,
+        vectors=out,
+        embedder=embedder.name,
+        weights=weights_of(embedder) if certain else "",
+    ).save(base)

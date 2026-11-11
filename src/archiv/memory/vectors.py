@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib
 import json
 import os
@@ -32,11 +33,30 @@ class Embedder(Protocol):
         ...
 
 
+def weights_of(embedder: object) -> str:
+    """The recorded hash of an embedder's weight files, or "" when it has none to record."""
+    return str(getattr(embedder, "weights", "") or "")
+
+
+def vectors_match(stored: VectorIndex, embedder: Embedder) -> bool:
+    """Whether vectors on disk were made by this embedder.
+
+    The name has to be the same. When both sides recorded a hash of the weight files it has to be
+    the same too, so a different build of the same model is not mixed in. Vectors saved before
+    hashes were recorded carry none and are accepted, as they always were.
+    """
+    if stored.embedder != embedder.name:
+        return False
+    current = weights_of(embedder)
+    return not stored.weights or not current or stored.weights == current
+
+
 class FastEmbedder:
     """CPU embedder. It never downloads weights: they must already be on disk."""
 
     def __init__(self, model_name: str = DEFAULT_MODEL, cache_dir: Path | None = None) -> None:
         self.name = model_name
+        self._weights: str | None = None
         folder = cache_dir or Path(os.environ.get("ARCHIV_EMBED_CACHE", "/tmp/fastembed_cache"))
         try:
             # Loaded by name so that type checking works without the optional library.
@@ -55,6 +75,23 @@ class FastEmbedder:
                 f"The embedding model '{model_name}' is not on this machine (looked in {folder}). "
                 "Archiv never downloads models by itself. Place the model there first."
             ) from error
+
+    @property
+    def weights(self) -> str:
+        """SHA-256 over the model's .onnx weight files (in name order), computed once."""
+        if self._weights is None:
+            digest = hashlib.sha256()
+            try:
+                folder = Path(self._model.model._model_dir)  # type: ignore[attr-defined]
+                for path in sorted(folder.rglob("*.onnx")):
+                    digest.update(path.name.encode("utf-8"))
+                    with path.resolve().open("rb") as handle:
+                        for block in iter(lambda: handle.read(1 << 20), b""):
+                            digest.update(block)
+                self._weights = digest.hexdigest()
+            except (AttributeError, OSError):
+                self._weights = ""  # not recorded: vectors are then matched by name alone
+        return self._weights
 
     def embed(self, texts: list[str]) -> Vectors:
         import numpy as np
@@ -75,6 +112,7 @@ class VectorIndex:
     ids: list[str]
     vectors: Vectors
     embedder: str = ""
+    weights: str = ""
     _row: dict[str, int] | None = field(default=None, init=False, repr=False, compare=False)
 
     def scores(self, ids: list[str], query: Vectors) -> dict[str, float]:
@@ -93,7 +131,8 @@ class VectorIndex:
 
         np.save(f"{base}.npy", self.vectors)
         Path(f"{base}.ids.json").write_text(
-            json.dumps({"ids": self.ids, "embedder": self.embedder}), encoding="utf-8"
+            json.dumps({"ids": self.ids, "embedder": self.embedder, "weights": self.weights}),
+            encoding="utf-8",
         )
 
     @classmethod
@@ -105,6 +144,7 @@ class VectorIndex:
             ids=list(meta["ids"]),
             vectors=np.load(f"{base}.npy"),
             embedder=str(meta.get("embedder", "")),
+            weights=str(meta.get("weights", "")),
         )
 
     def nearest(
