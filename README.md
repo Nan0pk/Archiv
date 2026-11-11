@@ -619,7 +619,9 @@ documents.
 
 **`archiv memory` works differently.** Its `ask` and `probe` commands, and `build` only when you
 pass `--model-label`, hand text to a command that *you* name with `--model-cmd`, and Archiv does
-not look inside that command. A plain `archiv memory build` hands text to no model. If
+not look inside that command. A plain `archiv memory build` hands text to no model command: its
+meaning vectors are made on this machine by the embedding model files you installed, and nothing
+is sent anywhere. If
 your command talks to a service on the internet, the document text it is given goes there.
 Archiv itself sends nothing and never downloads a model, but this one door is yours to choose.
 For private documents, name a command that talks only to your own machine.
