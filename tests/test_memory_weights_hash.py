@@ -69,6 +69,39 @@ def test_vectors_saved_before_hashes_were_recorded_are_still_accepted(tmp_path: 
     )
 
 
+def _add_a_passage(home: Path) -> None:
+    from archiv.ingestion import ingest_file
+    from archiv.search.index import rebuild_search_index
+
+    new = home.parent / "source" / "c.txt"
+    new.write_text(
+        "The Orchard Society hired a new treasurer after the long winter meeting.",
+        encoding="utf-8",
+    )
+    ingest_file(new, home=home)
+    rebuild_search_index(home=home)
+
+
+def test_rows_reused_from_an_unhashed_index_are_not_stamped_with_the_new_hash(
+    tmp_path: Path,
+) -> None:
+    home = make_archive(tmp_path, DOCS)
+    layout = ArchivLayout.resolve(home)
+    embed_passages(layout, load_passages(home), HashEmbedder())  # an index with no hash
+    _add_a_passage(home)
+    embed_passages(layout, load_passages(home), Weighted("bbb"))  # old rows reused, one new row
+    assert VectorIndex.load(passage_vectors_base(layout)).weights == ""
+
+
+def test_rows_reused_from_a_hashed_index_keep_the_hash(tmp_path: Path) -> None:
+    home = make_archive(tmp_path, DOCS)
+    layout = ArchivLayout.resolve(home)
+    embed_passages(layout, load_passages(home), Weighted("bbb"))
+    _add_a_passage(home)
+    embed_passages(layout, load_passages(home), Weighted("bbb"))
+    assert VectorIndex.load(passage_vectors_base(layout)).weights == "bbb"
+
+
 def test_a_different_embedder_name_never_matches(tmp_path: Path) -> None:
     home = make_archive(tmp_path, DOCS)
     layout = ArchivLayout.resolve(home)

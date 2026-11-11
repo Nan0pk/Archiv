@@ -810,8 +810,12 @@ Archiv cannot yet use Typer 0.29 or later. Until it does, installs stay on 0.28.
 
 - Vectors are now saved with a SHA-256 of the embedding model's `.onnx` files, and vectors made
   by the same model name but different weight files are not reused (they are made again).
-- Vectors saved earlier carry no hash and are still accepted by name alone, as before. The hash
-  is recorded the next time the vectors are written, which happens when passages are added or
-  changed. To record it for an unchanged collection, delete `indexes/memory-passages.npy` and
+- Vectors saved earlier carry no hash and are still accepted by name alone, as before. A hash is
+  recorded only when the vectors are made from scratch: adding documents to a collection whose
+  vectors have no hash keeps reusing those rows and leaves the file unhashed, because the old rows
+  were not checked. To stamp an existing collection, delete `indexes/memory-passages.npy` and
   `indexes/memory-passages.ids.json` and run `archiv memory build` again.
+- If the vectors on disk were made by different weights, `archiv memory ask` does not use them
+  and does not say so; answers then rely on text search and names only until
+  `archiv memory build` is run again.
 - The hash covers the `.onnx` files only, not the tokenizer files next to them.
