@@ -33,7 +33,23 @@ your documents and you have to trust whatever answer comes back.
 is, never modified, and builds a searchable index alongside. When you ask a question it finds
 the relevant passages, checks them against the untouched originals, and shows the answer
 *together with the page, sheet, slide or line each part came from*. If a language model is
-involved, it runs on your own machine. Nothing leaves it.
+involved, it runs on your own machine. Nothing leaves it, except in the cases below, which
+stay off until they are switched on.
+
+**Know these before you add anything private.**
+
+- **An evaluation archive.** An archive can be marked for trying Archiv against a hosted
+  model. It takes several deliberate steps and applies to that one archive. From then on,
+  commands that use the model, such as `archiv ask` and `archiv report`, send the hosted
+  model your question. With it go, for each document picked as evidence, the file name, the
+  place in the file and the full text of the passage found there. A passage can be one line
+  or a whole page. The original files and the index are not sent. The mark and the
+  hosted-model settings are saved with the archive, so its backups carry them: a restored
+  copy is still marked and still pointed at that model. Keep private documents in an archive
+  that has never been marked. Details: [Evaluation archives](#evaluation-archives).
+- **A model command for `archiv memory`.** That optional track hands document text to a
+  model command that you name, and where that command sends it is up to you. Details:
+  [Privacy boundary](#privacy-boundary).
 
 > **Models propose. Validators decide whether work succeeded.**
 >
@@ -62,7 +78,7 @@ silently corrupts another:
 | **1. Canonical originals** | Immutable, content-addressed copies of your files | Evidence must never be rewritten by a later step |
 | **2. Derived indexes** | Extraction output and the SQLite FTS5 search index | Rebuildable accelerators, safe to delete and regenerate |
 | **3. Deterministic capabilities** | Bounded operations with declared reads, writes and forbidden changes | Predictable, testable, no hidden effects |
-| **4. Model-assisted reasoning** | Optional, opt-in, loopback-only | A model is a proposer, never an authority |
+| **4. Model-assisted reasoning** | Optional, opt-in, loopback-only, with one labelled exception: [evaluation archives](#evaluation-archives) | A model is a proposer, never an authority |
 | **5. Validation and provenance** | Independent validators plus a durable run ledger | Success is decided by a checker, not by the thing being checked |
 
 See [Architecture](docs/architecture.md), the [execution contract](docs/execution-contract.md)
@@ -160,6 +176,11 @@ flowchart TD
 
 The orange shapes are the checkpoints. They are why Archiv can show you a source and you can
 trust that the source exists and says what the answer claims it says.
+
+Step 2 hands the model nothing of yours beyond the evidence package: your question and the
+passages picked in step 1, each with its file name and location. In an
+[evaluation archive](#evaluation-archives), and only there, the model in step 2 is a hosted
+one, so that package is what leaves your machine.
 
 <details>
 <summary><b>For engineers:</b> retrieval internals and how to inspect a decision</summary>
@@ -307,8 +328,10 @@ Being clear about limits is part of the point. The full, dated list is in
   run `archiv add` again; files already stored are recognised.
 - **One `archiv add` at a time per archive.** Two at once can both report the same file as
   new.
-- **No remote models.** That is a deliberate boundary, not a gap. See
-  [Privacy boundary](#privacy-boundary).
+- **No remote models, with one labelled exception.** Answers come from a model on your own
+  machine or not at all. That is a deliberate boundary, not a gap. The exception is an
+  [evaluation archive](#evaluation-archives), which is for trying Archiv out and should hold
+  nothing private. See [Privacy boundary](#privacy-boundary).
 
 ---
 
@@ -384,6 +407,10 @@ See [User-ready Fedora alpha](docs/offline-alpha.md) and
 You don't need documents of your own to try it. [See it work](#see-it-work) shows the first
 four steps with their real output. Searching works without a model; only `ask` and `report`
 need one on your own machine.
+
+None of the steps below sends anything off your machine. Before you add private documents of
+your own, read [how text can leave it](#the-idea): an archive marked for evaluation sends
+questions and passages to a hosted model, and that mark is carried in its backups.
 
 ```bash
 # 1-2. Make a sample folder and add it. Files are preserved and the index is refreshed.
@@ -577,8 +604,10 @@ failure cases, without touching your production configuration. See the
 
 The model interface is bound to **explicit loopback-only HTTP endpoints**: something running on
 your own machine, such as Ollama, LocalAI or vLLM. Remote hosts, cloud fallbacks, HTTPS tunnels
-and embedded credentials are **rejected**, not merely discouraged. The only two settings the
-configuration accepts are *disabled* and *loopback*; there is nothing to switch off.
+and embedded credentials are **rejected**, not merely discouraged. A new archive starts with
+the model *disabled*, and `archiv model configure` accepts nothing but a *loopback* address.
+There is a third setting, *remote evaluation*, which is the exception described below. Only
+its own command sets it, and it sends nothing from an archive that is not marked.
 
 If your local server needs a token, you give Archiv the *name of an environment variable* to
 read it from. The secret itself is never written into Archiv's configuration.
@@ -599,23 +628,51 @@ Archiv talks only to a model on your own machine. Evaluating the product against
 model is the one exception, and an archive cannot drift into it: it happens only if that
 archive carries a mark saying so, added by a command whose flag names the consequence rather
 than a plain `--yes`. The mark stores what you agreed to and when, so it can be checked later
-instead of taken on trust. A missing, unreadable or hand-edited mark counts as absent.
+instead of taken on trust. A missing, unreadable or incomplete mark counts as absent. One
+thing stands in for the mark: the environment variable `ARCHIV_EVALUATION_ARCHIVE`, which
+exists for automated tests. While it is set to `1`, `true`, `yes` or `on`, every archive is
+treated as marked, so do not leave it set in a shell you use for private documents.
 
 Do not mark an archive that holds private or confidential documents. Marking it means their
 text is sent to computers you do not control. Make a separate archive for evaluation instead.
+
+**What is sent.** Each time a command asks the hosted model something, one message goes over
+HTTPS to the address you configured. It holds your question or report objective, a fixed set
+of instructions, and one passage from each document picked as evidence: at most eight
+documents unless you ask for more, and never more than fifty. Each passage is sent whole,
+with the document's file name and the place it was found. How much text that is depends on
+the file. For example: one line of a text file, one paragraph of a Word file, one cell of a
+spreadsheet, and for a PDF read without the optional `pdf` extra, which is how the installer
+sets Archiv up, a whole page. The original files, the index and the rest of the archive are
+not sent. If the reply cannot be used, the message is sent again with a note of what was
+wrong, up to three times in all.
+
+**Which commands send it.** `archiv ask`; `archiv report`, unless you pass `--deterministic`;
+`archiv model calibrate`; and `archiv run`, when the task file asks for a model. Questions
+asked in the desktop app go through `archiv ask`, so the same holds there. `archiv model test`
+sends one fixed line and no document text. Adding, finding, locating a source, checking
+status and making backups contact no model at all.
 
 Marking an archive is only half of it. The archive also has to be pointed at a model off this
 machine with `archiv model configure-remote-evaluation`, and the two are separate on purpose:
 configuring one without marking the archive sends nothing, and marking an archive without
 configuring one does nothing. Either alone is inert. That command stores the *name* of an
 environment variable holding your API key, never the key itself, because the settings
-directory travels in backups and the key must not.
+directory travels in backups and the key must not. Even with both halves in place, nothing is
+sent until that variable is set and a spending ceiling has been recorded with
+`archiv model spend set`.
 
 **The mark travels with your data.** It lives in `config/`, which is included in backups and
 exports, so restoring an evaluation archive somewhere else produces an archive that is still
-marked for evaluation. That is deliberate: the alternative is a restored copy that has quietly
-forgotten it was allowed to send documents out. But it means the permission moves with the
-backup. Run `archiv model evaluation disable` after restoring if that is not what you want.
+marked for evaluation. The hosted-model settings, the spending ceiling and the record of what
+has been spent live there too and travel with it; the API key does not. So a restored copy is
+still marked and still pointed at the hosted model, and once the key variable is set on that
+machine, `archiv ask` there sends again. That is deliberate: the alternative is a restored
+copy that has quietly forgotten it was allowed to send documents out. But it means the
+permission moves with the backup. Run `archiv model evaluation disable` after restoring if
+that is not what you want. That removes the mark and leaves the hosted-model settings in
+place. `archiv model disable` does the opposite: it clears those settings and leaves the mark.
+Run both to remove both.
 
 ---
 
