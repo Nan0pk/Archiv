@@ -805,3 +805,13 @@ Archiv cannot yet use Typer 0.29 or later. Until it does, installs stay on 0.28.
   passages' text outside the index, so deleting it is part of removing a collection from disk.
   No command removes a single document's text from the index today, so nothing else needs to
   remove it.
+
+## Memory: vectors made before the weights hash was recorded
+
+- Vectors are now saved with a SHA-256 of the embedding model's `.onnx` files, and vectors made
+  by the same model name but different weight files are not reused (they are made again).
+- Vectors saved earlier carry no hash and are still accepted by name alone, as before. The hash
+  is recorded the next time the vectors are written, which happens when passages are added or
+  changed. To record it for an unchanged collection, delete `indexes/memory-passages.npy` and
+  `indexes/memory-passages.ids.json` and run `archiv memory build` again.
+- The hash covers the `.onnx` files only, not the tokenizer files next to them.
