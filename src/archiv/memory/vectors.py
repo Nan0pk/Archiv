@@ -51,6 +51,9 @@ def vectors_match(stored: VectorIndex, embedder: Embedder) -> bool:
     return not stored.weights or not current or stored.weights == current
 
 
+_EARLIER_FOLDER = Path("/tmp/fastembed_cache")  # the only default before; emptied on restart
+
+
 def embed_folders() -> list[Path]:
     """The folders the embedding model files are looked for in, in order.
 
@@ -62,7 +65,7 @@ def embed_folders() -> list[Path]:
     if named:
         return [Path(named)]
     cache = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache")
-    return [cache / "archiv" / "fastembed", Path("/tmp/fastembed_cache")]
+    return [cache / "archiv" / "fastembed", _EARLIER_FOLDER]
 
 
 class FastEmbedder:
@@ -82,6 +85,10 @@ class FastEmbedder:
             ) from error
         failure: Exception | None = None
         for folder in folders:
+            # The library creates a folder it is pointed at and prints its own error lines when
+            # the model is not there, so a folder that is missing or empty is not tried at all.
+            if not folder.is_dir() or not any(folder.iterdir()):
+                continue
             try:
                 self._model = fastembed.TextEmbedding(
                     model_name, cache_dir=str(folder), local_files_only=True

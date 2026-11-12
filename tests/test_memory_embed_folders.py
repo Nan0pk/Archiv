@@ -8,7 +8,14 @@ from types import SimpleNamespace
 
 import pytest
 
+from archiv.memory import vectors
 from archiv.memory.vectors import EmbedderUnavailable, FastEmbedder, embed_folders
+
+
+def _filled(folder: Path) -> Path:
+    folder.mkdir(parents=True)
+    (folder / "a-model-file").write_text("x", encoding="utf-8")
+    return folder
 
 
 def _library_with_model_in(monkeypatch: pytest.MonkeyPatch, holder: Path | None) -> list[str]:
@@ -32,14 +39,23 @@ def _library_with_model_in(monkeypatch: pytest.MonkeyPatch, holder: Path | None)
     return tried
 
 
-def test_the_folder_that_stays_is_looked_in_before_the_one_under_tmp(
+def _defaults(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> tuple[Path, Path]:
+    """Point both default folders at places inside `tmp_path`, so /tmp on this machine is unused."""
+    monkeypatch.delenv("ARCHIV_EMBED_CACHE", raising=False)
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    earlier = tmp_path / "earlier"
+    monkeypatch.setattr(vectors, "_EARLIER_FOLDER", earlier)
+    stays = tmp_path / "cache" / "archiv" / "fastembed"
+    assert embed_folders() == [stays, earlier]
+    return stays, earlier
+
+
+def test_the_folder_that_stays_is_looked_in_before_the_earlier_one(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    monkeypatch.delenv("ARCHIV_EMBED_CACHE", raising=False)
-    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
-    stays = tmp_path / "archiv" / "fastembed"
-    assert embed_folders() == [stays, Path("/tmp/fastembed_cache")]
-    tried = _library_with_model_in(monkeypatch, stays)
+    stays, earlier = _defaults(monkeypatch, tmp_path)
+    _filled(earlier)
+    tried = _library_with_model_in(monkeypatch, _filled(stays))
     FastEmbedder()
     assert tried == [str(stays)]
 
@@ -47,30 +63,34 @@ def test_the_folder_that_stays_is_looked_in_before_the_one_under_tmp(
 def test_a_model_left_in_the_earlier_folder_is_still_found(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    monkeypatch.delenv("ARCHIV_EMBED_CACHE", raising=False)
-    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
-    tried = _library_with_model_in(monkeypatch, Path("/tmp/fastembed_cache"))
+    stays, earlier = _defaults(monkeypatch, tmp_path)
+    tried = _library_with_model_in(monkeypatch, _filled(earlier))
     FastEmbedder()
-    assert tried == [str(tmp_path / "archiv" / "fastembed"), "/tmp/fastembed_cache"]
+    assert tried == [str(earlier)]  # the folder that stays does not exist, so it is not tried
+    assert not stays.exists()
 
 
 def test_a_named_folder_is_the_only_one_looked_in(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    monkeypatch.setenv("ARCHIV_EMBED_CACHE", str(tmp_path / "named"))
-    tried = _library_with_model_in(monkeypatch, Path("/tmp/fastembed_cache"))
+    _stays, earlier = _defaults(monkeypatch, tmp_path)
+    named = _filled(tmp_path / "named")
+    monkeypatch.setenv("ARCHIV_EMBED_CACHE", str(named))
+    tried = _library_with_model_in(monkeypatch, _filled(earlier))
     with pytest.raises(EmbedderUnavailable, match="never downloads"):
         FastEmbedder()
-    assert tried == [str(tmp_path / "named")]
+    assert tried == [str(named)]
 
 
-def test_a_missing_model_names_every_folder_looked_in(
+def test_a_missing_model_names_every_folder_and_creates_none(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    monkeypatch.delenv("ARCHIV_EMBED_CACHE", raising=False)
-    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
-    _library_with_model_in(monkeypatch, None)
+    stays, earlier = _defaults(monkeypatch, tmp_path)
+    tried = _library_with_model_in(monkeypatch, None)
     with pytest.raises(EmbedderUnavailable) as caught:
         FastEmbedder()
-    assert str(tmp_path / "archiv" / "fastembed") in str(caught.value)
-    assert "/tmp/fastembed_cache" in str(caught.value)
+    assert str(stays) in str(caught.value)
+    assert str(earlier) in str(caught.value)
+    assert tried == []  # the library is not asked about a folder that is not there
+    assert not stays.exists()
+    assert not earlier.exists()
