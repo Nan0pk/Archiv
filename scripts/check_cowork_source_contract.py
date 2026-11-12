@@ -28,6 +28,20 @@ def _read(root: Path, relative: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
+# Current CoWork wraps two values but still passes them on: the inherited environment
+# minus vault tokens, and the server's result with resolved vault secrets masked.
+# Accept those spellings as well as the pinned one; anything else still fails.
+_ALSO_ACCEPTED = {
+    "...process.env": r"\.\.\.withoutVaultTokens\(process\.env\)",
+    "return result as MCPCallResult": r"return\s+redactMcpCallResult\(result as MCPCallResult\)",
+}
+
+
+def _accepts(phrase: str, source: str) -> bool:
+    pattern = _ALSO_ACCEPTED.get(phrase)
+    return pattern is not None and re.search(pattern, source) is not None
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--cowork-root", type=Path, required=True)
@@ -121,7 +135,11 @@ def main() -> None:
         'stdio: ["pipe", "pipe", "pipe"]',
         "sendRequest(",
     ):
-        record(f"stdio_transport:{phrase}", phrase in transport_source, phrase)
+        record(
+            f"stdio_transport:{phrase}",
+            phrase in transport_source or _accepts(phrase, transport_source),
+            phrase,
+        )
 
     for phrase in (
         "MCP_METHODS.INITIALIZE",
@@ -129,7 +147,11 @@ def main() -> None:
         "MCP_METHODS.TOOLS_CALL",
         "return result as MCPCallResult",
     ):
-        record(f"mcp_connection:{phrase}", phrase in connection_source, phrase)
+        record(
+            f"mcp_connection:{phrase}",
+            phrase in connection_source or _accepts(phrase, connection_source),
+            phrase,
+        )
 
     for phrase in (
         "async testServer(",
