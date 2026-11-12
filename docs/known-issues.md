@@ -414,6 +414,19 @@ whatever the workflow list suggests.
   handshake in its connection manager. The probe does not instantiate that manager and
   does not exercise discovery or its restart fallback. A passing classic-handshake test
   does not establish compatibility of those paths or the complete desktop workbench.
+- **2026-11-13: second drift, two more checks.** At CoWork `main` `a9cbb87` the job failed
+  on `stdio_transport:...process.env` and `mcp_connection:return result as MCPCallResult`.
+  Upstream now writes `...withoutVaultTokens(process.env)` in `StdioTransport.ts` (the
+  inherited environment, minus the tokens that open a password vault, then the server's
+  own `env`) and `return redactMcpCallResult(result as MCPCallResult)` in
+  `MCPServerConnection.ts` (the server's result, with vault values it echoes back masked).
+  Both behaviours the checks protect are still there, so the checker now accepts these two
+  spellings as well as the pinned one, and nothing looser. It does not test what
+  `withoutVaultTokens` removes or what `redactMcpCallResult` masks; a server that
+  needs one of those variables, or that returns text matching a resolved vault value,
+  would behave differently with current CoWork. The checker run was clean on both the
+  pinned revision and `a9cbb87`. The transport probe was not run for this change. The
+  lock was not changed.
 - Future upstream drift can still fail this early-warning check; investigate it rather
   than skipping the job. Changing the pinned revision remains a separate manual decision.
 

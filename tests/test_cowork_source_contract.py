@@ -167,6 +167,45 @@ def test_current_source_uses_its_protocol_and_accepts_forwarded_options(tmp_path
     )
 
 
+TRANSPORT = "src/electron/mcp/client/transports/StdioTransport.ts"
+
+
+def test_current_source_wrapping_environment_and_result_is_accepted(tmp_path: Path) -> None:
+    root, lock = _snapshot(tmp_path)
+    transport = root / TRANSPORT
+    transport.write_text(
+        transport.read_text().replace("...process.env", "...withoutVaultTokens(process.env)")
+    )
+    connection = root / CONNECTION
+    connection.write_text(
+        connection.read_text().replace(
+            "return result as MCPCallResult",
+            "return redactMcpCallResult(result as MCPCallResult)",
+        )
+    )
+    code, report = _check(root, lock, "current")
+    assert code == 0 and report["compatible"] is True
+
+
+@pytest.mark.parametrize(
+    ("path", "old", "new"),
+    (
+        (TRANSPORT, "...process.env", "...safeEnv"),
+        (TRANSPORT, "...process.env", "...withoutVaultTokens(otherEnv)"),
+        (CONNECTION, "return result as MCPCallResult", "return undefined"),
+        (CONNECTION, "return result as MCPCallResult", "return wrap(result as MCPCallResult)"),
+    ),
+)
+def test_dropping_environment_or_result_still_fails(
+    tmp_path: Path, path: str, old: str, new: str
+) -> None:
+    root, lock = _snapshot(tmp_path)
+    target = root / path
+    target.write_text(target.read_text().replace(old, new))
+    code, report = _check(root, lock, "current")
+    assert code != 0 and report["compatible"] is False
+
+
 @pytest.mark.parametrize(
     "declaration",
     (
