@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import shlex
+import subprocess
 from dataclasses import asdict
 from pathlib import Path
 from typing import Annotated
@@ -37,7 +38,10 @@ ModelCmdOption = Annotated[
 ModelLabelOption = Annotated[
     str,
     typer.Option(
-        "--model-label", help="Name for the model behind --model-cmd; part of the cache key."
+        "--model-label",
+        envvar="ARCHIV_MODEL_LABEL",
+        help="Name for the model behind --model-cmd. Answers are stored under this name and "
+        "reused, so change it whenever the command changes. Defaults to $ARCHIV_MODEL_LABEL.",
     ),
 ]
 
@@ -51,7 +55,25 @@ def _completer(model_cmd: str | None) -> Complete:
             err=True,
         )
         raise typer.Exit(2)
-    return command_completer(shlex.split(command))
+    run = command_completer(shlex.split(command))
+
+    def complete(prompt: str) -> str:
+        """Run the model command; when it fails, say so in a sentence instead of a traceback."""
+        try:
+            return run(prompt)
+        except subprocess.TimeoutExpired:
+            reason = "it did not answer in time"
+        except subprocess.CalledProcessError as error:
+            last = (error.stderr or "").strip().splitlines()[-1:]
+            reason = f"it ended with exit code {error.returncode}" + (
+                f" and said: {last[0][:300]}" if last else ""
+            )
+        except OSError as error:
+            reason = f"it could not be started ({error})"
+        typer.echo(f"The model command failed: {reason}. Command: {command}", err=True)
+        raise typer.Exit(1)
+
+    return complete
 
 
 def _embedder() -> Embedder | None:
@@ -106,6 +128,14 @@ def build_command(
             f"Read {summary.documents} documents with no model. The memory now holds "
             f"{summary.things} things and {summary.relations} relations."
         )
+        if summary.earlier_merges:
+            typer.echo(
+                f"{summary.earlier_merges} pairs of written forms that a model confirmed to be "
+                "the same thing in an earlier build are still in force. The only way to drop "
+                "them today is to delete indexes/memory.sqlite3 in the archive home and build "
+                "again, and that also deletes every model answer stored there, so a later "
+                "build with a model would pay for all of them again."
+            )
         return
     summary = build_memory(
         home=home,
@@ -162,6 +192,7 @@ def ask_command(
                     "sources": sources,
                     "unknown_labels": report.unknown_labels,
                     "uncited_sentences": report.uncited_sentences,
+                    "notes": report.notes,
                 },
                 indent=2,
                 ensure_ascii=False,
@@ -183,6 +214,8 @@ def ask_command(
         typer.echo(
             f"\nWarning: {report.uncited_sentences} sentence(s) in the report have no source."
         )
+    for note in report.notes:
+        typer.echo(f"\nNote: {note}")
 
 
 @memory_app.command("probe")
@@ -223,6 +256,7 @@ def probe_command(
             )
         if report.uncited_sentences:
             lines.append(f"\nWarning: {report.uncited_sentences} sentence(s) have no source.")
+        lines += [f"\nNote: {note}" for note in report.notes]
         lines += ["", "## What plain search finds", ""]
         for result in search_documents(probe.form, home=home, limit=20):
             c = result.citation

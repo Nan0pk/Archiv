@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import sqlite3
-from collections.abc import Generator
+from collections.abc import Generator, Iterable
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -65,6 +65,28 @@ def cached(conn: sqlite3.Connection, key: str) -> str | None:
 
 def remember(conn: sqlite3.Connection, key: str, text: str) -> None:
     conn.execute("INSERT OR REPLACE INTO outputs (key, text) VALUES (?, ?)", (key, text))
+
+
+# Not a hash, so it can never be the key of a stored model answer.
+_BUILT_FOR = "the passages this memory was built for"
+
+
+def passages_mark(segment_ids: Iterable[str]) -> str:
+    """One value that changes whenever a passage is added, removed or reworded."""
+    digest = hashlib.sha256()
+    for segment_id in sorted(set(segment_ids)):
+        digest.update(segment_id.encode("utf-8") + b"\n")
+    return digest.hexdigest()
+
+
+def record_built(conn: sqlite3.Connection, segment_ids: Iterable[str]) -> None:
+    """Note which passages the build that just ran covered, so a question can tell later."""
+    remember(conn, _BUILT_FOR, passages_mark(segment_ids))
+
+
+def built_for(conn: sqlite3.Connection) -> str | None:
+    """The mark of the passages the last build covered, or None when none was recorded."""
+    return cached(conn, _BUILT_FOR)
 
 
 def thing_id_for(conn: sqlite3.Connection, form: str) -> int:
