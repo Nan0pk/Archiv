@@ -414,6 +414,22 @@ whatever the workflow list suggests.
   handshake in its connection manager. The probe does not instantiate that manager and
   does not exercise discovery or its restart fallback. A passing classic-handshake test
   does not establish compatibility of those paths or the complete desktop workbench.
+- **2026-11-13: second drift, two more checks.** The job was already failing on
+  2026-11-11 on `stdio_transport:...process.env` and
+  `mcp_connection:return result as MCPCallResult`. The CoWork revision read to find out
+  why was `main` at `a9cbb87`; which CoWork commit introduced the change was not looked up.
+  There, `StdioTransport.ts` writes `...withoutVaultTokens(process.env)`: the server process
+  gets the inherited environment without `OP_SERVICE_ACCOUNT_TOKEN`, `OP_CONNECT_TOKEN`,
+  `BWS_ACCESS_TOKEN`, `BW_SESSION`, `BW_CLIENTID`, `BW_CLIENTSECRET`, `BW_PASSWORD` and any
+  name starting with `OP_SESSION_` (sign-in tokens of two password managers), and then the
+  server's own `env`. Nothing under `src/archiv` reads any of those names.
+  `MCPServerConnection.ts` writes `return redactMcpCallResult(result as MCPCallResult)`:
+  the result is returned, and text in it that equals a value CoWork fetched from a password
+  manager is masked. The checker now accepts these two spellings as well as the pinned
+  ones, and nothing looser. It does not test those two functions themselves. On the pull
+  request that made this change, the `current CoWork compatibility` job checked out CoWork
+  `a9cbb87` and every step passed, including the transport probe and the check of its
+  evidence outside CoWork. The lock was not changed.
 - Future upstream drift can still fail this early-warning check; investigate it rather
   than skipping the job. Changing the pinned revision remains a separate manual decision.
 
