@@ -146,7 +146,8 @@ COMMAND_GROUPS: list[tuple[str, str, list[str]]] = [
         "`archiv add ./folder`, then `archiv memory build`, then "
         '`archiv memory ask "your question" --model-cmd "<a command that reads a prompt on '
         'standard input and prints the answer>" --model-label <its name>`. Setting '
-        "`ARCHIV_MODEL_CMD` and `ARCHIV_MODEL_LABEL` once saves typing both each time. "
+        "`ARCHIV_MODEL_CMD` and `ARCHIV_MODEL_LABEL` once saves typing both each time; answers are "
+        "stored under that name, so change it when the command changes. "
         "The meaning vectors "
         "need the embedding model files to be on this machine already, in the folder named by "
         "`ARCHIV_EMBED_CACHE` (the default, `/tmp/fastembed_cache`, is cleared on reboot on many "

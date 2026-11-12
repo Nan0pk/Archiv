@@ -793,7 +793,8 @@ Archiv cannot yet use Typer 0.29 or later. Until it does, installs stay on 0.28.
   same thing. If a collection was first built with `--model-label`, those confirmations stay
   in force and keep joining those names wherever the new build finds them again. The plain
   build now says how many such confirmations are still in force. Start a fresh home (or delete
-  `indexes/memory.sqlite3`) when switching between the two builds.
+  `indexes/memory.sqlite3`) when switching between the two builds. Deleting that file also
+  deletes every model answer stored in it, so a later build with a model pays for them again.
 
 ## Memory: a question on a very large collection takes about 20 seconds before the model
 
@@ -828,6 +829,12 @@ Archiv cannot yet use Typer 0.29 or later. Until it does, installs stay on 0.28.
   meaning vectors or they could not be used, when some passages have no vector, when the model's
   first answer could not be read, and when the model returned no report. `archiv memory probe`
   writes the same notes into each probe file.
+- Text added after the last build can be left out of an answer even when it holds the exact
+  words asked for. When meaning vectors are in use, exact matches are ordered by how close their
+  vector is to the question, a passage with no vector is placed last, and only the first of
+  them fit. The note says the answer may be missing something; it does not say what.
+- Answers are stored under the model name (`--model-label` or `ARCHIV_MODEL_LABEL`). If the
+  command is changed and the name is not, answers from the earlier model are reused.
 - A memory built before this was added carries no record of what it covered. A question then
   says that it cannot be checked, once per question, until `archiv memory build` is run again.
 - The record is of which passages existed at build time. It does not notice a memory database

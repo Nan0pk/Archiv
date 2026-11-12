@@ -517,8 +517,8 @@ def _memory_notes(conn: sqlite3.Connection, by_id: dict[str, Passage]) -> list[s
         ]
     if built != passages_mark(by_id):
         return [
-            "Documents were added or changed after the memory was built. Their text is found "
-            "by its exact words only until `archiv memory build` is run again."
+            "Documents were added or changed after the memory was built. What they say may be "
+            "missing from this answer until `archiv memory build` is run again."
         ]
     return []
 
@@ -589,8 +589,8 @@ def ask(
                 without = len(by_id.keys() - set(stored.ids))
                 if without and current:
                     notes.append(
-                        f"{without} passages have no meaning vector and were found by their "
-                        "words and names only. Run `archiv memory build` again."
+                        f"{without} passages have no meaning vector, so what they say may be "
+                        "missing from this answer. Run `archiv memory build` again."
                     )
             else:
                 notes.append(

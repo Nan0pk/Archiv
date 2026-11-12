@@ -105,7 +105,10 @@ def test_passages_without_a_vector_are_counted(tmp_path: Path) -> None:
     ingest_file(late, home=home)
     rebuild_search_index(home=home)
     build_memory_offline(home=home)  # the names are current again, the vectors are not
-    _one(_ask(home, HashEmbedder()), "1 passages have no meaning vector")
+    _one(
+        _ask(home, HashEmbedder()),
+        "1 passages have no meaning vector, so what they say may be missing",
+    )
 
 
 def test_a_first_answer_that_cannot_be_read_is_reported(tmp_path: Path) -> None:

@@ -40,8 +40,8 @@ ModelLabelOption = Annotated[
     typer.Option(
         "--model-label",
         envvar="ARCHIV_MODEL_LABEL",
-        help="Name for the model behind --model-cmd; part of the cache key. "
-        "Defaults to $ARCHIV_MODEL_LABEL.",
+        help="Name for the model behind --model-cmd. Answers are stored under this name and "
+        "reused, so change it whenever the command changes. Defaults to $ARCHIV_MODEL_LABEL.",
     ),
 ]
 
@@ -131,8 +131,10 @@ def build_command(
         if summary.earlier_merges:
             typer.echo(
                 f"{summary.earlier_merges} pairs of written forms that a model confirmed to be "
-                "the same thing in an earlier build are still in force. To drop them, delete "
-                "indexes/memory.sqlite3 in the archive home and build again."
+                "the same thing in an earlier build are still in force. The only way to drop "
+                "them today is to delete indexes/memory.sqlite3 in the archive home and build "
+                "again, and that also deletes every model answer stored there, so a later "
+                "build with a model would pay for all of them again."
             )
         return
     summary = build_memory(
