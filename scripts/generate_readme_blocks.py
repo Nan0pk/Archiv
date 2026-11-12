@@ -145,7 +145,9 @@ COMMAND_GROUPS: list[tuple[str, str, list[str]]] = [
         "where document text goes; see the privacy section of the README. A first run: "
         "`archiv add ./folder`, then `archiv memory build`, then "
         '`archiv memory ask "your question" --model-cmd "<a command that reads a prompt on '
-        'standard input and prints the answer>" --model-label <its name>`. The meaning vectors '
+        'standard input and prints the answer>" --model-label <its name>`. Setting '
+        "`ARCHIV_MODEL_CMD` and `ARCHIV_MODEL_LABEL` once saves typing both each time. "
+        "The meaning vectors "
         "need the embedding model files to be on this machine already, in the folder named by "
         "`ARCHIV_EMBED_CACHE` (the default, `/tmp/fastembed_cache`, is cleared on reboot on many "
         "systems, so set it to a folder that stays); Archiv never downloads them. Without them "

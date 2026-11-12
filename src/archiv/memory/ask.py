@@ -16,7 +16,7 @@ from archiv.memory.extract import first_json_object, ident
 from archiv.memory.merge import canonical_ids
 from archiv.memory.model import Complete
 from archiv.memory.passages import Passage, count_literal_passages, load_passages
-from archiv.memory.store import cache_key, cached, open_memory, remember
+from archiv.memory.store import built_for, cache_key, cached, open_memory, passages_mark, remember
 from archiv.memory.vectors import Embedder, VectorIndex, vectors_match
 from archiv.search.index import search_index_path
 from archiv.search.retrieval import derive_query_variants
@@ -496,6 +496,31 @@ class Report:
     unknown_labels: list[str]
     uncited_sentences: int
     labels: list[int] = field(default_factory=lambda: list[int]())
+    # Plain sentences about anything this answer had to do without (a memory that is out of date,
+    # meaning vectors that could not be used, a model step that gave nothing usable).
+    notes: list[str] = field(default_factory=lambda: list[str]())
+
+
+def _memory_notes(conn: sqlite3.Connection, by_id: dict[str, Passage]) -> list[str]:
+    """What to tell the user when the memory does not cover the collection as it is now."""
+    built = built_for(conn)
+    if built is None:
+        if conn.execute("SELECT 1 FROM things LIMIT 1").fetchone() is None:
+            return [
+                "The memory has not been built for this collection, so passages were found by "
+                "their exact words only. Run `archiv memory build` first."
+            ]
+        return [
+            "This memory was built by an earlier version of Archiv that did not record which "
+            "documents it covered, so it cannot be checked against the collection. Run "
+            "`archiv memory build` once."
+        ]
+    if built != passages_mark(by_id):
+        return [
+            "Documents were added or changed after the memory was built. Their text is found "
+            "by its exact words only until `archiv memory build` is run again."
+        ]
+    return []
 
 
 def check_report(answer: str, passages: list[Passage]) -> Report:
@@ -540,13 +565,40 @@ def ask(
     layout = ArchivLayout.resolve(home)
     with open_memory(layout) as conn:
         by_id = {p.segment_id: p for p in load_passages(home)}
+        notes = _memory_notes(conn, by_id)
+        current = not notes
         vectors: VectorIndex | None = None
         question_vec = None
         base = passage_vectors_base(layout)
-        if embedder is not None and Path(f"{base}.ids.json").is_file():
+        if not Path(f"{base}.ids.json").is_file():
+            if current:
+                notes.append(
+                    "This memory has no meaning vectors, so passages were found by their words "
+                    "and names only. `archiv memory build` makes them when the embedding model "
+                    "is on this machine."
+                )
+        elif embedder is None:
+            notes.append(
+                "The meaning vectors on disk were not used because the embedding model could "
+                "not be loaded. Passages were found by their words and names only."
+            )
+        else:
             stored = VectorIndex.load(base)
             if vectors_match(stored, embedder):
                 vectors, question_vec = stored, embedder.embed([question])[0]
+                without = len(by_id.keys() - set(stored.ids))
+                if without and current:
+                    notes.append(
+                        f"{without} passages have no meaning vector and were found by their "
+                        "words and names only. Run `archiv memory build` again."
+                    )
+            else:
+                notes.append(
+                    "The meaning vectors on disk were made by a different embedding model, or by "
+                    "different weight files of the same model, and were not used. Passages were "
+                    "found by their words and names only. Run `archiv memory build` to make "
+                    "them again."
+                )
         # Show the entry step what this collection says near the question, so that a term is
         # read the way the collection uses it and not the way everyday use does.
         samples: list[str] = []
@@ -563,6 +615,11 @@ def ask(
             answer = complete(prompt)
             if first_json_object(answer) is not None:
                 remember(conn, key, answer)
+        if first_json_object(answer) is None:
+            notes.append(
+                "The model's first answer could not be read, so only the question's own words "
+                "were searched and no other names for its subject."
+            )
         forms = parse_entry(answer)
         # The first step says which words of the question name its subject. Those words, once
         # checked against the question, are what is searched as the question's own words (so
@@ -586,11 +643,16 @@ def ask(
             own=(question_terms(asked) if asked else []) or question_terms(question),
         )
         if not found:
-            return Report(nothing_found(forms), [], [], 0)
+            return Report(nothing_found(forms), [], [], 0, notes=notes)
         prompt = exit_prompt(question, found, literal_totals(home, forms, found))
         key = cache_key(question, model_label, EXIT_PROMPT_VERSION, prompt)
         answer = cached(conn, key)
         if answer is None:
             answer = complete(prompt)
-            remember(conn, key, answer)
-    return check_report(answer, found)
+            if answer.strip():  # an empty answer is not kept, so the next try asks again
+                remember(conn, key, answer)
+    report = check_report(answer, found)
+    if not report.text:
+        notes.append("The model returned no report text. Nothing was answered; try again.")
+    report.notes = notes
+    return report
