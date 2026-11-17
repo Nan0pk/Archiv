@@ -33,5 +33,6 @@ absence of findings is not proof of safety.
 6. For compromise, stop distribution, revoke/rotate credentials, publish corrected signed
    artifacts and an advisory, and never silently replace an existing release asset.
 
-The repository workflow implements provenance and attestation scaffolding; maintainers are
+The release workflow creates the GitHub release as a draft, so step 5 can be done before
+anyone can download it; a maintainer publishes it after verifying. The repository workflow implements provenance and attestation scaffolding; maintainers are
 responsible for protected environments and signing identities in repository settings.
