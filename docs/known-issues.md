@@ -317,55 +317,31 @@ to its status claims) has still not been line-by-line audited against what the c
 so read its content as a record of what was intended, not of what was delivered — only the
 completion claim itself is now corrected.
 
-## Code scanning has never run: every CodeQL workflow run fails before it starts
+## Code scanning: the old startup failures, and the three warnings it now reports
 
-`.github/workflows/codeql.yml` has run 87 times and failed 87 times, every one with the
-conclusion `startup_failure`, from its very first run through the current head of `main`.
-A `startup_failure` means GitHub rejected the run before creating any job, so there are no
-logs and no steps to read. Nothing was ever scanned. The failure is silent in the way that
-matters: a workflow that never starts looks quiet on the pull request rather than red, so
-this went unnoticed while every other gate was being enforced strictly.
+`.github/workflows/codeql.yml` ran once and succeeded, on 2026-07-30 on the commit that
+added it (`c3a8c3b`), with zero results. Every run after that until 2026-11-12 ended in
+`startup_failure`: GitHub refused it before any job started, so nothing was scanned. The
+cause is on the runs' own web pages (not in the API): the steps
+`github/codeql-action/init@<sha>` and `github/codeql-action/analyze@<sha>` were "not
+allowed" under the repository's allowed-actions patterns, which then were `actions/*` and
+`github/codeql-action@*`; the second does not cover an action in a sub-folder of that
+repository. Code scanning default setup was ruled out (`code-scanning/default-setup`
+reports `not-configured`). The allow-list now also has `github/codeql-action/*`, and the
+workflow has run and finished on `main` since 2026-11-16 (the scheduled run on `ec21072`,
+then the push of `c4b9cf6`).
 
-Two candidate causes in the workflow file were checked and ruled out. That is not the
-same as clearing the file entirely — other workflow-level conditions were not examined:
+Its first scans reported three warnings, all in test or harness code, not in `src/archiv`.
+They were still open on GitHub as of 2026-11-17; dismissing them (reasons below) is a repository-settings step:
 
-- The file is valid YAML and parses cleanly.
-- It pins `actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1`, the same commit
-  pinned by `fast-checks.yml`, `office-validation.yml`, `field-trial.yml`,
-  `offline-alpha.yml` and `mcp-validation.yml`, all of which run and pass.
-
-What is established is narrower than a diagnosis: every observed run fails before a job
-starts, the committed workflow parses, and its checkout pin is known good elsewhere. Where
-the block actually sits is not established.
-
-The leading hypothesis is code scanning **default setup** being enabled. GitHub then refuses
-to start any repository CodeQL analysis workflow, and the refusal appears as
-`startup_failure` with no job, which matches this signature.
-
-The sibling Rush-linux repository, under the same owner, supports this. Its code scanning
-runs as a workflow named for the pull request with the path
-`dynamic/github-code-scanning/codeql` and the event type `dynamic` — that is default setup,
-not a committed file — and it runs normally. Rush-linux has no `codeql.yml` of its own to
-collide with it. Archiv has one, and Archiv's is the one that never starts. Two repositories
-under one owner, one with default setup and no file, the other with a file and nothing but
-`startup_failure`, is the pattern default setup produces.
-
-It is still not confirmed for Archiv specifically. Repository code-scanning settings cannot
-be read through the interfaces available to an agent session here, and no equivalent
-`dynamic` run was observed in Archiv's history — though that absence proves little, since
-the query that would have isolated it does not filter by event type.
-
-Confirming it takes one look, at **Settings → Code security → Code scanning**:
-
-- If default setup is enabled, then scanning is running after all but this workflow is
-  redundant. Delete `.github/workflows/codeql.yml` so the repository stops logging a failed
-  run on every push to `main`.
-- If default setup is not enabled, then nothing is scanning this code and the cause is
-  something else — most likely an Actions permissions policy blocking `github/codeql-action`.
-  The workflow's own run page names the reason where the runs list does not.
-
-Until one of those is done, treat this repository as having **no static security analysis**,
-whatever the workflow list suggests.
+- `py/incomplete-url-substring-sanitization`, twice, in
+  `tests/test_remote_evaluation_provenance.py` and `tests/test_remote_evaluation_adapter.py`.
+  Both lines are test assertions that a warning message names `api.openai.com`; neither
+  sanitizes a URL. False positives.
+- `py/polynomial-redos` in `scripts/field_trial/fixtures.py`, the stand-in model server the
+  field trial uses. Only the public trial starts that server (`run_public_trial`), so its
+  regular expression only reads prompts Archiv builds from the generated corpus and the
+  benchmark's questions. No user text reaches that regular expression.
 
 ## OpenDocument and InPage UTF-16 XML declaration bypass repaired in S16A
 
@@ -430,6 +406,8 @@ whatever the workflow list suggests.
   request that made this change, the `current CoWork compatibility` job checked out CoWork
   `a9cbb87` and every step passed, including the transport probe and the check of its
   evidence outside CoWork. The lock was not changed.
+- **2026-11-17:** after [#282](https://github.com/Nan0pk/Archiv/pull/282) the job passes
+  on `main` again; the whole `Field trial` workflow succeeded on `c4b9cf6`.
 - Future upstream drift can still fail this early-warning check; investigate it rather
   than skipping the job. Changing the pinned revision remains a separate manual decision.
 
