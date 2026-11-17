@@ -17,6 +17,7 @@ artifacts are untrusted. Archiv is local-first, not a sandbox or malware scanner
 | Report-template injection | Document/model text becomes template syntax, HTML, fields, links, or formulas. | Treat values as data, use fixed bundled templates and context-aware escaping, disallow active links/macros, and validate rendered reports. Visual deception remains possible. |
 | Unsafe desktop opening | Preview/open actions invoke a shell, handler, or active office content. | Never shell-interpolate paths; require explicit user action; open only generated inert previews/reports with argument arrays; warn before handing originals to another application. Desktop handlers are outside Archiv's boundary. |
 | Installer compromise | A release, dependency, CI runner, or signing identity supplies altered code. | Protected release workflow, pinned actions/dependencies, signed tags/artifacts, checksums, SLSA provenance, least-privilege CI, and independent verification. Account or runner compromise remains possible. |
+| Converter exploit | A damaged legacy `.ppt` handed to LibreOffice exploits it, reaches the network, or writes outside its folder. | LibreOffice is used only for a `.ppt` our own reader refuses because a record extends past its container, and only inside bubblewrap: no network and no shared IPC, process list or host name; the system mounted read-only; `/run` (the user's session bus and service-manager sockets), `/home`, `/mnt`, `/media`, `/tmp` and `/var/tmp` replaced by empty folders; an environment holding only `PATH`, the locale, a private home and `GSETTINGS_BACKEND`; a private profile and output folder deleted afterwards; and the budget below. Checked: from inside, connecting to the session bus and to the service manager's socket fails, the user's files are not visible, and a timed-out conversion leaves no LibreOffice process behind. Without both LibreOffice and `bwrap` the file stays refused. Text it yields is labelled `origin: libreoffice_conversion`. A LibreOffice defect can still corrupt or misread that one file's text, and bubblewrap shares the kernel. |
 | Durable-state tampering | SQLite rows, originals, derived files, or ledgers are replaced, rolled back, or partially written. | Read-only content-addressed originals, atomic writes, schema constraints, recorded hashes, integrity checks, and rebuildable derived data. Local rollback requires an external trusted backup/checkpoint to detect. |
 
 ## Enforced resource budget
@@ -28,6 +29,12 @@ artifacts are untrusted. Archiv is local-first, not a sandbox or malware scanner
 be lower. An exceeded boundary raises a named error and the CLI must show it. Validation
 happens before `_store_original`, so rejected material cannot create or replace a canonical
 original. Derivation never writes to the original and post-processing hashes detect change.
+
+One declared exception: the LibreOffice conversion of a damaged `.ppt`
+(`src/archiv/ingestion/ppt_libreoffice.py`) gets 60 CPU seconds, 4 GiB of address space and
+180 seconds wall time. LibreOffice reserves far more address space than it uses: on 33 real
+damaged files it needed at most 10.1 CPU seconds and 971 MB resident, but it could not start
+at 1 GiB of address space and failed on 15 of the 33 at 2 GiB.
 
 ## Security verification
 

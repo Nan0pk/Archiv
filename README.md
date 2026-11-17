@@ -251,7 +251,7 @@ are never quietly accepted and half-read.
 | Excel | `.xlsx` | 🟡 Partial | Read directly | Charts, images, comments and pivot state are not read |
 | Excel, old format | `.xls` | 🟡 Partial | Read directly | Only the last calculated value of a formula; no charts |
 | PowerPoint | `.pptx` | ✅ Full | Read directly | Hidden slides are read and marked; alt text, comments and SmartArt are not read |
-| PowerPoint, old format | `.ppt` | 🟡 Partial | Read directly | No speaker notes or animation; slide numbers may differ after edits |
+| PowerPoint, old format | `.ppt` | 🟡 Partial | Read directly | No speaker notes or animation; slide numbers may differ after edits; damaged files are read through sandboxed LibreOffice when it is installed |
 | OpenDocument text | `.odt` `.ott` `.odm` `.otm` `.fodt` | ✅ Full | Read directly | Layout, frames and styles are not rebuilt |
 | OpenDocument spreadsheet | `.ods` `.ots` `.fods` | 🟡 Partial | Read directly | Charts and pivot state are not read |
 | OpenDocument presentation | `.odp` `.otp` `.fodp` | 🟡 Partial | Read directly | Chart values are not read; hidden slides are read and marked |
@@ -382,6 +382,7 @@ The installer also brings in a handful of system packages. Here is what each is 
 | Package | What it enables | If it's missing |
 | --- | --- | --- |
 | `libreoffice-writer` | Rendering and validating Word and PDF reports | `archiv report` cannot complete its verification step |
+| `libreoffice-impress` (with `bubblewrap`) | Reading old `.ppt` files our own reader refuses as damaged, converted inside a sandbox with no network | Those files stay refused |
 | `tesseract` + `tesseract-langpack-eng`, `-ara`, `-urd` | Reading scans and photos in English, Arabic and Urdu | Pictures are kept but produce no text |
 | `python3-tkinter` | The desktop application | `archiv ui` won't open; every command still works in the terminal |
 | `xdg-utils`, `bubblewrap` | Desktop integration and sandboxing | Reduced integration |

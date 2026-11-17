@@ -72,7 +72,7 @@ if ((SKIP_SYSTEM_PACKAGES == 0)); then
     DNF=(sudo dnf)
   fi
   "${DNF[@]}" install -y --setopt=install_weak_deps=False \
-    python3 python3-pip python3-tkinter xdg-utils libreoffice-writer \
+    python3 python3-pip python3-tkinter xdg-utils libreoffice-writer libreoffice-impress \
     poppler-utils curl tar gzip \
     tesseract tesseract-langpack-eng tesseract-langpack-ara \
     tesseract-langpack-urd bubblewrap

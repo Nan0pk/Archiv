@@ -24,6 +24,7 @@ from archiv.ingestion.normalize_office import normalize_pptx
 from archiv.ingestion.normalize_rtf import normalize_rtf
 from archiv.ingestion.normalize_svg import normalize_svg
 from archiv.ingestion.normalize_xlsx import normalize_xlsx
+from archiv.ingestion.ppt_libreoffice import FALLBACK_REASON, convert_rejected_ppt
 
 # Known binary signatures that must never appear in plain-text documents
 KNOWN_BINARY_SIGNATURES: tuple[bytes, ...] = (
@@ -115,7 +116,14 @@ def _norm_xlsx(
 def _norm_ppt(
     path: Path, digest: str, *, source_name: str, media_type: str, kind: str
 ) -> NormalizedDocument:
-    return normalize_ppt(path, digest, source_name=source_name, media_type=media_type)
+    try:
+        return normalize_ppt(path, digest, source_name=source_name, media_type=media_type)
+    except ValueError as error:
+        if str(error) != FALLBACK_REASON:
+            raise
+        return convert_rejected_ppt(
+            path, digest, source_name=source_name, media_type=media_type, rejection=error
+        )
 
 
 def _norm_pptx(

@@ -4,6 +4,11 @@
 
 ### User-facing
 
+- Old `.ppt` files our own reader refuses as damaged (a record longer than the record holding
+  it) are now read through LibreOffice inside a bubblewrap sandbox with no network; their text is
+  labelled `origin: libreoffice_conversion`. The Fedora installer adds `libreoffice-impress`.
+- A memory question follows the web one step out from its starting names by default (faster;
+  same exact-word and other-form passages on the measuring kit).
 - Updated the documented project maturity from pre-alpha to alpha without changing the
   independent security-review gate or operational warnings.
 - Added a task-oriented desktop application for library setup, ingestion, search, grounded
