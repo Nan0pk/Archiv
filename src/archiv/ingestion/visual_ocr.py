@@ -18,6 +18,7 @@ from PIL import Image
 from archiv.contracts import NormalizedDocument, NormalizedSegment
 from archiv.hashing import sha256_file
 from archiv.ingestion.limits import MAX_CPU_SECONDS, MAX_MEMORY_BYTES, MAX_SUBPROCESSES
+from archiv.ingestion.sandbox import SANDBOX_ARGUMENTS, sandbox_environment
 
 OCR_PROCESSOR_VERSION = "1"
 MAX_INPUT_BYTES = 200 * 1024 * 1024
@@ -128,23 +129,13 @@ def _run(
         bubblewrap = shutil.which("bwrap")
         if bubblewrap is not None:
             writable = root.resolve()
-            wrapped = [
-                bubblewrap,
-                "--unshare-net",
-                "--die-with-parent",
-                "--new-session",
-                "--ro-bind",
-                "/",
-                "/",
-                "--dev",
-                "/dev",
-                "--proc",
-                "/proc",
-                "--tmpfs",
-                "/tmp",
-            ]
-            # --tmpfs /tmp masks the earlier --ro-bind / / for anything under /tmp,
-            # including inputs whose real path (e.g. ARCHIV_HOME under /tmp) lies
+            wrapped = [bubblewrap, *SANDBOX_ARGUMENTS]
+            # A language-data folder the user named may sit under a hidden folder.
+            tessdata = os.environ.get("TESSDATA_PREFIX")
+            if tessdata and Path(tessdata).is_dir():
+                resolved_data = Path(tessdata).resolve()
+                wrapped += ["--ro-bind", str(resolved_data), str(resolved_data)]
+            # The hidden folders (/tmp, /home, ...) mask inputs whose real path lies
             # outside the writable root re-bound below. Re-expose those explicitly.
             for extra in extra_ro_binds:
                 resolved = extra.resolve()
@@ -162,7 +153,9 @@ def _run(
         elif mode == "required":
             raise VisualOcrError("bubblewrap is required but not installed")
 
-    environment = os.environ.copy()
+    environment = (
+        sandbox_environment(str(root.resolve())) if sandbox != "none" else os.environ.copy()
+    )
     environment.setdefault("OMP_THREAD_LIMIT", "2")
 
     def apply_resource_limits() -> None:

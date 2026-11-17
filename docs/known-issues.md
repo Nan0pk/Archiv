@@ -867,18 +867,22 @@ Archiv cannot yet use Typer 0.29 or later. Until it does, installs stay on 0.28.
 - Slide and shape numbers come from the converted file, so they may differ from the numbers
   our own reader would give an undamaged copy of the same deck.
 
-## The OCR sandbox can still see the user's session and files
+## The OCR sandbox could see the user's session and files (fixed in 0.1.0a7)
 
-- `src/archiv/ingestion/visual_ocr.py` runs Tesseract and the PDF renderer inside bubblewrap
+- `src/archiv/ingestion/visual_ocr.py` ran Tesseract and the PDF renderer inside bubblewrap
   with no network, but with the whole system visible read-only and the parent's environment.
-  Checked on 2026-11-18 with the same arguments: from inside, a process could connect to the
-  user's session bus (`/run/user/<uid>/bus`) and the service manager's socket, and could read
-  files under `/home` and `/mnt`. A program that took over the OCR tool through a hostile
-  image could therefore ask the user's session to start something outside the sandbox.
-- The LibreOffice conversion of damaged `.ppt` files (`ppt_libreoffice.py`) already hides
-  those folders and passes a minimal environment; the OCR runner should get the same
-  treatment. Not done yet.
-
+  Checked on 2026-11-18: from inside, a process could connect to the user's session bus
+  (`/run/user/<uid>/bus`) and the service manager's socket, and read files under `/home` and
+  `/mnt`, so a program that took over the OCR tool through a hostile image could have asked
+  the user's session to start something outside the sandbox.
+- Both external tools now share `src/archiv/ingestion/sandbox.py`: `/run`, `/home`, `/mnt`,
+  `/media`, `/tmp` and `/var/tmp` are hidden, IPC, process list and host name are not
+  shared, and the environment holds only `PATH`, the locale, `TESSDATA_PREFIX`,
+  `OMP_THREAD_LIMIT` and a private `HOME`. Inputs and the work folder are bound back in, and a
+  `TESSDATA_PREFIX` folder is exposed read-only. On ten local images and PDFs with the archive
+  under `/home`, every derived `document.json` was byte-identical before and after
+  (`tests/test_sandbox_hides_session.py` checks the hiding). `ARCHIV_OCR_SANDBOX=off` still
+  runs the tools without a sandbox and with the full environment, as before.
 ## Plain text that is not UTF-8 is refused
 
 - A `.txt` or `.md` file must decode as UTF-8; anything else is refused, as before. In a

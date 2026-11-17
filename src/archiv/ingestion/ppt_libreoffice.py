@@ -20,6 +20,7 @@ from pathlib import Path
 from archiv.contracts import NormalizedDocument, NormalizedSegment
 from archiv.ingestion.limits import check_input
 from archiv.ingestion.normalize_office import normalize_pptx
+from archiv.ingestion.sandbox import SANDBOX_ARGUMENTS, sandbox_environment
 
 # Measured on 33 real rejected files: at most 10.1 CPU seconds and 971 MB resident.
 # LibreOffice reserves far more address space than it uses; below 4 GiB of address space
@@ -27,36 +28,6 @@ from archiv.ingestion.normalize_office import normalize_pptx
 LIBREOFFICE_CPU_SECONDS = 60
 LIBREOFFICE_ADDRESS_SPACE_BYTES = 4 * 1024 * 1024 * 1024
 LIBREOFFICE_WALL_SECONDS = 180
-
-# No network, IPC, process or host-name sharing; the system read-only; and the folders that
-# hold the user's session sockets (/run), files and collections (/home, /mnt, /media) hidden.
-SANDBOX_ARGUMENTS = (
-    "--unshare-net",
-    "--unshare-ipc",
-    "--unshare-pid",
-    "--unshare-uts",
-    "--die-with-parent",
-    "--new-session",
-    "--ro-bind",
-    "/",
-    "/",
-    "--dev",
-    "/dev",
-    "--proc",
-    "/proc",
-    "--tmpfs",
-    "/tmp",
-    "--tmpfs",
-    "/var/tmp",
-    "--tmpfs",
-    "/run",
-    "--tmpfs",
-    "/home",
-    "--tmpfs",
-    "/mnt",
-    "--tmpfs",
-    "/media",
-)
 
 ORIGIN = "libreoffice_conversion"
 FALLBACK_REASON = "PPT record extends past its container"
@@ -126,11 +97,7 @@ def convert_rejected_ppt(
             str(work / "out"),
             str(source),
         ]
-        # Only what LibreOffice needs; nothing that points at the user's session.
-        environment = {
-            key: os.environ[key] for key in ("PATH", "LANG", "LC_ALL") if key in os.environ
-        }
-        environment["HOME"] = str(work / "home")
+        environment = sandbox_environment(str(work / "home"))
         environment["GSETTINGS_BACKEND"] = "memory"
         try:
             completed = subprocess.run(
@@ -200,7 +167,7 @@ def _libreoffice_version(office: str, bubblewrap: str) -> str:
             text=True,
             encoding="utf-8",
             errors="replace",
-            env={"PATH": os.environ.get("PATH", ""), "HOME": str(home)},
+            env=sandbox_environment(str(home)),
             timeout=60,
             preexec_fn=_limits,
         )

@@ -27,6 +27,12 @@ two-person privacy review in `docs/definition-of-done.md`. Audio, video and the 
 - Text derived from some PDFs can change after `rebuild-derived`, because pypdf 7 reads a few
   pages differently; saved answers citing those pages may then stop validating.
 
+### Sandboxing
+
+- OCR now runs in the same stricter sandbox as the LibreOffice conversion: it can no longer
+  reach the user's session bus or see files under `/home`, `/mnt` or `/media`, and gets only
+  a minimal environment.
+
 ### Institutional memory (`archiv memory`, new)
 
 - `archiv memory build` makes a web of the things a collection names (repeated phrases,
