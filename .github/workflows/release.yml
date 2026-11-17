@@ -39,5 +39,7 @@ jobs:
         with:
           # Every 0.1.0aN tag so far is an alpha; remove this for a stable release.
           prerelease: true
+          # docs/security/maintenance.md step 5: verify the assets before publishing the draft.
+          draft: true
           files: |
             dist/*
