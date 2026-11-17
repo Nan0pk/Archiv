@@ -790,12 +790,25 @@ Archiv cannot yet use Typer 0.29 or later. Until it does, installs stay on 0.28.
   `indexes/memory.sqlite3`) when switching between the two builds. Deleting that file also
   deletes every model answer stored in it, so a later build with a model pays for them again.
 
-## Memory: a question on a very large collection takes about 20 seconds before the model
+## Memory: a question on a very large collection took 7 to 15 seconds before the model (measured on `6747d2b`)
 
 - On the largest collection measured (126,382 passages, 146,018 things, 4.9 million
-  connections) answering a question takes about 20 to 22 seconds and 3.4 GB before the report
-  step's model time is added, almost all of it the walk reading the connections. Every question
-  loads all passages into memory. See the design document, section 8, for the breakdown.
+  connections) answering a question took 7.4 to 14.7 seconds and 1.1 to 1.6 GB on four
+  questions before the report step's model time is added. Measured on `6747d2b` with the walk
+  going one step out from the starting names, which is the default since 2026-11-17; how that
+  time splits between loading and the walk was measured only for two steps. Every question
+  loads all passages into memory.
+- Two steps out (the earlier default, still available to code that calls `walk(hops=2)`)
+  took 20 to 22 seconds and 3.4 GB on the same collection, most of it the walk reading the
+  connections. On the measuring kit's question sets, replayed against a memory built from
+  spaCy names (not the repeated-phrase graph `archiv memory build` makes by default), one step
+  handed the same exact-word and other-form passages as two, no question lower. The rest of
+  the places moved in opposite directions on the two sets: passages reached only through the
+  web or by meaning 192.5 to 165 on the heavy set but 352 to 371 on the light set, and
+  passages holding only one word of a name 205 to 227.5 and 67 to 58.5. Whether reports read worse with one step was not judged: a blind comparison pack
+  was prepared and the owner chose the faster default without it. In that pack's 20 reports
+  (10 questions each way) sentences without a citation numbered 5 with one step and 2 with
+  two.
 - The passages are kept in a file next to the search index (`search.passages-40.json`). It is
   rewritten when the index file changes and is safe to delete. It holds a full copy of the
   passages' text outside the index, so deleting it is part of removing a collection from disk.

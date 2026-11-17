@@ -72,6 +72,20 @@ def test_walk_follows_relations_two_hops(tmp_path: Path) -> None:
     )
 
 
+def test_walk_goes_one_step_out_by_default(tmp_path: Path) -> None:
+    home = _built(tmp_path)
+    by_id = {p.segment_id: p for p in load_passages(home)}
+    with open_memory(ArchivLayout.resolve(home)) as conn:
+        texts = [
+            p.text
+            for p in walk(
+                conn, forms=["Alpha Works"], question_vec=None, vectors=None, by_id=by_id, home=home
+            )
+        ]
+    assert not any("Gamma Society now runs" in t for t in texts)
+    assert texts == [p.text for p in _walk(home, ["Alpha Works"], hops=1)]
+
+
 def test_walk_uses_merges(tmp_path: Path) -> None:
     home = _built(tmp_path)
     assert not any("Beta Trust later" in p.text for p in _walk(home, ["Alpha Group"], hops=1))

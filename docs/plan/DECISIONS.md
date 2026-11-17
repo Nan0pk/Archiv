@@ -263,3 +263,28 @@ handling and take priority over widening supported content.
 an actual model before beginning audio, video or face capabilities. A passing synthetic
 suite alone does not establish answer usefulness or beta readiness. Define that trial
 and its available corpus/model prerequisites explicitly when it becomes the next task.
+
+---
+
+## 13. A release candidate before audio, video and faces
+
+**Decided 2026-11-17 by the owner.** The next milestone is a tagged and published release
+candidate, `0.1.0a7`, not Phase D. Audio and video (S19 to S23) and the face steps (S24 to
+S27) wait until after it. The decision-12 trial before audio is therefore not run now; it
+stays the gate for S19 when that work resumes. Work on S19 that was paused on 2026-10-22
+lived only in a temporary folder and no longer exists; S19 starts from its stub.
+
+The owner also handed three choices to the agent working on the release, each to be made
+on measured evidence and stated in its pull request:
+
+- memory questions follow the web one step out from the starting names instead of two;
+- legacy `.ppt` files our reader rejects may be read through LibreOffice, sandboxed with no
+  network and a time limit, and marked with that origin;
+- plain-text files that are not UTF-8 may be read with a detected encoding, marked as a
+  guess with its confidence.
+
+Indexing spreadsheets by row rather than by cell was not handed over and stays open.
+
+**Why.** Beta readiness (`docs/definition-of-done.md`) needs owner-run trials on three
+hardware tiers and a two-person privacy review, which no agent session can do. A release
+candidate is the furthest point reachable without them.
