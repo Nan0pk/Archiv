@@ -51,13 +51,30 @@ def vectors_match(stored: VectorIndex, embedder: Embedder) -> bool:
     return not stored.weights or not current or stored.weights == current
 
 
+_EARLIER_FOLDER = Path("/tmp/fastembed_cache")  # the only default before; emptied on restart
+
+
+def embed_folders() -> list[Path]:
+    """The folders the embedding model files are looked for in, in order.
+
+    `ARCHIV_EMBED_CACHE` names the only one when it is set. Otherwise it is the user's cache
+    folder, which stays across restarts, and then the earlier default under /tmp, which many
+    systems empty on every restart.
+    """
+    named = os.environ.get("ARCHIV_EMBED_CACHE")
+    if named:
+        return [Path(named)]
+    cache = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache")
+    return [cache / "archiv" / "fastembed", _EARLIER_FOLDER]
+
+
 class FastEmbedder:
     """CPU embedder. It never downloads weights: they must already be on disk."""
 
     def __init__(self, model_name: str = DEFAULT_MODEL, cache_dir: Path | None = None) -> None:
         self.name = model_name
         self._weights: str | None = None
-        folder = cache_dir or Path(os.environ.get("ARCHIV_EMBED_CACHE", "/tmp/fastembed_cache"))
+        folders = [cache_dir] if cache_dir else embed_folders()
         try:
             # Loaded by name so that type checking works without the optional library.
             fastembed = importlib.import_module("fastembed")
@@ -66,15 +83,25 @@ class FastEmbedder:
                 "The meaning-vector library is not installed. "
                 "Install it with: pip install 'archiv-core[memory]'"
             ) from error
-        try:
-            self._model = fastembed.TextEmbedding(
-                model_name, cache_dir=str(folder), local_files_only=True
-            )
-        except Exception as error:
+        failure: Exception | None = None
+        for folder in folders:
+            # The library creates a folder it is pointed at and prints its own error lines when
+            # the model is not there, so a folder that is missing or empty is not tried at all.
+            if not folder.is_dir() or not any(folder.iterdir()):
+                continue
+            try:
+                self._model = fastembed.TextEmbedding(
+                    model_name, cache_dir=str(folder), local_files_only=True
+                )
+                break
+            except Exception as error:
+                failure = error
+        else:
+            looked = " and ".join(str(folder) for folder in folders)
             raise EmbedderUnavailable(
-                f"The embedding model '{model_name}' is not on this machine (looked in {folder}). "
-                "Archiv never downloads models by itself. Place the model there first."
-            ) from error
+                f"The embedding model '{model_name}' is not on this machine (looked in {looked}). "
+                f"Archiv never downloads models by itself. Place the model in {folders[0]} first."
+            ) from failure
 
     @property
     def weights(self) -> str:

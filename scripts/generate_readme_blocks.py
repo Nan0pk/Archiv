@@ -145,10 +145,14 @@ COMMAND_GROUPS: list[tuple[str, str, list[str]]] = [
         "where document text goes; see the privacy section of the README. A first run: "
         "`archiv add ./folder`, then `archiv memory build`, then "
         '`archiv memory ask "your question" --model-cmd "<a command that reads a prompt on '
-        'standard input and prints the answer>" --model-label <its name>`. The meaning vectors '
-        "need the embedding model files to be on this machine already, in the folder named by "
-        "`ARCHIV_EMBED_CACHE` (the default, `/tmp/fastembed_cache`, is cleared on reboot on many "
-        "systems, so set it to a folder that stays); Archiv never downloads them. Without them "
+        'standard input and prints the answer>" --model-label <its name>`. Setting '
+        "`ARCHIV_MODEL_CMD` and `ARCHIV_MODEL_LABEL` once saves typing both each time; answers are "
+        "stored under that name, so change it when the command changes. "
+        "The meaning vectors "
+        "need the embedding model files to be on this machine already: in the folder named by "
+        "`ARCHIV_EMBED_CACHE` when that is set, otherwise in `~/.cache/archiv/fastembed` "
+        "(or under `XDG_CACHE_HOME`), and failing that in `/tmp/fastembed_cache`, which many "
+        "systems empty on every restart; Archiv never downloads them. Without them "
         "the build still finishes, says that the meaning vectors were skipped, and questions use "
         "text search and names only.",
         ["memory build", "memory ask", "memory probe"],

@@ -23,6 +23,7 @@ from archiv.memory.store import (
     cache_key,
     cached,
     open_memory,
+    record_built,
     remember,
     store_extraction,
     thing_id_for,
@@ -40,6 +41,7 @@ class BuildSummary:
     things: int
     relations: int
     merges_confirmed: int = 0
+    earlier_merges: int = 0  # confirmed by a model in an earlier build and still in force
 
 
 def build_memory(
@@ -84,6 +86,7 @@ def build_memory(
                 conn, object_sha256, Extraction(tuple(mentions), tuple(relations), dropped)
             )
             conn.commit()
+        record_built(conn, (p.segment_id for p in passages))
         things = int(conn.execute("SELECT COUNT(*) FROM things").fetchone()[0])
         relation_count = int(conn.execute("SELECT COUNT(*) FROM relations").fetchone()[0])
     merged = 0
@@ -141,9 +144,16 @@ def build_memory_offline(*, home: Path | None, embedder: Embedder | None = None)
                     json.dumps([passage.segment_id]),
                 ),
             )
+        record_built(conn, (p.segment_id for p in passages))
         conn.commit()
         things = int(conn.execute("SELECT COUNT(*) FROM things").fetchone()[0])
         relation_count = int(conn.execute("SELECT COUNT(*) FROM relations").fetchone()[0])
+        earlier = int(
+            conn.execute(
+                "SELECT COUNT(*) FROM merges "
+                "WHERE same = 1 AND reason NOT LIKE 'the text defines %'"
+            ).fetchone()[0]
+        )
     if embedder is not None:
         embed_passages(layout, passages, embedder)
     return BuildSummary(
@@ -153,6 +163,7 @@ def build_memory_offline(*, home: Path | None, embedder: Embedder | None = None)
         failed_batches=0,
         things=things,
         relations=relation_count,
+        earlier_merges=earlier,
     )
 
 

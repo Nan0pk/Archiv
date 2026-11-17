@@ -414,6 +414,22 @@ whatever the workflow list suggests.
   handshake in its connection manager. The probe does not instantiate that manager and
   does not exercise discovery or its restart fallback. A passing classic-handshake test
   does not establish compatibility of those paths or the complete desktop workbench.
+- **2026-11-13: second drift, two more checks.** The job was already failing on
+  2026-11-11 on `stdio_transport:...process.env` and
+  `mcp_connection:return result as MCPCallResult`. The CoWork revision read to find out
+  why was `main` at `a9cbb87`; which CoWork commit introduced the change was not looked up.
+  There, `StdioTransport.ts` writes `...withoutVaultTokens(process.env)`: the server process
+  gets the inherited environment without `OP_SERVICE_ACCOUNT_TOKEN`, `OP_CONNECT_TOKEN`,
+  `BWS_ACCESS_TOKEN`, `BW_SESSION`, `BW_CLIENTID`, `BW_CLIENTSECRET`, `BW_PASSWORD` and any
+  name starting with `OP_SESSION_` (sign-in tokens of two password managers), and then the
+  server's own `env`. Nothing under `src/archiv` reads any of those names.
+  `MCPServerConnection.ts` writes `return redactMcpCallResult(result as MCPCallResult)`:
+  the result is returned, and text in it that equals a value CoWork fetched from a password
+  manager is masked. The checker now accepts these two spellings as well as the pinned
+  ones, and nothing looser. It does not test those two functions themselves. On the pull
+  request that made this change, the `current CoWork compatibility` job checked out CoWork
+  `a9cbb87` and every step passed, including the transport probe and the check of its
+  evidence outside CoWork. The lock was not changed.
 - Future upstream drift can still fail this early-warning check; investigate it rather
   than skipping the job. Changing the pinned revision remains a separate manual decision.
 
@@ -791,8 +807,10 @@ Archiv cannot yet use Typer 0.29 or later. Until it does, installs stay on 0.28.
 - `archiv memory build` (no `--model-label`) replaces the names and connections of every
   document it covers, but it does not clear the table of forms a model confirmed to be the
   same thing. If a collection was first built with `--model-label`, those confirmations stay
-  in force and keep joining those names wherever the new build finds them again. Start a
-  fresh home (or delete `memory.sqlite3`) when switching between the two builds.
+  in force and keep joining those names wherever the new build finds them again. The plain
+  build now says how many such confirmations are still in force. Start a fresh home (or delete
+  `indexes/memory.sqlite3`) when switching between the two builds. Deleting that file also
+  deletes every model answer stored in it, so a later build with a model pays for them again.
 
 ## Memory: a question on a very large collection takes about 20 seconds before the model
 
@@ -815,7 +833,29 @@ Archiv cannot yet use Typer 0.29 or later. Until it does, installs stay on 0.28.
   vectors have no hash keeps reusing those rows and leaves the file unhashed, because the old rows
   were not checked. To stamp an existing collection, delete `indexes/memory-passages.npy` and
   `indexes/memory-passages.ids.json` and run `archiv memory build` again.
-- If the vectors on disk were made by different weights, `archiv memory ask` does not use them
-  and does not say so; answers then rely on text search and names only until
-  `archiv memory build` is run again.
+- If the vectors on disk were made by different weights, `archiv memory ask` does not use them.
+  It now says so in a note under the answer (and under `notes` with `--json`); answers then rely
+  on text search and names only until `archiv memory build` is run again.
 - The hash covers the `.onnx` files only, not the tokenizer files next to them.
+
+## Memory: what a question says when it had less to work with, and what it still cannot tell
+
+- `archiv memory ask` adds a note under the answer (`notes` with `--json`) when the memory was
+  never built, when documents were added or changed after the last build, when there are no
+  meaning vectors or they could not be used, when some passages have no vector, when the model's
+  first answer could not be read, and when the model returned no report. `archiv memory probe`
+  writes the same notes into each probe file.
+- Text added after the last build can be left out of an answer even when it holds the exact
+  words asked for. When meaning vectors are in use, exact matches are ordered by how close their
+  vector is to the question, a passage with no vector is placed last, and only the first of
+  them fit. The note says the answer may be missing something; it does not say what.
+- Answers are stored under the model name (`--model-label` or `ARCHIV_MODEL_LABEL`). If the
+  command is changed and the name is not, answers from the earlier model are reused.
+- A memory built before this was added carries no record of what it covered. A question then
+  says that it cannot be checked, once per question, until `archiv memory build` is run again.
+- The record is of which passages existed at build time. It does not notice a memory database
+  that was edited by hand or copied in from another collection with the same passages.
+- A model command that fails (it cannot be started, exits with an error, or takes longer than
+  15 minutes) now ends the command with one sentence and exit code 1. During
+  `archiv memory build --model-label`, the documents finished before the failure are kept and
+  the next run carries on from them, as before.
