@@ -21,6 +21,9 @@ two-person privacy review in `docs/definition-of-done.md`. Audio, video and the 
   `docs/known-issues.md`).
 - To move an archive to another folder, use `archiv backup` and `archiv restore`; a folder
   copied by hand cannot be searched (see `docs/known-issues.md`).
+- The Fedora installer downloads a full 40-character commit SHA given as `--ref` directly,
+  without asking GitHub's API first; a branch or tag name is still looked up there, and
+  without a token that lookup can meet GitHub's limit of 60 requests an hour.
 - Text derived from some PDFs can change after `rebuild-derived`, because pypdf 7 reads a few
   pages differently; saved answers citing those pages may then stop validating.
 
