@@ -850,3 +850,35 @@ Archiv cannot yet use Typer 0.29 or later. Until it does, installs stay on 0.28.
   15 minutes) now ends the command with one sentence and exit code 1. During
   `archiv memory build --model-label`, the documents finished before the failure are kept and
   the next run carries on from them, as before.
+
+## Damaged old `.ppt` files are read through LibreOffice, and that reading is LibreOffice's
+
+- Our own `.ppt` reader refuses a file when a record claims to be longer than the record
+  that contains it. In a 480-file sample of a private collection that was 33 of its 53 `.ppt`
+  files.
+  From 0.1.0a7 such a file is converted to `.pptx` by LibreOffice inside bubblewrap (no
+  network, read-only system, private throwaway home and profile; 60 CPU seconds, 4 GiB of
+  address space, 180 seconds) and read by the `.pptx` reader. Every segment carries
+  `origin: libreoffice_conversion`. Any other refusal (encryption, a truncated header, a
+  broken container) is unchanged, and without both LibreOffice (with its presentation
+  component, `libreoffice-impress` on Fedora) and `bwrap` the file stays refused.
+- Checked on those 33 files: all 33 converted and read, at most 10.4 seconds and 971 MB
+  resident each. Independently of LibreOffice, the text records each file holds were found
+  by their byte pattern (without trusting the damaged record lengths); leaving out the twelve
+  words of PowerPoint's own template placeholders, at least 98.4% of each file's words (median
+  100%) appear in Archiv's reading. One file held only placeholder text. This shows the text
+  is there, not that its order, slide numbers or shape numbers match the original deck.
+- Slide and shape numbers come from the converted file, so they may differ from the numbers
+  our own reader would give an undamaged copy of the same deck.
+
+## The OCR sandbox can still see the user's session and files
+
+- `src/archiv/ingestion/visual_ocr.py` runs Tesseract and the PDF renderer inside bubblewrap
+  with no network, but with the whole system visible read-only and the parent's environment.
+  Checked on 2026-11-18 with the same arguments: from inside, a process could connect to the
+  user's session bus (`/run/user/<uid>/bus`) and the service manager's socket, and could read
+  files under `/home` and `/mnt`. A program that took over the OCR tool through a hostile
+  image could therefore ask the user's session to start something outside the sandbox.
+- The LibreOffice conversion of damaged `.ppt` files (`ppt_libreoffice.py`) already hides
+  those folders and passes a minimal environment; the OCR runner should get the same
+  treatment. Not done yet.

@@ -61,7 +61,8 @@ FAMILIES: dict[str, tuple[str, str]] = {
     ),
     "legacy-office-presentation": (
         "PowerPoint, old format",
-        "No speaker notes or animation; slide numbers may differ after edits",
+        "No speaker notes or animation; slide numbers may differ after edits; "
+        "damaged files are read through sandboxed LibreOffice when it is installed",
     ),
     "opendocument-text": ("OpenDocument text", "Layout, frames and styles are not rebuilt"),
     "opendocument-spreadsheet": ("OpenDocument spreadsheet", "Charts and pivot state are not read"),

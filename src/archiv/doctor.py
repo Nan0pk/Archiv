@@ -123,7 +123,11 @@ def _tkinter_available() -> bool:
 
 def _libreoffice_advisory() -> Advisory:
     available = shutil.which("libreoffice") is not None or shutil.which("soffice") is not None
-    return Advisory("libreoffice", available, "archiv report cannot complete its verification step")
+    return Advisory(
+        "libreoffice",
+        available,
+        "archiv report cannot complete its verification step, and damaged .ppt files stay refused",
+    )
 
 
 def _tesseract_advisory() -> Advisory:
