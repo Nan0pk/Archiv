@@ -524,7 +524,13 @@ at its edge and memory is inside it.
   collection this size (8.5 s of SQL for the relations, 2.9 s counting passages per thing, 2.7 s
   for the forms). Making that cheaper means limiting how far or how wide the walk expands, which
   changes what is handed over and needs its own measurement; the graph's own value for recall
-  is not shown (see above), so that is a design decision, not a speed fix, and it is not made.
+  is not shown (see above), so that is a design decision, not a speed fix, and it was not made
+  here. **Made on 2026-11-17 (owner's delegation, `docs/plan/DECISIONS.md` decision 13):** the
+  walk goes one step out by default. Measured on the same home on `6747d2b`: 7.4 to 14.7 s and
+  1.1 to 1.6 GB on four questions; on the measuring kit's question sets (replayed against a
+  spaCy-name memory, not the default repeated-phrase graph) the same exact-word and other-form
+  passages were handed as with two steps, no question lower, while the rest of the places
+  shifted in opposite directions on the heavy and light sets. Report quality was not judged.
 - Loading every passage into memory for every question is still the memory limit; fetching
   passages by id would remove it but was not done.
 

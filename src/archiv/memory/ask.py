@@ -238,7 +238,7 @@ def walk(
     vectors: VectorIndex | None,
     by_id: dict[str, Passage],
     home: Path | None,
-    hops: int = 2,
+    hops: int = 1,
     max_passages: int = 40,
     floor: float = 0.55,
     vector_k: int = 10,
