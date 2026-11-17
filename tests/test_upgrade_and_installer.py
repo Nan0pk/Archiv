@@ -108,3 +108,51 @@ def test_fedora_installer_local_source_and_upgrade(tmp_path: Path) -> None:
 
     current_symlink = prefix / "current"
     assert current_symlink.resolve() == (prefix / "versions" / ARCHIV_VERSION).resolve()
+
+
+def _requested_urls(tmp_path: Path, ref: str) -> list[str]:
+    """Run the installer with a stand-in curl that records each URL and then fails."""
+    bin_dir = tmp_path / "fake-bin"
+    bin_dir.mkdir()
+    log = tmp_path / "curl.log"
+    fake = bin_dir / "curl"
+    fake.write_text(
+        '#!/bin/bash\nfor a in "$@"; do [[ "$a" == http* ]] && echo "$a" >> '
+        f'"{log}"; done\nexit 22\n',
+        encoding="utf-8",
+    )
+    fake.chmod(0o755)
+    env = dict(os.environ)
+    env["PATH"] = f"{bin_dir}{os.pathsep}{env['PATH']}"
+    for name in ("GITHUB_TOKEN", "GH_TOKEN"):
+        env.pop(name, None)
+    subprocess.run(
+        [
+            "bash",
+            str(INSTALLER),
+            "--ref",
+            ref,
+            "--prefix",
+            str(tmp_path / "archiv-alpha"),
+            "--bin-dir",
+            str(tmp_path / "target-bin"),
+            "--skip-system-packages",
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=300,
+    )
+    return log.read_text(encoding="utf-8").split() if log.exists() else []
+
+
+def test_installer_downloads_a_full_commit_sha_without_the_api_lookup(tmp_path: Path) -> None:
+    sha = "0123456789abcdef0123456789abcdef01234567"
+    urls = _requested_urls(tmp_path, sha)
+    assert not any("api.github.com" in url for url in urls)
+    assert any(url.endswith(f"/archive/{sha}.tar.gz") for url in urls)
+
+
+def test_installer_still_resolves_a_branch_name_through_the_api(tmp_path: Path) -> None:
+    urls = _requested_urls(tmp_path, "main")
+    assert urls and "api.github.com" in urls[0]

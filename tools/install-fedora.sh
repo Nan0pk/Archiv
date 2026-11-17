@@ -138,15 +138,22 @@ else
     CURL_AUTH=(-H "Authorization: Bearer $(gh auth token)")
   fi
 
-  API_URL="https://api.github.com/repos/${REPOSITORY}/commits/${REF}"
-  SOURCE_COMMIT=$(
-    curl --fail --silent --show-error --location \
-      --header "User-Agent: Archiv-Installer" \
-      --header "Accept: application/vnd.github+json" \
-      "${CURL_AUTH[@]}" \
-      "$API_URL" \
-      | python3 -c 'import json,sys; print(json.load(sys.stdin)["sha"])'
-  )
+  if [[ "$REF" =~ ^[0-9a-f]{40}$ ]]; then
+    # A full commit SHA needs no lookup; skipping it avoids GitHub's unauthenticated API
+    # limit (60 requests an hour per address). The archive download below still fails if
+    # the commit does not exist.
+    SOURCE_COMMIT="$REF"
+  else
+    API_URL="https://api.github.com/repos/${REPOSITORY}/commits/${REF}"
+    SOURCE_COMMIT=$(
+      curl --fail --silent --show-error --location \
+        --header "User-Agent: Archiv-Installer" \
+        --header "Accept: application/vnd.github+json" \
+        "${CURL_AUTH[@]}" \
+        "$API_URL" \
+        | python3 -c 'import json,sys; print(json.load(sys.stdin)["sha"])'
+    )
+  fi
   if [[ ! "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
     echo "GitHub returned an invalid commit SHA for ref: $REF" >&2
     exit 1

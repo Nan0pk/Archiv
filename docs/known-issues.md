@@ -17,27 +17,23 @@
 - Diagnostics export (`archiv diagnostics-export`) operates strictly on aggregate system
   metrics and never includes document metadata, text segments, or GPS coordinates.
 
-## Offline-alpha `egress-denied` fails intermittently on pull requests
+## Offline-alpha `egress-denied` failed intermittently on pull requests (fixed for commit refs)
 
-- `tools/install-fedora.sh` resolves `--ref` through
+- `tools/install-fedora.sh` resolved every `--ref` through
   `https://api.github.com/repos/<repo>/commits/<ref>`. Inside the container built by
   [`.github/offline-alpha.Dockerfile`](../.github/offline-alpha.Dockerfile) that request
-  is **unauthenticated**: the build receives only `--build-arg ARCHIV_REF`, no token is
-  passed, and `gh` is not installed, so `CURL_AUTH` is empty.
-- Unauthenticated GitHub API access is limited to 60 requests per hour **per IP**, shared
-  across GitHub-hosted runners. When the limit is hit the API returns `403`, `curl` exits
-  22, and the installer feeds the error body to `json.load`, producing
-  `JSONDecodeError: Expecting value: line 1 column 1 (char 0)`. Observed on
-  [#123](https://github.com/Nan0pk/Archiv/pull/123); a re-run of the same commit passed.
-- The obvious remedy — passing a token into the build to raise the limit — conflicts with
-  the repository's own trust boundary: [Contributing](../CONTRIBUTING.md) states that
-  branch and fork pull requests "must not receive repository secrets", and
-  `scripts/audit_ci_trust.py` reports a `pr_secret_reference` violation for exactly that.
-- Remaining options, none yet chosen: retry with backoff on `403`; install from the local
-  checkout using the installer's existing `--source` flag, accepting that this stops
-  exercising the download path a real user takes, which is the purpose of the job; or
-  accept the flakiness and re-run. Until one is chosen, treat a `403` here as
-  environmental and re-run once before investigating.
+  is **unauthenticated** (no token may reach a pull-request build; see
+  [Contributing](../CONTRIBUTING.md) and `scripts/audit_ci_trust.py`). GitHub allows 60
+  such requests an hour per address, shared across its hosted runners; when the limit was
+  hit the API returned `403` and the installer failed with
+  `JSONDecodeError: Expecting value: line 1 column 1 (char 0)`. Seen on #123, and three
+  times on 2026-11-17 and 2026-11-18 (#280 twice, #287).
+- The workflow passes a full 40-character commit SHA. Since 0.1.0a7 the installer uses a
+  full SHA as it is, without the lookup, and downloads
+  `https://github.com/<repo>/archive/<sha>.tar.gz` directly, which is not counted against
+  that limit and still fails if the commit does not exist
+  (`tests/test_upgrade_and_installer.py`). A branch or tag name is still looked up, so a
+  user installing `--ref main` without a token can still meet the limit.
 
 General alpha limitations remain documented in [Offline alpha](offline-alpha.md) and the
 [format compatibility matrix](format-compatibility.json).
