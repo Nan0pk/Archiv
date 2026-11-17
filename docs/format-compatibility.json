@@ -1,6 +1,6 @@
 {
   "schema_version": "1",
-  "product_version": "0.1.0a6",
+  "product_version": "0.1.0a7",
   "purpose": "Tested OpenDocument/open-format compatibility matrix for Archiv ingestion, retrieval, citation, and output (issue #37). Every family claim is re-verified by tests/test_format_matrix.py against live local ingestion runs; unsupported formats are rejected explicitly, never silently accepted.",
   "families": [
     {

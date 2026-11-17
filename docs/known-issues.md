@@ -882,3 +882,44 @@ Archiv cannot yet use Typer 0.29 or later. Until it does, installs stay on 0.28.
 - The LibreOffice conversion of damaged `.ppt` files (`ppt_libreoffice.py`) already hides
   those folders and passes a minimal environment; the OCR runner should get the same
   treatment. Not done yet.
+
+## Plain text that is not UTF-8 is refused
+
+- A `.txt` or `.md` file must decode as UTF-8; anything else is refused, as before. In a
+  480-file sample of a private collection that was 2 text files.
+- Reading such files with an automatically detected encoding was considered (decision 13) and
+  declined on measurement. The detector tried was `charset-normalizer` 3.5.2. It was given
+  220 generated texts: one sentence-sized source text for each of 11 language and code-page
+  pairs (French, German and Spanish in cp1252; Polish and Czech in cp1250; Russian in cp1251
+  and KOI8-R; Arabic cp1256; Greek cp1253; Turkish cp1254; Hebrew cp1255), cut to 6, 12, 25,
+  60 and 150 words, four random cuts each (seed 20261117).
+  - Taking its best guess: 165 decoded correctly and 55 decoded to the wrong text, with no
+    refusal. French and Spanish in cp1252 were read as cp1250 in 14 and 13 of 20 cases,
+    which silently changes accented letters.
+  - Accepting only when every candidate it reports gives the same text: 23 right, 3 wrong,
+    194 refused. Accepting when the candidates close to the best agree: 47 right, 6 wrong,
+    167 refused.
+  - Its own scores do not separate right from wrong guesses: every right guess and at least
+    three quarters of the wrong ones had a "chaos" score of 0, and "coherence" medians were
+    0.58 (right) and 0.55 (wrong).
+  - The two refused files in the private sample were reported as cp1250, the code page the
+    detector most often confuses with cp1252.
+- Wrong text in the index is worse than a refusal: it cannot be found by its real words and
+  nothing says it is wrong. A way for the user to name the encoding of a file was not built.
+
+## Status shows 0 documents on an archive made by an older version, until something writes to it
+
+- `archiv status` never changes the archive, so on an archive created by 0.1.0a6 it does not
+  bring the database up to date first. Until the first `archiv add` (or another command that
+  writes), it reports `Documents: 0` and `Warning: metadata database: no such table:
+  ingestion_failures`, although `find` already works. Checked on 2026-11-18 with an archive
+  made by the 0.1.0a6 commit (`ff206b5`): after one `archiv add` the counts were right and
+  old and new documents were both found.
+
+## An archive folder copied or moved by hand cannot be searched
+
+- The search index records each document's absolute path. A copy of an archive folder at a
+  new path finds nothing from its old documents: every citation fails with "normalized path
+  is not canonical for the object", and adding new files does not repair it. Moving an
+  archive works through `archiv backup` and `archiv restore` into the new folder, which
+  rewrites the recorded paths and rebuilds the index (checked on 2026-11-18).

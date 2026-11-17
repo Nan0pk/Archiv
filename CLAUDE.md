@@ -89,15 +89,15 @@ If you cannot run these checks where you are working, say so plainly in the pull
 rather than substituting a push for a run. Getting a real checkout is the cheaper fix: the
 venv above installs in about two minutes.
 
-**Known-good baseline** measured on `c4b9cf6`, the head of `main` after
-[#283](https://github.com/Nan0pk/Archiv/pull/283), run as
-`PATH="$PWD/.venv/bin:$PATH" pytest -q`: **898 passed, 0 failed**, no skips reported.
-Every workflow on that commit succeeded in CI, including `Field trial` (whose
-`current CoWork compatibility` job checks CoWork-OS `main` and fails again whenever
-upstream drifts; see `docs/known-issues.md`) and `CodeQL`.
+**Known-good baseline** measured on the `0.1.0a7` release change on top of `19b984a` (the head
+of `main` after [#286](https://github.com/Nan0pk/Archiv/pull/286)), run as
+`PATH="$PWD/.venv/bin:$PATH" pytest -q`: **906 passed, 0 failed** on a machine with
+LibreOffice and bubblewrap. Without them five tests in `tests/test_ppt_libreoffice.py` skip,
+as they do in CI (899 passed, 7 skipped on `231b6c2`). The `current CoWork compatibility` job
+checks CoWork-OS `main` and fails again whenever upstream drifts; see `docs/known-issues.md`.
 There is no expected failure in the test suite: treat any failure as real, because a
 tolerated red test is how the next one gets ignored. Keep this current and name the commit
-when you update it. The baseline this replaced named `a752170`, the head after #263.
+when you update it. The baseline this replaced named `c4b9cf6`, the head after #283.
 
 ---
 

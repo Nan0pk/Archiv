@@ -285,6 +285,12 @@ on measured evidence and stated in its pull request:
 
 Indexing spreadsheets by row rather than by cell was not handed over and stays open.
 
+**2026-11-18, outcome of the handed-over choices.** One step out became the default (#285).
+Damaged `.ppt` files are read through sandboxed LibreOffice (#286). Reading non-UTF-8 text
+with a detected encoding was declined: the detector tried decoded a quarter of 220 generated
+texts to the wrong text without warning, and its own scores could not tell right from wrong
+(`docs/known-issues.md`, "Plain text that is not UTF-8 is refused").
+
 **Why.** Beta readiness (`docs/definition-of-done.md`) needs owner-run trials on three
 hardware tiers and a two-person privacy review, which no agent session can do. A release
 candidate is the furthest point reachable without them.

@@ -137,6 +137,13 @@ the user-oriented document-library application now launched by `archiv ui`.
 - `archiv ui` reports missing desktop support when either the `tkinter` package or the `_tkinter` extension is absent, instead of printing a traceback;
 - the Fedora installer verifies Python >= 3.12 before building a virtual environment, so an unsupported interpreter fails with readable guidance rather than inside pip's resolver.
 
+## Release candidate (0.1.0a7)
+
+- Phase C of the plan queue (richer Word, Excel, PowerPoint and OpenDocument reading, S15 to S18A) and the model-boundary steps (S02 to S09);
+- `archiv memory`: a model-free web of things with cited answers through a model command the user names;
+- large-collection ingest speed and memory fixes; damaged `.ppt` files read through sandboxed LibreOffice;
+- deferred to after this release: audio and video (S19 to S23) and faces (S24 to S27), by the owner's decision 13.
+
 ## Evidence-derived next work
 
 The public field trial and real-world corpus notes rank gaps instead of treating every
