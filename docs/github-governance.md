@@ -40,7 +40,7 @@ The repository settings below were reviewed on 2026-07-30. Evidence is classifie
 | Allowed actions | GitHub-owned actions only, with full-SHA pinning | Owner UI verification required; repository auditor independently enforces full SHAs |
 | Private vulnerability reporting | Enabled | Owner UI verification required |
 | Secret scanning and push protection | Enabled where GitHub makes them available | Owner UI verification required |
-| Code scanning | Trusted-event CodeQL workflow enabled | Workflow file verified; Security-tab result requires owner UI verification |
+| Code scanning | Trusted-event CodeQL workflow enabled | Runs and finishes on `main` since 2026-11-16 (after its first run on 2026-07-30, runs were refused at startup until 2026-11-12; see `docs/known-issues.md`) |
 | Labels and project view | Plain-language labels and simple workflow columns | Owner UI verification required |
 
 ## Owner verification checklist
