@@ -879,10 +879,17 @@ Archiv cannot yet use Typer 0.29 or later. Until it does, installs stay on 0.28.
   `/media`, `/tmp` and `/var/tmp` are hidden, IPC, process list and host name are not
   shared, and the environment holds only `PATH`, the locale, `TESSDATA_PREFIX`,
   `OMP_THREAD_LIMIT` and a private `HOME`. Inputs and the work folder are bound back in, and a
-  `TESSDATA_PREFIX` folder is exposed read-only. On ten local images and PDFs with the archive
-  under `/home`, every derived `document.json` was byte-identical before and after
+  `TESSDATA_PREFIX` folder is exposed read-only. With the archive
+  under `/home`, every derived file was identical before and after
   (`tests/test_sandbox_hides_session.py` checks the hiding). `ARCHIV_OCR_SANDBOX=off` still
   runs the tools without a sandbox and with the full environment, as before.
+- Exercised: OCR of four photographs and four PNG images, a text-less PDF generated at test
+  time (rendered by `pdftoppm`, then OCR), and a two-frame TIFF generated at test time; each
+  derived `document.json` and every other derived file was identical to the old code's, and
+  no extra files appeared. Two further PDFs had native text and did not reach OCR. The
+  sandbox tests skip in CI (no working bubblewrap there) and ran only on a Fedora machine.
+- Still open: SVG files are rendered by `resvg` with no sandbox at all
+  (`visual_ocr.py`, a plain subprocess). Bring it under the same arguments.
 ## Plain text that is not UTF-8 is refused
 
 - A `.txt` or `.md` file must decode as UTF-8; anything else is refused, as before. In a
