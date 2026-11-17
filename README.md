@@ -7,7 +7,7 @@ questions about them with sources you can check.**
 
 [![Licence: Apache 2.0](https://img.shields.io/badge/licence-Apache--2.0-blue.svg)](LICENSE)
 [![Fast checks](https://github.com/Nan0pk/Archiv/actions/workflows/fast-checks.yml/badge.svg)](https://github.com/Nan0pk/Archiv/actions/workflows/fast-checks.yml)
-[![Version](https://img.shields.io/badge/version-0.1.0a6-orange.svg)](pyproject.toml)
+[![Version](https://img.shields.io/badge/version-0.1.0a7-orange.svg)](pyproject.toml)
 [![Python](https://img.shields.io/badge/python-3.12%2B-3776ab.svg)](pyproject.toml)
 
 *Early alpha. Tested on Fedora. Expect rough edges, but not invented answers.*

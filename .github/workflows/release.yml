@@ -24,7 +24,10 @@ jobs:
           cache: pip
       - run: python -m pip install -r .github/release-requirements.txt
       - run: python -m build
-      - run: python -m pip_audit --format cyclonedx-json --output dist/sbom.cdx.json
+      # The dependency list must describe what the wheel installs.
+      # A plain target folder, so neither the release tools nor a venv's own pip are listed.
+      - run: python -m pip install --target "$RUNNER_TEMP/installed" dist/*.whl
+      - run: python -m pip_audit --path "$RUNNER_TEMP/installed" --format cyclonedx-json --output dist/sbom.cdx.json
       - run: cd dist && sha256sum * > SHA256SUMS
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
         with:
@@ -34,5 +37,7 @@ jobs:
           inputs: ./dist/*
       - uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3
         with:
+          # Every 0.1.0aN tag so far is an alpha; remove this for a stable release.
+          prerelease: true
           files: |
             dist/*
