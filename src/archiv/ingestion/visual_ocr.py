@@ -18,7 +18,11 @@ from PIL import Image
 from archiv.contracts import NormalizedDocument, NormalizedSegment
 from archiv.hashing import sha256_file
 from archiv.ingestion.limits import MAX_CPU_SECONDS, MAX_MEMORY_BYTES, MAX_SUBPROCESSES
-from archiv.ingestion.sandbox import SANDBOX_ARGUMENTS, sandbox_environment
+from archiv.ingestion.sandbox import (
+    SANDBOX_ARGUMENTS,
+    executable_binds,
+    sandbox_environment,
+)
 
 OCR_PROCESSOR_VERSION = "1"
 MAX_INPUT_BYTES = 200 * 1024 * 1024
@@ -129,7 +133,7 @@ def _run(
         bubblewrap = shutil.which("bwrap")
         if bubblewrap is not None:
             writable = root.resolve()
-            wrapped = [bubblewrap, *SANDBOX_ARGUMENTS]
+            wrapped = [bubblewrap, *SANDBOX_ARGUMENTS, *executable_binds(command[0])]
             # A language-data folder the user named may sit under a hidden folder.
             tessdata = os.environ.get("TESSDATA_PREFIX")
             if tessdata and Path(tessdata).is_dir():

@@ -20,7 +20,7 @@ from pathlib import Path
 from archiv.contracts import NormalizedDocument, NormalizedSegment
 from archiv.ingestion.limits import check_input
 from archiv.ingestion.normalize_office import normalize_pptx
-from archiv.ingestion.sandbox import SANDBOX_ARGUMENTS, sandbox_environment
+from archiv.ingestion.sandbox import SANDBOX_ARGUMENTS, executable_binds, sandbox_environment
 
 # Measured on 33 real rejected files: at most 10.1 CPU seconds and 971 MB resident.
 # LibreOffice reserves far more address space than it uses; below 4 GiB of address space
@@ -78,6 +78,7 @@ def convert_rejected_ppt(
         command = [
             bubblewrap,
             *SANDBOX_ARGUMENTS,
+            *executable_binds(office),
             # Re-exposes the work folder even when it lies under a folder just hidden.
             "--bind",
             str(work),
@@ -155,6 +156,7 @@ def _libreoffice_version(office: str, bubblewrap: str) -> str:
             [
                 bubblewrap,
                 *SANDBOX_ARGUMENTS,
+                *executable_binds(office),
                 "--bind",
                 str(home),
                 str(home),

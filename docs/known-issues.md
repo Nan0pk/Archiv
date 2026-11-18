@@ -893,6 +893,13 @@ Archiv cannot yet use Typer 0.29 or later. Until it does, installs stay on 0.28.
   `tests/test_sandbox_hides_session.py` (a stand-in records that both calls go through the
   runner with the original's folder bound in and the output inside the work folder): `resvg`
   was not installed on the machine used, so a real SVG render inside the sandbox was not run.
+- Hiding `/home`, `/mnt` and `/media` (since #289) also hid tools installed there, such as a
+  `resvg` from `cargo install` or a user-local Tesseract: they could not start inside the
+  sandbox, so OCR or SVG rendering failed quietly and the file was stored without text. The
+  tool's own folder is now bound back in read-only (`executable_binds` in `sandbox.py`;
+  `tests/test_sandbox_hides_session.py`). A tool whose libraries or data also live under a
+  hidden folder can still fail; install Tesseract, Poppler, LibreOffice and `resvg` from
+  Fedora packages. In 0.1.0a7 itself (before this fix) every tool under those folders fails.
 ## Plain text that is not UTF-8 is refused
 
 - A `.txt` or `.md` file must decode as UTF-8; anything else is refused, as before. In a
