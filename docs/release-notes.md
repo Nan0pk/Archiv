@@ -2,7 +2,26 @@
 
 ## Unreleased
 
-Nothing yet.
+### Sandboxing
+
+- SVG rendering (`resvg`), which had no sandbox at all, now runs inside the same sandbox as
+  OCR (#290).
+- Tools installed under `/home`, `/mnt` or `/media` start inside the sandbox again: 0.1.0a7
+  hid those folders without binding the tool's own folder back in (#290).
+
+### Desktop app (`archiv ui`)
+
+- Search and questions show readable results instead of raw JSON. Command text used to
+  reach the window from a background thread; with Fedora's own Python and Tk that worked,
+  but with a separately downloaded Python build (as `uv` installs) it never appeared at all.
+  It now goes through the window's own thread. An empty search says so instead of doing
+  nothing.
+- The library is a scrollable table with a count (10,274 files opened in 0.12 s instead of
+  0.69 s, and every file is reachable; column widths follow the font size); the sidebar shows
+  the archive folder's name instead of a full path that pushed the navigation off the window;
+  the status line spans the window; an archive built
+  from the command line opens straight to the library; the "Sources" page, which promised an
+  action the app did not have, is gone.
 
 ## 0.1.0a7 (release candidate, 2026-11-18)
 
@@ -24,29 +43,18 @@ two-person privacy review in `docs/definition-of-done.md`. Audio, video and the 
 - The Fedora installer downloads a full 40-character commit SHA given as `--ref` directly,
   without asking GitHub's API first; a branch or tag name is still looked up there, and
   without a token that lookup can meet GitHub's limit of 60 requests an hour.
+- Known limitation: tools installed under `/home`, `/mnt` or `/media` (a `cargo install`
+  `resvg`, a user-local Tesseract) cannot start inside the stricter sandbox, so OCR or SVG
+  rendering yields no text for those files. Install them from Fedora packages; fixed after
+  this release.
 - Text derived from some PDFs can change after `rebuild-derived`, because pypdf 7 reads a few
   pages differently; saved answers citing those pages may then stop validating.
-
-### Desktop app (`archiv ui`)
-
-- Search and questions show readable results instead of raw JSON. Command text used to
-  reach the window from a background thread; with Fedora's own Python and Tk that worked,
-  but with a separately downloaded Python build (as `uv` installs) it never appeared at all.
-  It now goes through the window's own thread. An empty search says so instead of doing
-  nothing.
-- The library is a scrollable table with a count (10,274 files opened in 0.12 s instead of
-  0.69 s, and every file is reachable; column widths follow the font size); the sidebar shows
-  the archive folder's name instead of a full path that pushed the navigation off the window;
-  the status line spans the window; an archive built
-  from the command line opens straight to the library; the "Sources" page, which promised an
-  action the app did not have, is gone.
 
 ### Sandboxing
 
 - OCR now runs in the same stricter sandbox as the LibreOffice conversion: it can no longer
   reach the user's session bus or see files under `/home`, `/mnt` or `/media`, and gets only
-  a minimal environment. SVG rendering (`resvg`), which had no sandbox at all, now runs
-  inside it too.
+  a minimal environment.
 
 ### Institutional memory (`archiv memory`, new)
 
