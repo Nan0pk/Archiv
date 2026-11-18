@@ -7,10 +7,10 @@ import sys
 import tkinter as tk
 from pathlib import Path
 from tkinter import TclError, filedialog, messagebox, ttk
+from tkinter import font as tkfont
 from tkinter.scrolledtext import ScrolledText
 
 from archiv.doctor import diagnostics_report, save_diagnostics
-from archiv.ui.outputs import inspect_run_output
 from archiv.ui.product import (
     DesktopState,
     check_prerequisites,
@@ -28,16 +28,18 @@ from archiv.ui.runner import ConsoleRunner, console_executable_argv
 _POLL_MS = 100
 
 
-_NOT_LOCAL_NOTICE = (
-    "\n"
-    "========================================================================\n"
-    "NOT A LOCAL ANSWER\n"
-    "This archive is in evaluation mode: answers come from a model running on\n"
-    "computers you do not control, and the text of any source used to answer\n"
-    "is sent there.\n"
-    "Turn it off with:  archiv model evaluation disable\n"
-    "========================================================================\n"
-)
+# The CLI prints this above any answer that did not come from this machine.
+_NOT_LOCAL_MARKER = "NOT A LOCAL ANSWER"
+
+
+def finished_status(label: str, output: str, *, succeeded: bool) -> str:
+    """The status line after a run. The not-local warning is repeated only from where
+    `ask` prints its banner: above the "Question:" line of a question run. Anywhere else
+    the words could be a quoted passage from a document."""
+    state = "Finished" if succeeded else "Needs attention — review details"
+    if label == "Questions" and _NOT_LOCAL_MARKER in output.split("Question:", 1)[0]:
+        state = f"{state} — NOT A LOCAL ANSWER: this archive is in evaluation mode"
+    return state
 
 
 class ProductApp:
@@ -48,7 +50,6 @@ class ProductApp:
         "Needs attention",
         "Search",
         "Questions",
-        "Sources",
         "Reports",
         "Settings",
     )
@@ -56,17 +57,33 @@ class ProductApp:
     def __init__(self, root: tk.Tk, *, home: Path | None = None) -> None:
         self.root = root
         self.state = load_state(home)
+        self._pending: list[str] = []
+        self._running = ""
         self.runner = ConsoleRunner(on_output=self._on_output)
         root.title("Archiv — your document library")
+        if "clam" in ttk.Style(root).theme_names():
+            ttk.Style(root).theme_use("clam")
         root.minsize(900, 620)
         root.bind("<Control-k>", lambda _event: self._show("Search"))
         root.bind("<Control-q>", lambda _event: self._show("Questions"))
         root.protocol("WM_DELETE_WINDOW", self._close)
 
+        # Packed before the sidebar and body so it spans the full width at the bottom.
+        self.status = tk.StringVar(value="Ready")
+        ttk.Label(root, textvariable=self.status, relief=tk.SUNKEN, anchor=tk.W, padding=4).pack(
+            side=tk.BOTTOM, fill=tk.X
+        )
+        base = tkfont.nametofont("TkDefaultFont")
+        self.title_font = base.copy()
+        self.title_font.configure(size=max(base.cget("size"), 10) + 8, weight="bold")
+        self.section_font = base.copy()
+        self.section_font.configure(weight="bold")
         sidebar = ttk.Frame(root, padding=12)
         sidebar.pack(side=tk.LEFT, fill=tk.Y)
-        ttk.Label(sidebar, text="Archiv", font=("TkDefaultFont", 18, "bold")).pack(anchor=tk.W)
-        ttk.Label(sidebar, text=str(self.state.home), wraplength=190).pack(
+        ttk.Label(sidebar, text="Archiv", font=self.title_font).pack(anchor=tk.W)
+        # The folder name only: a full path wraps over several lines and pushes the
+        # navigation off the window. Settings shows the whole path.
+        ttk.Label(sidebar, text=self.state.home.name or str(self.state.home)).pack(
             anchor=tk.W, pady=(0, 14)
         )
         for view in self.VIEWS:
@@ -75,10 +92,6 @@ class ProductApp:
             )
         self.body = ttk.Frame(root, padding=18)
         self.body.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        self.status = tk.StringVar(value="Ready")
-        ttk.Label(root, textvariable=self.status, relief=tk.SUNKEN, anchor=tk.W).pack(
-            side=tk.BOTTOM, fill=tk.X
-        )
         if self.state.onboarding_complete:
             self._show("Library")
         else:
@@ -89,7 +102,7 @@ class ProductApp:
             child.destroy()
 
     def _heading(self, title: str, detail: str) -> None:
-        ttk.Label(self.body, text=title, font=("TkDefaultFont", 20, "bold")).pack(anchor=tk.W)
+        ttk.Label(self.body, text=title, font=self.title_font).pack(anchor=tk.W)
         ttk.Label(self.body, text=detail, wraplength=650).pack(anchor=tk.W, pady=(2, 16))
 
     def _onboard(self) -> None:
@@ -109,9 +122,9 @@ class ProductApp:
                 row, text="Browse…", command=lambda v=variable, c=chooser: v.set(c() or v.get())
             ).pack(side=tk.LEFT, padx=4)
         checks = check_prerequisites()
-        ttk.Label(
-            self.body, text="Optional document support", font=("TkDefaultFont", 11, "bold")
-        ).pack(anchor=tk.W)
+        ttk.Label(self.body, text="Optional document support", font=self.section_font).pack(
+            anchor=tk.W
+        )
         for check in checks:
             mark = "Available" if check.available else "Action needed"
             ttk.Label(self.body, text=f"{check.name}: {mark}. {check.guidance}").pack(anchor=tk.W)
@@ -162,20 +175,35 @@ class ProductApp:
                 text = (
                     "Nothing needs attention."
                     if failed
-                    else "No indexed documents yet. Add a folder to begin."
+                    else "No indexed documents yet. Add a folder in Settings to begin."
                 )
                 ttk.Label(self.body, text=text).pack(anchor=tk.W)
-            for row in rows:
-                detail = row.error or row.source_path
-                ttk.Label(self.body, text=f"{row.name} — {detail}", wraplength=700).pack(
-                    anchor=tk.W, pady=3
+                return
+            ttk.Label(self.body, text=f"{len(rows):,} file(s)").pack(anchor=tk.W, pady=(0, 6))
+            last = "Problem" if failed else "Added"
+            table = ttk.Treeview(
+                self.body, columns=("name", "folder", last), show="headings", selectmode="browse"
+            )
+            char = tkfont.nametofont("TkDefaultFont").measure("0")  # widths follow the font size
+            for column, chars in (("name", 26), ("folder", 30), (last, 18)):
+                table.heading(column, text=column.capitalize(), anchor=tk.W)
+                table.column(
+                    column, width=chars * char, minwidth=8 * char, stretch=column == "folder"
                 )
+            for row in rows:
+                path = Path(row.source_path)
+                detail = (row.error or "") if failed else row.imported_at[:16].replace("T", " ")
+                table.insert("", tk.END, values=(row.name, str(path.parent), detail))
+            scroll = ttk.Scrollbar(self.body, orient=tk.VERTICAL, command=table.yview)  # pyright: ignore[reportUnknownArgumentType, reportUnknownMemberType]
+            table.configure(yscrollcommand=scroll.set)
+            scroll.pack(side=tk.RIGHT, fill=tk.Y)
+            table.pack(fill=tk.BOTH, expand=True)
             if failed:
                 ttk.Label(
                     self.body,
                     text=(
                         "Check file permissions or install the prerequisite shown in "
-                        "Settings, then retry the containing folder."
+                        "Settings, then add the containing folder again."
                     ),
                 ).pack(anchor=tk.W, pady=12)
         elif view in {"Search", "Questions"}:
@@ -200,7 +228,12 @@ class ProductApp:
                 ).pack(anchor=tk.W)
 
             def submit() -> None:
-                argv = action(value.get(), self.state.home)
+                try:
+                    argv = action(value.get(), self.state.home)
+                except ValueError as error:
+                    self.status.set(str(error))
+                    entry.focus_set()
+                    return
                 if view == "Questions":
                     self.state = DesktopState(
                         self.state.home,
@@ -212,28 +245,12 @@ class ProductApp:
 
             ttk.Button(
                 self.body,
-                text=view.removesuffix("s"),
+                text="Search" if view == "Search" else "Ask",
                 command=submit,
             ).pack(side=tk.LEFT)
             ttk.Button(self.body, text="Cancel", command=self._cancel).pack(side=tk.LEFT, padx=5)
             entry.bind("<Return>", lambda _event: submit())
             entry.focus_set()
-        elif view == "Sources":
-            self._heading(
-                "Sources",
-                (
-                    "Verified citations from search, questions, and reports identify "
-                    "preserved sources."
-                ),
-            )
-            ttk.Label(
-                self.body,
-                text=(
-                    "Open a citation from its result. Archiv revalidates its bounded source "
-                    "location before handing it to the desktop."
-                ),
-                wraplength=700,
-            ).pack(anchor=tk.W)
         elif view == "Reports":
             self._heading(
                 "Reports", "Validated reports created by Archiv appear in the outputs folder."
@@ -310,33 +327,32 @@ class ProductApp:
         # "not a local answer" notice prepended below would stack -- three identical
         # notices at the top with the newest answer off the bottom of the screen, which
         # makes a warning ambiguous about which answer it belongs to.
+        self._running = label
+        self._pending.clear()
         self._clear_output()
         self.runner.start(console_executable_argv(argv))
         self.status.set(label + "…")
         self.root.after(_POLL_MS, self._poll)
 
     def _poll(self) -> None:
+        self._drain_output()
         if self.runner.busy:
             self.root.after(_POLL_MS, self._poll)
             return
+        self._drain_output()
         outcome = self.runner.wait(timeout=0)
-        state = "Finished" if outcome.succeeded else "Needs attention — review details"
-        # This is the window people actually open. It shows the run's raw JSON, so
-        # without this a remote answer arrives looking exactly like a local one with
-        # the origin buried inside the dump. Say it in words, where they are looking.
-        if inspect_run_output(outcome.output).model_provenance == "remote-evaluation":
-            # Above the output, not appended after it -- the same reason the terminal
-            # banner goes above the answer. A warning under a screen of JSON is not a
-            # warning.
-            self._prepend(_NOT_LOCAL_NOTICE)
-            state = f"{state} — NOT A LOCAL ANSWER: this archive is in evaluation mode"
+        state = finished_status(self._running, outcome.output, succeeded=outcome.succeeded)
         self.status.set(state)
 
     def _on_output(self, chunk: bytes) -> None:
-        if not hasattr(self, "output"):
-            return
-        text = chunk.decode("utf-8", errors="replace")
-        self.root.after(0, lambda: self._append(text))
+        # Called on the runner's thread. Tk must only be touched from its own thread, so
+        # queue the text here; `_poll` writes it into the window (an earlier version
+        # called `root.after` from this thread and the text never appeared).
+        self._pending.append(chunk.decode("utf-8", errors="replace"))
+
+    def _drain_output(self) -> None:
+        while self._pending:
+            self._append(self._pending.pop(0))
 
     def _live_output(self) -> ScrolledText | None:
         """The output box, if one exists right now -- otherwise nothing.
@@ -377,9 +393,6 @@ class ProductApp:
 
     def _clear_output(self) -> None:
         self._write_output(None, at="1.0")
-
-    def _prepend(self, text: str) -> None:
-        self._write_output(text, at="1.0")
 
     def _append(self, text: str) -> None:
         self._write_output(text, at=tk.END)
