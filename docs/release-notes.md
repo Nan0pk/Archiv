@@ -29,11 +29,15 @@ two-person privacy review in `docs/definition-of-done.md`. Audio, video and the 
 
 ### Desktop app (`archiv ui`)
 
-- Search and questions show readable results instead of raw JSON; before this, text from
-  the command reached the window from a background thread and, on the machine tested, never
-  appeared at all. An empty search says so instead of doing nothing.
+- Search and questions show readable results instead of raw JSON. Command text used to
+  reach the window from a background thread; with Fedora's own Python and Tk that worked,
+  but with a separately downloaded Python build (as `uv` installs) it never appeared at all.
+  It now goes through the window's own thread. An empty search says so instead of doing
+  nothing.
 - The library is a scrollable table with a count (10,274 files opened in 0.12 s instead of
-  0.69 s, and every file is reachable); the status line spans the window; an archive built
+  0.69 s, and every file is reachable; column widths follow the font size); the sidebar shows
+  the archive folder's name instead of a full path that pushed the navigation off the window;
+  the status line spans the window; an archive built
   from the command line opens straight to the library; the "Sources" page, which promised an
   action the app did not have, is gone.
 
@@ -91,7 +95,7 @@ two-person privacy review in `docs/definition-of-done.md`. Audio, video and the 
 - Updated the documented project maturity from pre-alpha to alpha without changing the
   independent security-review gate or operational warnings.
 - Added a task-oriented desktop application for library setup, ingestion, search, grounded
-  questions, sources, reports, recovery, and settings.
+  questions, reports, recovery, and settings.
 - Retained the command-oriented desktop console for maintainers behind `archiv ui --diagnostic`.
 - Added user-invoked CLI and desktop diagnostics export with a full pre-save preview.
 - Added versioned support-bundle schema metadata, aggregate operational/validation status,

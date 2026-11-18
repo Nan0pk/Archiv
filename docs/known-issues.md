@@ -899,7 +899,8 @@ Archiv cannot yet use Typer 0.29 or later. Until it does, installs stay on 0.28.
   tool's own folder is now bound back in read-only (`executable_binds` in `sandbox.py`;
   `tests/test_sandbox_hides_session.py`). A tool whose libraries or data also live under a
   hidden folder can still fail; install Tesseract, Poppler, LibreOffice and `resvg` from
-  Fedora packages. In 0.1.0a7 itself (before this fix) every tool under those folders fails.
+  Fedora packages. Between #289 and this fix (never in a release) every tool under those
+  folders failed.
 ## Plain text that is not UTF-8 is refused
 
 - A `.txt` or `.md` file must decode as UTF-8; anything else is refused, as before. In a

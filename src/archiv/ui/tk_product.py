@@ -32,6 +32,16 @@ _POLL_MS = 100
 _NOT_LOCAL_MARKER = "NOT A LOCAL ANSWER"
 
 
+def finished_status(label: str, output: str, *, succeeded: bool) -> str:
+    """The status line after a run. The not-local warning is repeated only from where
+    `ask` prints its banner: above the "Question:" line of a question run. Anywhere else
+    the words could be a quoted passage from a document."""
+    state = "Finished" if succeeded else "Needs attention — review details"
+    if label == "Questions" and _NOT_LOCAL_MARKER in output.split("Question:", 1)[0]:
+        state = f"{state} — NOT A LOCAL ANSWER: this archive is in evaluation mode"
+    return state
+
+
 class ProductApp:
     """Persistent task-oriented application; no command construction is exposed."""
 
@@ -48,6 +58,7 @@ class ProductApp:
         self.root = root
         self.state = load_state(home)
         self._pending: list[str] = []
+        self._running = ""
         self.runner = ConsoleRunner(on_output=self._on_output)
         root.title("Archiv — your document library")
         if "clam" in ttk.Style(root).theme_names():
@@ -70,7 +81,9 @@ class ProductApp:
         sidebar = ttk.Frame(root, padding=12)
         sidebar.pack(side=tk.LEFT, fill=tk.Y)
         ttk.Label(sidebar, text="Archiv", font=self.title_font).pack(anchor=tk.W)
-        ttk.Label(sidebar, text=str(self.state.home), wraplength=190).pack(
+        # The folder name only: a full path wraps over several lines and pushes the
+        # navigation off the window. Settings shows the whole path.
+        ttk.Label(sidebar, text=self.state.home.name or str(self.state.home)).pack(
             anchor=tk.W, pady=(0, 14)
         )
         for view in self.VIEWS:
@@ -171,9 +184,12 @@ class ProductApp:
             table = ttk.Treeview(
                 self.body, columns=("name", "folder", last), show="headings", selectmode="browse"
             )
-            for column, width in (("name", 240), ("folder", 300), (last, 150)):
+            char = tkfont.nametofont("TkDefaultFont").measure("0")  # widths follow the font size
+            for column, chars in (("name", 26), ("folder", 30), (last, 18)):
                 table.heading(column, text=column.capitalize(), anchor=tk.W)
-                table.column(column, width=width, minwidth=80, stretch=column == "folder")
+                table.column(
+                    column, width=chars * char, minwidth=8 * char, stretch=column == "folder"
+                )
             for row in rows:
                 path = Path(row.source_path)
                 detail = (row.error or "") if failed else row.imported_at[:16].replace("T", " ")
@@ -229,7 +245,7 @@ class ProductApp:
 
             ttk.Button(
                 self.body,
-                text=view.removesuffix("s"),
+                text="Search" if view == "Search" else "Ask",
                 command=submit,
             ).pack(side=tk.LEFT)
             ttk.Button(self.body, text="Cancel", command=self._cancel).pack(side=tk.LEFT, padx=5)
@@ -311,6 +327,7 @@ class ProductApp:
         # "not a local answer" notice prepended below would stack -- three identical
         # notices at the top with the newest answer off the bottom of the screen, which
         # makes a warning ambiguous about which answer it belongs to.
+        self._running = label
         self._pending.clear()
         self._clear_output()
         self.runner.start(console_executable_argv(argv))
@@ -324,12 +341,7 @@ class ProductApp:
             return
         self._drain_output()
         outcome = self.runner.wait(timeout=0)
-        state = "Finished" if outcome.succeeded else "Needs attention — review details"
-        # This is the window people actually open. It shows the run's raw JSON, so
-        # without this a remote answer arrives looking exactly like a local one with
-        # the origin buried inside the dump. Say it in words, where they are looking.
-        if _NOT_LOCAL_MARKER in outcome.output:
-            state = f"{state} — NOT A LOCAL ANSWER: this archive is in evaluation mode"
+        state = finished_status(self._running, outcome.output, succeeded=outcome.succeeded)
         self.status.set(state)
 
     def _on_output(self, chunk: bytes) -> None:

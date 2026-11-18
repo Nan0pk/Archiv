@@ -475,7 +475,9 @@ def test_the_default_desktop_window_shows_the_cli_warning_above_the_answer() -> 
         )
     )
     assert marker == "NOT A LOCAL ANSWER"
-    assert "_NOT_LOCAL_MARKER in outcome.output" in source_path.read_text(encoding="utf-8")
+    assert '_NOT_LOCAL_MARKER in output.split("Question:", 1)[0]' in source_path.read_text(
+        encoding="utf-8"
+    )
 
 
 # --- S06: the report path, and the document that always claimed 'disabled' -----

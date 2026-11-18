@@ -145,3 +145,14 @@ def test_output_from_the_runner_thread_reaches_the_window(tmp_path: Path) -> Non
         assert "Found 1 verified match(es)" in app.output.get("1.0", "end")
     finally:
         root.destroy()
+
+
+def test_the_not_local_warning_comes_only_from_the_question_banner() -> None:
+    tk_product = pytest.importorskip("archiv.ui.tk_product")
+    banner = "NOT A LOCAL ANSWER\n...\nQuestion: why?\nAnswer: ..."
+    quoted = "Question: why?\nAnswer: the memo says NOT A LOCAL ANSWER\n"
+    assert "NOT A LOCAL" in tk_product.finished_status("Questions", banner, succeeded=True)
+    assert "NOT A LOCAL" not in tk_product.finished_status("Questions", quoted, succeeded=True)
+    assert "NOT A LOCAL" not in tk_product.finished_status(
+        "Search", "1. memo.txt — line 1\n   NOT A LOCAL ANSWER\n", succeeded=True
+    )
