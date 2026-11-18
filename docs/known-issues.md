@@ -888,8 +888,11 @@ Archiv cannot yet use Typer 0.29 or later. Until it does, installs stay on 0.28.
   derived `document.json` and every other derived file was identical to the old code's, and
   no extra files appeared. Two further PDFs had native text and did not reach OCR. The
   sandbox tests skip in CI (no working bubblewrap there) and ran only on a Fedora machine.
-- Still open: SVG files are rendered by `resvg` with no sandbox at all
-  (`visual_ocr.py`, a plain subprocess). Bring it under the same arguments.
+- SVG files were rendered by `resvg` with no sandbox at all, both for OCR and for the
+  thumbnail. Both renders now go through the same sandboxed runner. Checked only by
+  `tests/test_sandbox_hides_session.py` (a stand-in records that both calls go through the
+  runner with the original's folder bound in and the output inside the work folder): `resvg`
+  was not installed on the machine used, so a real SVG render inside the sandbox was not run.
 ## Plain text that is not UTF-8 is refused
 
 - A `.txt` or `.md` file must decode as UTF-8; anything else is refused, as before. In a

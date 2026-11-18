@@ -188,6 +188,10 @@ def _run(
     return completed.stdout, completed.stderr, sandbox
 
 
+# Other derivation steps run untrusted-file tools through the same sandbox and limits.
+run_sandboxed = _run
+
+
 def _tool_version(
     executable: str,
     arguments: list[str],
@@ -663,11 +667,11 @@ def run_visual_ocr(
             out_path = root / rel_path
             out_path.parent.mkdir(parents=True, exist_ok=True)
             if not out_path.is_file():
-                subprocess.run(
+                _run(
                     [resvg, str(original), str(out_path)],
-                    check=True,
-                    capture_output=True,
+                    root=root,
                     timeout=OCR_TIMEOUT_SECONDS,
+                    extra_ro_binds=(original.parent,),
                 )
             inputs.append(
                 (

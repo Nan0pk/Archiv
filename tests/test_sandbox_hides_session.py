@@ -55,3 +55,41 @@ def test_ocr_runner_hides_session_files_and_environment(
     seen = json.loads(stdout)
     assert sandbox == "bubblewrap"
     assert seen == {"outside": False, "run_user": False, "secret": False, "root_writable": True}
+
+
+def test_svg_rendering_goes_through_the_sandboxed_runner(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from PIL import Image
+
+    from archiv.ingestion import derive, ingest_file, visual_ocr
+    from tests.format_matrix_support import build_svg
+
+    real_which = shutil.which
+
+    def which(name: str) -> str | None:
+        return "/usr/bin/resvg" if name == "resvg" else real_which(name)
+
+    monkeypatch.setattr(shutil, "which", which)
+    calls: list[tuple[list[str], Path, tuple[Path, ...]]] = []
+
+    def fake_run(
+        command: list[str], *, root: Path, timeout: int, extra_ro_binds: tuple[Path, ...] = ()
+    ) -> tuple[str, str, str]:
+        if command[0] == "/usr/bin/resvg":
+            calls.append((command, root, extra_ro_binds))
+            Image.new("RGB", (8, 8), "white").save(command[-1], format="PNG")
+            return "", "", "bubblewrap"
+        return _run(command, root=root, timeout=timeout, extra_ro_binds=extra_ro_binds)
+
+    monkeypatch.setattr(visual_ocr, "_run", fake_run)
+    monkeypatch.setattr(derive, "run_sandboxed", fake_run)
+    source = tmp_path / "drawing.svg"
+    source.write_bytes(build_svg())
+
+    ingest_file(source, home=tmp_path / "home")
+
+    assert calls, "resvg was run outside the sandboxed runner"
+    for command, root, binds in calls:
+        assert Path(command[-1]).is_relative_to(root)
+        assert any(Path(command[-2]).parent == b for b in binds)
