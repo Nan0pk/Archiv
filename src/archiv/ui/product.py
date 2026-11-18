@@ -49,7 +49,8 @@ class DesktopState:
 
     @property
     def onboarding_complete(self) -> bool:
-        return bool(self.folders)
+        # An archive built from the command line has no folders saved by the app.
+        return bool(self.folders) or ArchivLayout.resolve(self.home).database.is_file()
 
 
 def state_path(home: Path) -> Path:
@@ -161,10 +162,12 @@ def ingestion_argv(folder: Path, home: Path) -> list[str]:
 def search_argv(query: str, home: Path) -> list[str]:
     if not query.strip():
         raise ValueError("Enter words to search for.")
-    return ["find", query.strip(), "--home", str(home), "--json"]
+    # The CLI's readable text, not JSON: it is what a person should read, and it already
+    # prints the "not a local answer" banner above an answer when that applies.
+    return ["find", query.strip(), "--home", str(home)]
 
 
 def question_argv(question: str, home: Path) -> list[str]:
     if not question.strip():
         raise ValueError("Enter a question.")
-    return ["ask", question.strip(), "--home", str(home), "--json"]
+    return ["ask", question.strip(), "--home", str(home)]

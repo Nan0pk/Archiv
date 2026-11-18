@@ -1,10 +1,16 @@
 # Archiv desktop and diagnostic console
 
 `archiv ui` opens the user-oriented desktop application. It is organized around
-the library, ingestion progress, search, grounded questions, sources, reports,
-recovery, and settings. First run chooses an Archiv home and initial folder and
-checks optional OCR and LibreOffice support. Long operations can be cancelled,
-and keyboard shortcuts include Ctrl+K for search and Ctrl+Q for questions.
+the library, files that need attention, search, grounded questions, reports and
+settings. First run chooses an Archiv home and initial folder and checks optional
+OCR and LibreOffice support; an archive that already exists (for example one built
+with `archiv add`) opens straight to the library. The library and the files that
+need attention are one scrollable table with a count. Search and questions show
+the same readable text the `find` and `ask` commands print, including the
+"not a local answer" warning above an answer from an evaluation archive, and the
+status line repeats that warning. Long operations can be cancelled, and keyboard
+shortcuts include Ctrl+K for search and Ctrl+Q for questions. The app does not yet
+open a cited file, run the `archiv memory` commands, or open reports.
 
 The original command-oriented test console is retained for maintainers as
 `archiv ui --diagnostic`. It remains a **diagnostic console over the existing

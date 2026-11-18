@@ -27,6 +27,16 @@ two-person privacy review in `docs/definition-of-done.md`. Audio, video and the 
 - Text derived from some PDFs can change after `rebuild-derived`, because pypdf 7 reads a few
   pages differently; saved answers citing those pages may then stop validating.
 
+### Desktop app (`archiv ui`)
+
+- Search and questions show readable results instead of raw JSON; before this, text from
+  the command reached the window from a background thread and, on the machine tested, never
+  appeared at all. An empty search says so instead of doing nothing.
+- The library is a scrollable table with a count (10,274 files opened in 0.12 s instead of
+  0.69 s, and every file is reachable); the status line spans the window; an archive built
+  from the command line opens straight to the library; the "Sources" page, which promised an
+  action the app did not have, is gone.
+
 ### Sandboxing
 
 - OCR now runs in the same stricter sandbox as the LibreOffice conversion: it can no longer

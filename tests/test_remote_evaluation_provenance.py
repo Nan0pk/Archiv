@@ -447,36 +447,35 @@ def test_the_remediation_command_carries_the_archive_it_applies_to(
     assert "Unset it as well" in with_override.output
 
 
-def test_the_default_desktop_window_has_a_notice_and_reads_the_origin() -> None:
-    """The window `archiv ui` opens is the one people use, and it shows raw JSON.
+def test_the_default_desktop_window_shows_the_cli_warning_above_the_answer() -> None:
+    """The window `archiv ui` opens is the one people use.
 
-    Without this the origin arrives buried inside that dump. The wiring itself needs a
-    display to drive, so what is asserted here is the text it shows and the fact that it
-    reads the origin from the same place the diagnostic console does.
+    It shows the readable text `archiv ask` prints, so the warning that
+    `test_ask_human_output_states_the_answer_is_not_local` checks (wording, and its place
+    above the answer and the sources) reaches the window unchanged. Asking for `--json`
+    would drop that banner, so that is checked here, and the status line must repeat it.
     """
 
-    # Read rather than imported: this module needs tkinter, which is not installed
-    # everywhere the test suite runs, and the notice must be checked regardless.
-    source_path = Path(__file__).parent.parent / "src" / "archiv" / "ui" / "tk_product.py"
-    source = source_path.read_text(encoding="utf-8")
+    from archiv.ui.product import question_argv, search_argv
 
-    tree = ast.parse(source)
-    notice = next(
+    assert "--json" not in question_argv("Why?", Path("home"))
+    assert "--json" not in search_argv("words", Path("home"))
+
+    # Read rather than imported: this module needs tkinter, which is not installed
+    # everywhere the test suite runs, and the status-line wiring must be checked regardless.
+    source_path = Path(__file__).parent.parent / "src" / "archiv" / "ui" / "tk_product.py"
+    tree = ast.parse(source_path.read_text(encoding="utf-8"))
+    marker = next(
         ast.literal_eval(node.value)
         for node in tree.body
         if isinstance(node, ast.Assign)
         and any(
-            isinstance(target, ast.Name) and target.id == "_NOT_LOCAL_NOTICE"
+            isinstance(target, ast.Name) and target.id == "_NOT_LOCAL_MARKER"
             for target in node.targets
         )
     )
-    assert "NOT A LOCAL ANSWER" in notice
-    assert "computers you do not control" in notice
-    assert "archiv model evaluation disable" in notice
-    assert "was sent to" not in notice, "same rule as the terminal banner: no past-tense claim"
-
-    assert "inspect_run_output" in source
-    assert "model_provenance" in source
+    assert marker == "NOT A LOCAL ANSWER"
+    assert "_NOT_LOCAL_MARKER in outcome.output" in source_path.read_text(encoding="utf-8")
 
 
 # --- S06: the report path, and the document that always claimed 'disabled' -----
