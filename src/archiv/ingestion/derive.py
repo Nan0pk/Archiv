@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import shutil
-import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -14,7 +13,7 @@ from archiv.contracts import NormalizedDocument, ProcessingEvidence
 from archiv.hashing import sha256_file
 from archiv.ingestion.ledger import now_iso, record_processing, record_processing_batch
 from archiv.ingestion.normalizers import normalize
-from archiv.ingestion.visual_ocr import VisualOcrRun, run_visual_ocr
+from archiv.ingestion.visual_ocr import VisualOcrRun, run_sandboxed, run_visual_ocr
 from archiv.storage.database import ArchivDatabase
 from archiv.storage.layout import ArchivLayout
 from archiv.storage.queue import enqueue_job
@@ -389,11 +388,11 @@ def _derive_svg_preview(
 
     try:
         tmp_png = root / "previews" / "rendered.png"
-        subprocess.run(
+        run_sandboxed(
             [resvg, "-w", "256", "-h", "256", str(original), str(tmp_png)],
-            check=True,
-            capture_output=True,
+            root=root,
             timeout=30,
+            extra_ro_binds=(original.parent,),
         )
         with Image.open(tmp_png) as img:
             thumb = img.copy()

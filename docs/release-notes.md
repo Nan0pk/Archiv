@@ -31,7 +31,8 @@ two-person privacy review in `docs/definition-of-done.md`. Audio, video and the 
 
 - OCR now runs in the same stricter sandbox as the LibreOffice conversion: it can no longer
   reach the user's session bus or see files under `/home`, `/mnt` or `/media`, and gets only
-  a minimal environment.
+  a minimal environment. SVG rendering (`resvg`), which had no sandbox at all, now runs
+  inside it too.
 
 ### Institutional memory (`archiv memory`, new)
 
