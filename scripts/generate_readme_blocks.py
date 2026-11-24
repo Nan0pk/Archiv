@@ -102,7 +102,7 @@ SUPPORT = {"full": "✅ Full", "partial": "🟡 Partial"}
 # Command list order. Every visible command must appear exactly once; the test and this
 # script both fail on a command that is missing or unknown.
 COMMAND_GROUPS: list[tuple[str, str, list[str]]] = [
-    ("Everyday use", "", ["add", "find", "ask", "source", "report", "status", "ui"]),
+    ("Everyday use", "", ["setup", "add", "find", "ask", "source", "report", "status", "ui"]),
     (
         "Files and formats",
         "",

@@ -56,7 +56,7 @@ ocr-benchmark = [
 ]
 
 [project.scripts]
-archiv = "archiv.cli:app"
+archiv = "archiv.cli:main"
 archiv-mcp = "archiv.mcp_server:main"
 
 [tool.hatch.build.targets.wheel]

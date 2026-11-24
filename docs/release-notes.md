@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### First-run setup
+
+- New `archiv setup` asks where to keep the library, which documents to add, and which AI
+  model to use, then configures itself. It lists every model offered by Ollama, LM Studio and
+  llama.cpp servers on this computer (llama.cpp's port 8080 is new), accepts a server address
+  typed by hand, and asks the chosen model one tiny question before calling it ready. For a
+  bare `.gguf` file it shows how to serve it; Archiv still never downloads or starts a model.
+  The installer now ends by pointing at it.
+- The library location chosen in setup or the desktop app is remembered for every later
+  command. Before, the desktop app forgot a non-default location at the next launch and
+  started first-run again. A remembered folder that has gone missing stops with a plain
+  message instead of quietly starting an empty library elsewhere.
+- The desktop app's first-run page and Settings now have a model chooser with "Look again",
+  manual entry, and model-file guidance. Before, it offered only the first model of the first
+  server it found, and nothing at all when none was running.
+
 ### Sandboxing
 
 - SVG rendering (`resvg`), which had no sandbox at all, now runs inside the same sandbox as

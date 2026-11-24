@@ -15,13 +15,21 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.request import urlopen
 
-from archiv.model_adapter import ModelConfig, save_model_config
+from pydantic import ValidationError
+
+from archiv.model_adapter import (
+    ModelConfig,
+    build_model_adapter,
+    load_model_config,
+    save_model_config,
+)
 from archiv.storage.layout import ArchivLayout
 
 PRODUCT_STATE = "desktop.json"
 LOOPBACK_CANDIDATES = (
     ("http://127.0.0.1:11434", "Ollama"),
     ("http://127.0.0.1:1234", "LM Studio"),
+    ("http://127.0.0.1:8080", "llama.cpp"),
 )
 
 
@@ -102,25 +110,55 @@ def check_prerequisites() -> tuple[Prerequisite, ...]:
     )
 
 
-def detect_loopback_model(timeout: float = 0.15) -> tuple[str, str] | None:
-    """Detect known local servers only; never contact a non-loopback address."""
+def detect_loopback_models(timeout: float = 0.15) -> tuple[tuple[str, str, str], ...]:
+    """Every model offered by a known local server, as (endpoint, server, model).
 
-    for endpoint, _label in LOOPBACK_CANDIDATES:
+    Only the fixed loopback addresses above are contacted, never a network address.
+    """
+
+    found: list[tuple[str, str, str]] = []
+    for endpoint, label in LOOPBACK_CANDIDATES:
         try:
             with urlopen(endpoint + "/v1/models", timeout=timeout) as response:  # noqa: S310
                 payload = json.loads(response.read().decode("utf-8"))
-            models = payload.get("data", [])
-            if models and isinstance(models[0].get("id"), str):
-                return endpoint, str(models[0]["id"])
-        except (OSError, ValueError, KeyError, TypeError):
+            for item in payload.get("data", []):
+                if isinstance(item.get("id"), str):
+                    found.append((endpoint, label, str(item["id"])))
+        except (OSError, ValueError, AttributeError, TypeError):
             continue
-    return None
+    return tuple(found)
 
 
-def configure_detected_model(home: Path, detected: tuple[str, str]) -> Path:
-    endpoint, model = detected
-    return save_model_config(
-        ModelConfig(adapter="openai-compatible-loopback", endpoint=endpoint, model=model), home
+def configure_model(home: Path, endpoint: str, model: str) -> Path:
+    """Save a local model choice; the loopback-only rules reject anything else."""
+
+    try:
+        config = ModelConfig(
+            adapter="openai-compatible-loopback", endpoint=endpoint.strip(), model=model.strip()
+        )
+    except ValidationError as error:
+        raise ValueError(error.errors()[0]["msg"].removeprefix("Value error, ")) from error
+    return save_model_config(config, home)
+
+
+def verify_model(home: Path) -> tuple[bool, str]:
+    """Ask the saved model one tiny question, so "configured" is never only a claim."""
+
+    config = load_model_config(home)
+    try:
+        reply = build_model_adapter(config, home).complete("Respond with the single word PONG.")
+    except Exception as error:  # any failure is reported to the person, not raised
+        return False, f"{config.model} at {config.endpoint} did not answer: {error}"
+    return True, f"{config.model} at {config.endpoint} answered ({reply.strip()[:40]!r})."
+
+
+def gguf_hint(path: Path) -> str:
+    """Archiv never starts or downloads a model; say how to serve a model file locally."""
+
+    return (
+        f"Archiv talks to a model server on this computer rather than opening {path.name} "
+        f"itself. Serve it with llama.cpp:\n  llama-server -m {path} --port 8080\n"
+        "then choose it here (it appears as a llama.cpp model)."
     )
 
 

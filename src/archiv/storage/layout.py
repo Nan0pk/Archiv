@@ -9,6 +9,58 @@ from pathlib import Path
 LAYOUT_SCHEMA_VERSION = 1
 
 
+def default_home() -> Path:
+    """The library location when nothing else names one."""
+
+    xdg_data_home = os.environ.get("XDG_DATA_HOME")
+    data_home = (
+        Path(xdg_data_home).expanduser() if xdg_data_home else Path.home() / ".local" / "share"
+    )
+    return data_home / "archiv"
+
+
+class MissingLibraryError(RuntimeError):
+    """The library remembered by setup is not where it was."""
+
+
+def home_pointer_path() -> Path:
+    """Where ``archiv setup`` records the chosen library, outside the library itself."""
+
+    config_home = os.environ.get("XDG_CONFIG_HOME")
+    base = Path(config_home).expanduser() if config_home else Path.home() / ".config"
+    return base / "archiv" / "home"
+
+
+def remembered_home() -> Path | None:
+    """The library chosen during setup, or None when setup never chose one.
+
+    A remembered library that has gone missing is an error, never a fresh start: an
+    unplugged drive must not silently split the user's documents across two libraries.
+    """
+
+    pointer = home_pointer_path()
+    if not pointer.is_file():
+        return None
+    root = Path(pointer.read_text(encoding="utf-8").strip()).expanduser()
+    if not root.is_dir():
+        raise MissingLibraryError(
+            f"Archiv's library folder {root} is missing. Reconnect the drive it is on, "
+            "or run `archiv setup` to choose another location."
+        )
+    return root
+
+
+def remember_home(root: Path) -> Path:
+    """Make ``root`` the library every later command uses when none is named."""
+
+    pointer = home_pointer_path()
+    pointer.parent.mkdir(parents=True, exist_ok=True)
+    temporary = pointer.with_suffix(".tmp")
+    temporary.write_text(f"{root.expanduser().resolve()}\n", encoding="utf-8")
+    os.replace(temporary, pointer)
+    return pointer
+
+
 @dataclass(frozen=True, slots=True)
 class ArchivLayout:
     """Resolved paths for canonical, derived, index, and database state."""
@@ -33,14 +85,10 @@ class ArchivLayout:
             root = explicit.expanduser()
         elif value := os.environ.get("ARCHIV_HOME"):
             root = Path(value).expanduser()
+        elif (remembered := remembered_home()) is not None:
+            root = remembered
         else:
-            xdg_data_home = os.environ.get("XDG_DATA_HOME")
-            data_home = (
-                Path(xdg_data_home).expanduser()
-                if xdg_data_home
-                else Path.home() / ".local" / "share"
-            )
-            root = data_home / "archiv"
+            root = default_home()
 
         root = root.resolve()
         return cls(
