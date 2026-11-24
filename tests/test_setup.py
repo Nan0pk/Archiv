@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 from typer.testing import CliRunner
@@ -14,6 +15,9 @@ from archiv.cli import app
 from archiv.model_adapter import load_model_config
 from archiv.storage.layout import ArchivLayout, home_pointer_path, remember_home
 from archiv.ui import product
+
+if TYPE_CHECKING:
+    from tkinter import Misc, ttk
 
 
 def test_remembered_library_is_used_until_overridden(
@@ -141,3 +145,89 @@ def test_missing_library_is_reported_in_one_sentence(
     error = capsys.readouterr().err
     assert "is missing" in error
     assert "Traceback" not in error
+
+
+def test_setup_with_a_missing_library_offers_no_silent_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("ARCHIV_HOME", raising=False)
+    monkeypatch.setattr(setup_cli, "detect_loopback_models", lambda: ())
+    remember_home(tmp_path / "unplugged")
+    new = tmp_path / "new-library"
+    # An empty first answer must be asked again, not accepted as some default folder.
+    result = CliRunner().invoke(app, ["setup"], input=f"\n{new}\n\ns\n")
+    assert result.exit_code == 0, result.output
+    assert f"Your library at {tmp_path / 'unplugged'} is missing" in result.output
+    assert home_pointer_path().read_text(encoding="utf-8").strip() == str(new.resolve())
+
+
+def test_setup_warns_when_archiv_home_overrides_the_choice(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("ARCHIV_HOME", str(tmp_path / "from-env"))
+    monkeypatch.setattr(setup_cli, "detect_loopback_models", lambda: ())
+    result = CliRunner().invoke(app, ["setup", "--home", str(tmp_path / "chosen")], input="\ns\n")
+    assert result.exit_code == 0, result.output
+    assert "ARCHIV_HOME is set" in result.output
+
+
+def test_doctor_reports_a_missing_remembered_library(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from archiv.doctor import doctor_report
+
+    monkeypatch.delenv("ARCHIV_HOME", raising=False)
+    remember_home(tmp_path / "gone")
+    report = doctor_report()
+    check = next(c for c in report["checks"] if c["name"] == "remembered_library")
+    assert not check["passed"] and "is missing" in check["detail"]
+    assert report["status"] == "failed"
+
+
+def _button(widget: Misc, text: str) -> ttk.Button | None:
+    from tkinter import ttk
+
+    for child in widget.winfo_children():
+        if isinstance(child, ttk.Button) and child.cget("text") == text:
+            return child
+        if (hit := _button(child, text)) is not None:
+            return hit
+    return None
+
+
+def test_settings_keeps_the_saved_model_and_checks_it_off_the_window_thread(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    product.configure_model(tmp_path, "http://127.0.0.1:8080", "mine")
+    tkinter = pytest.importorskip("tkinter")
+    tk_product = pytest.importorskip("archiv.ui.tk_product")
+    try:
+        root = tkinter.Tk()
+    except tkinter.TclError:
+        pytest.skip("no display")
+    detected = (("http://127.0.0.1:11434", "Ollama", "other"),)
+    monkeypatch.setattr(tk_product, "detect_loopback_models", lambda: detected)
+    desktop = tk_product.ProductApp(root, home=tmp_path)
+    checked: list[Path] = []
+
+    def answered(home: Path) -> tuple[bool, str]:
+        checked.append(home)
+        return True, "mine answered."
+
+    monkeypatch.setattr(tk_product, "verify_model", answered)
+    try:
+        desktop._show("Settings")  # pyright: ignore[reportPrivateUsage]
+        button = _button(desktop.body, "Use this model")
+        assert button is not None
+        button.invoke()
+        for _ in range(50):
+            root.update()
+            if desktop.status.get().startswith("Model ready"):
+                break
+            root.after(20)
+        config = load_model_config(tmp_path)
+        assert (config.endpoint, config.model) == ("http://127.0.0.1:8080", "mine")
+        assert checked == [tmp_path]
+        assert desktop.status.get() == "Model ready: mine answered."
+    finally:
+        root.destroy()

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+import threading
 import tkinter as tk
 from collections.abc import Callable
 from pathlib import Path
@@ -12,6 +13,7 @@ from tkinter import font as tkfont
 from tkinter.scrolledtext import ScrolledText
 
 from archiv.doctor import diagnostics_report, save_diagnostics
+from archiv.model_adapter import load_model_config
 from archiv.storage.layout import MissingLibraryError, remember_home
 from archiv.ui.product import (
     DesktopState,
@@ -140,7 +142,7 @@ class ProductApp:
         for check in checks:
             mark = "Available" if check.available else "Action needed"
             ttk.Label(self.body, text=f"{check.name}: {mark}. {check.guidance}").pack(anchor=tk.W)
-        chosen_model = self._model_picker()
+        chosen_model = self._model_picker(None)
 
         def finish() -> None:
             selected_home, selected_folder = (
@@ -159,15 +161,7 @@ class ProductApp:
                 except ValueError as error:
                     messagebox.showerror("Model not saved", str(error), parent=self.root)
                     return
-                self.status.set(f"Checking that {model[1]} answers…")
-                self.root.update_idletasks()
-                ok, message = verify_model(selected_home)
-                if not ok:
-                    messagebox.showwarning(
-                        "Model saved, but not answering",
-                        f"{message}\n\nStart the model server, then choose it again in Settings.",
-                        parent=self.root,
-                    )
+                self._check_model(selected_home, warn=True)
             self.state = DesktopState(selected_home.resolve(), (selected_folder.resolve(),), ())
             save_state(self.state)
             remember_home(self.state.home)  # so the next launch opens this library
@@ -180,8 +174,36 @@ class ProductApp:
             anchor=tk.W, pady=18
         )
 
-    def _model_picker(self) -> Callable[[], tuple[str, str] | None]:
-        """Pack a model chooser into the body; the returned function reads the choice."""
+    def _check_model(self, home: Path, *, warn: bool) -> None:
+        """Ask the saved model one tiny question off the window thread; report the result."""
+
+        result: list[tuple[bool, str]] = []
+        self.status.set("Checking that the model answers…")
+        threading.Thread(target=lambda: result.append(verify_model(home)), daemon=True).start()
+
+        def poll() -> None:
+            if not result:
+                self.root.after(_POLL_MS, poll)
+                return
+            ok, message = result[0]
+            self.status.set(
+                ("Model ready: " if ok else "Model saved, but not answering: ") + message
+            )
+            if warn and not ok:
+                messagebox.showwarning(
+                    "Model saved, but not answering",
+                    f"{message}\n\nStart the model server, then choose it again in Settings.",
+                    parent=self.root,
+                )
+
+        self.root.after(_POLL_MS, poll)
+
+    def _model_picker(self, home: Path | None) -> Callable[[], tuple[str, str] | None]:
+        """Pack a model chooser into the body; the returned function reads the choice.
+
+        With ``home``, the model already saved there is shown and selected, so saving
+        without touching the chooser never swaps it for whichever model was found first.
+        """
 
         ttk.Label(self.body, text="AI model", font=self.section_font).pack(anchor=tk.W, pady=(8, 0))
         frame = ttk.Frame(self.body)
@@ -199,11 +221,23 @@ class ProductApp:
             ttk.Label(manual_row, text=label).pack(side=tk.LEFT)
             ttk.Entry(manual_row, textvariable=variable, width=28).pack(side=tk.LEFT, padx=4)
 
+        saved = load_model_config(home) if home is not None else None
+        current: tuple[str, str, str] | None = None
+        if saved is not None and saved.adapter == "openai-compatible-loopback":
+            current = (saved.endpoint or "", "saved", saved.model or "")
+        if saved is not None:
+            text = f"Current: {saved.model} at {saved.endpoint}" if saved.model else "Current: none"
+            ttk.Label(self.body, text=text).pack(anchor=tk.W, before=frame)
+
         def labels() -> list[str]:
             return [f"{model} ({server})" for _endpoint, server, model in found]
 
         def refresh() -> None:
-            found[:] = detect_loopback_models()
+            detected = detect_loopback_models()
+            if current is not None:  # the saved model first, under its own label
+                key = (current[0], current[2])
+                detected = (current, *(i for i in detected if (i[0], i[2]) != key))
+            found[:] = detected
             combo["values"] = [*labels(), manual, skip]
             choice.set(labels()[0] if found else skip)
             on_choice()
@@ -353,7 +387,7 @@ class ProductApp:
             ttk.Button(self.body, text="Add folder…", command=self._add_folder).pack(
                 anchor=tk.W, pady=12
             )
-            chosen_model = self._model_picker()
+            chosen_model = self._model_picker(self.state.home)
 
             def save_model() -> None:
                 model = chosen_model()
@@ -365,12 +399,7 @@ class ProductApp:
                 except ValueError as error:
                     messagebox.showerror("Model not saved", str(error), parent=self.root)
                     return
-                self.status.set(f"Checking that {model[1]} answers…")
-                self.root.update_idletasks()
-                ok, message = verify_model(self.state.home)
-                self.status.set(
-                    ("Model ready: " if ok else "Saved, but the check failed: ") + message
-                )
+                self._check_model(self.state.home, warn=False)
 
             ttk.Button(self.body, text="Use this model", command=save_model).pack(
                 anchor=tk.W, pady=4

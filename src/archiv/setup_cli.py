@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Annotated
 
 import typer
 
-from archiv.storage.layout import ArchivLayout, MissingLibraryError, default_home, remember_home
+from archiv.storage.layout import (
+    ArchivLayout,
+    MissingLibraryError,
+    home_pointer_path,
+    remember_home,
+)
 from archiv.ui.product import (
     DesktopState,
     configure_model,
@@ -19,11 +25,13 @@ from archiv.ui.product import (
 )
 
 
-def _default_home() -> Path:
+def _current_home() -> tuple[Path | None, Path | None]:
+    """(library to offer as the default, remembered library that has gone missing)."""
+
     try:
-        return ArchivLayout.resolve().root
-    except MissingLibraryError:  # offer the standard place instead
-        return default_home().resolve()
+        return ArchivLayout.resolve().root, None
+    except MissingLibraryError:
+        return None, Path(home_pointer_path().read_text(encoding="utf-8").strip())
 
 
 def _choose_model(home: Path) -> str:
@@ -92,14 +100,37 @@ def register_setup_command(app: typer.Typer) -> None:
         """Guided first run: choose the library location, add documents, pick a model."""
 
         typer.echo("Archiv setup. Nothing here leaves this computer.\n")
+        current, missing = _current_home()
         if home is None:
             typer.echo("1. Where should Archiv keep its library? It holds a preserved copy of")
             typer.echo("   every document plus the search index, so pick a disk with room.")
-            home = Path(typer.prompt("   Library folder", default=str(_default_home())))
+            if missing is not None:
+                # No default here: Enter must not quietly start a second, empty library.
+                typer.echo(f"   Your library at {missing} is missing. If it is on a drive that")
+                typer.echo(
+                    "   is unplugged, stop here (Ctrl+C), reconnect it, and run setup again."
+                )
+                typer.echo("   Otherwise type where the library should be from now on.")
+                home = Path(typer.prompt("   Library folder"))
+            else:
+                home = Path(typer.prompt("   Library folder", default=str(current)))
         layout = ArchivLayout.resolve(home)
         layout.ensure()
         remember_home(layout.root)
         typer.echo(f"   Library: {layout.root} (remembered for every command)")
+        if current is not None and current != layout.root:
+            typer.echo(
+                f"   The library at {current} is left as it was; it is no longer the default."
+            )
+        if (overriding := os.environ.get("ARCHIV_HOME")) and Path(
+            overriding
+        ).expanduser().resolve() != layout.root:
+            typer.echo(
+                f"   Note: ARCHIV_HOME is set to {overriding} in this shell, and it wins over"
+            )
+            typer.echo(
+                "   this choice. Remove it from your shell profile to use the library above."
+            )
 
         if folder is None:
             typer.echo(

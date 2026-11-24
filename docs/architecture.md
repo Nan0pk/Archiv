@@ -26,8 +26,11 @@ canonical originals + structured metadata + rebuildable indexes
 ## `ARCHIV_HOME` durability and compatibility contract
 
 `ARCHIV_HOME` selects the entire Archiv state root. An explicit CLI `--home` wins,
-then `ARCHIV_HOME`, then `$XDG_DATA_HOME/archiv` (or
-`~/.local/share/archiv`). Moving a home is supported only through a verified
+then `ARCHIV_HOME`, then the library remembered by `archiv setup` or the desktop app
+(one path in `$XDG_CONFIG_HOME/archiv/home`, outside the state root), then
+`$XDG_DATA_HOME/archiv` (or `~/.local/share/archiv`). A remembered library whose folder
+is missing is an error, never a fallback to the default, so one user's documents are not
+split across two roots. Moving a home is supported only through a verified
 backup/export and restore; consumers must not infer additional paths or write
 directly into this tree.
 

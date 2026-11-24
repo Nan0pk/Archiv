@@ -47,7 +47,7 @@ The MCP server deliberately does not expose:
 - arbitrary file reads;
 - deletion or overwrite tools.
 
-`ARCHIV_HOME` is fixed by the server process rather than chosen per call. Ingest requires an absolute regular-file path and defaults to a 100 MiB maximum, configurable through `ARCHIV_MCP_MAX_SOURCE_BYTES`. Report names must be simple `.docx` basenames and are confined to `ARCHIV_HOME/outputs/mcp/`. Existing reports are not overwritten.
+`ARCHIV_HOME` is fixed by the server process rather than chosen per call; without it, the server uses the library remembered by `archiv setup`, then the default location. Ingest requires an absolute regular-file path and defaults to a 100 MiB maximum, configurable through `ARCHIV_MCP_MAX_SOURCE_BYTES`. Report names must be simple `.docx` basenames and are confined to `ARCHIV_HOME/outputs/mcp/`. Existing reports are not overwritten.
 
 ## Evidence and failure semantics
 
