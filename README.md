@@ -369,11 +369,23 @@ bash install-fedora.sh
 curl -fsSL https://raw.githubusercontent.com/Nan0pk/Archiv/main/tools/install-fedora.sh | bash
 ```
 
-Then confirm it worked:
+Then let Archiv set itself up:
 
 ```bash
-archiv doctor
+archiv setup
 ```
+
+It asks three things, with a sensible default for each: where to keep the library (it holds a
+preserved copy of every document plus the search index, so pick a disk with room), which folder
+of documents to add, and which AI model to use. For the model it looks for Ollama, LM Studio and
+llama.cpp servers on this computer and lists every model they offer; you can also type a
+server address, or skip and add one later. Archiv never downloads or starts a model itself: if
+you only have a `.gguf` file, setup shows the one-line `llama-server` command to serve it. A
+chosen model is asked one tiny question before setup calls it ready. The library location is
+remembered, so later commands need no `--home`. `archiv ui` offers the same choices in a window
+on first launch, and in Settings afterwards.
+
+`archiv doctor` confirms what is installed and working.
 
 No cloning and no virtual environment to activate.
 
@@ -429,6 +441,7 @@ archiv find "unique fixture marker" --json > matches.json
 archiv source --citation-file matches.json --citation-number 1
 
 # 5. Point Archiv at a model on your own machine (only needed for steps 6 and 7).
+#    `archiv setup` finds and checks one for you; this is the same thing by hand.
 archiv model configure --endpoint http://127.0.0.1:11434 --model llama3
 
 # 6. Ask a real question. --explain-retrieval shows how it decided.
@@ -451,6 +464,7 @@ Maintainers can open the retained command diagnostic with `archiv ui --diagnosti
 
 | Command | What it does |
 | --- | --- |
+| `archiv setup` | Choose the library folder, add your documents and pick a local AI model, in one guided pass |
 | `archiv add PATH` | Add supported files and refresh the search index in one step |
 | `archiv find TEXT` | Find exact text, with independently validated citations |
 | `archiv ask QUESTION` | Answer a question from your own documents, with sources |
@@ -461,7 +475,10 @@ Maintainers can open the retained command diagnostic with `archiv ui --diagnosti
 | `archiv ui` | Open the task-oriented document library |
 
 Most commands accept `--json` for machine-readable output, and `--home PATH` to work on an
-archive other than the default (`$ARCHIV_HOME` if set, otherwise `~/.local/share/archiv`).
+archive other than the default: `$ARCHIV_HOME` if set, otherwise the library chosen in
+`archiv setup` or the desktop app, otherwise `~/.local/share/archiv`. If the chosen library's
+folder goes missing (an unplugged drive, say), commands stop and say so rather than starting
+an empty library somewhere else.
 `archiv COMMAND --help` shows the options of one command. Support and privacy guidance:
 [diagnostics and issue reports](docs/diagnostics.md) · [release notes](docs/release-notes.md).
 
@@ -477,6 +494,7 @@ archive other than the default (`$ARCHIV_HOME` if set, otherwise `~/.local/share
 
 | Command | What it does |
 | --- | --- |
+| `archiv setup` | Guided first run: choose the library location, add documents, pick a model. |
 | `archiv add SOURCE` | Add supported files and immediately refresh the local search index. |
 | `archiv find QUERY` | Find exact text and show readable, independently validated citations. |
 | `archiv ask QUERY` | Ask a grounded question over ingested evidence and receive a citation-verified answer. |

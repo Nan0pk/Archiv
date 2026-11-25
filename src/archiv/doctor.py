@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import platform
 import shutil
 import sqlite3
@@ -15,7 +16,7 @@ from typing import Literal, TypedDict
 
 from archiv import __version__
 from archiv.storage.integrity import inspect_home
-from archiv.storage.layout import ArchivLayout
+from archiv.storage.layout import ArchivLayout, MissingLibraryError, remembered_home
 
 SUPPORT_BUNDLE_SCHEMA_VERSION = "1"
 _DEPENDENCIES = (
@@ -157,6 +158,14 @@ def collect_checks(home: Path | None = None) -> list[CheckResult]:
     """Return all checks without mutating persistent user state."""
 
     checks = [_python_check(), _sqlite_fts5_check(), _writable_workspace_check()]
+    if home is None and not os.environ.get("ARCHIV_HOME"):
+        try:
+            remembered = remembered_home()
+        except MissingLibraryError as error:
+            checks.append(CheckResult("remembered_library", False, str(error)))
+        else:
+            if remembered is not None:
+                checks.append(CheckResult("remembered_library", True, str(remembered)))
     if home is not None:
         integrity = inspect_home(home)
         checks.append(

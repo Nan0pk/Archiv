@@ -10,10 +10,14 @@ from ingestion_support import GENERATOR
 
 
 @pytest.fixture(autouse=True)
-def disable_optional_ocr(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+def disable_optional_ocr(
+    monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory
+) -> Iterator[None]:
     """Keep unrelated tests independent of host-installed OCR tools."""
 
     monkeypatch.setenv("ARCHIV_OCR", "off")
+    # A library remembered by `archiv setup` on this machine must not redirect tests.
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path_factory.mktemp("xdg-config")))
     yield
 
 

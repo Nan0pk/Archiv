@@ -8,8 +8,10 @@ The storage root is resolved in this order:
 
 1. `--home` supplied to the CLI;
 2. `ARCHIV_HOME`;
-3. `$XDG_DATA_HOME/archiv`;
-4. `~/.local/share/archiv`.
+3. the library chosen in `archiv setup` or the desktop app, recorded in
+   `$XDG_CONFIG_HOME/archiv/home` (an error, not a fallback, if that folder is missing);
+4. `$XDG_DATA_HOME/archiv`;
+5. `~/.local/share/archiv`.
 
 The default never uses the current repository or working directory.
 

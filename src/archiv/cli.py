@@ -26,6 +26,7 @@ from archiv.model_cli import model_app
 from archiv.ocr_benchmark_cli import register_ocr_benchmark_command
 from archiv.report_cli import register_report_commands
 from archiv.search import rebuild_search_index, search_documents
+from archiv.setup_cli import register_setup_command
 from archiv.source_location_cli import register_source_location_command
 from archiv.ui_cli import register_ui_command
 from archiv.user_cli import register_user_commands
@@ -36,6 +37,7 @@ app.add_typer(model_app, name="model")
 register_report_commands(app)
 register_alpha_commands(app)
 register_user_commands(app)
+register_setup_command(app)
 register_source_location_command(app)
 register_format_matrix_command(app)
 register_ocr_benchmark_command(app)
@@ -44,6 +46,18 @@ register_image_commands(app)
 register_faces_commands(app)
 register_graph_commands(app)
 app.add_typer(memory_app, name="memory")
+
+
+def main() -> None:
+    """Console entry point: a missing remembered library is a sentence, not a traceback."""
+
+    from archiv.storage.layout import MissingLibraryError
+
+    try:
+        app()
+    except MissingLibraryError as error:
+        typer.echo(str(error), err=True)
+        raise SystemExit(2) from error
 
 
 @app.command()
@@ -312,4 +326,4 @@ def search_command(
 
 
 if __name__ == "__main__":
-    app()
+    main()

@@ -227,4 +227,4 @@ case ":$PATH:" in
   *":$BIN_DIR:"*) ;;
   *) echo "Add $BIN_DIR to PATH, then open a new shell." ;;
 esac
-echo "Next: archiv add ~/Documents"
+echo "Next: run  archiv setup  to choose your library folder, documents and AI model."

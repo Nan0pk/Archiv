@@ -4,24 +4,30 @@ from __future__ import annotations
 
 import json
 import sys
+import threading
 import tkinter as tk
+from collections.abc import Callable
 from pathlib import Path
 from tkinter import TclError, filedialog, messagebox, ttk
 from tkinter import font as tkfont
 from tkinter.scrolledtext import ScrolledText
 
 from archiv.doctor import diagnostics_report, save_diagnostics
+from archiv.model_adapter import load_model_config
+from archiv.storage.layout import MissingLibraryError, remember_home
 from archiv.ui.product import (
     DesktopState,
     check_prerequisites,
-    configure_detected_model,
-    detect_loopback_model,
+    configure_model,
+    detect_loopback_models,
+    gguf_hint,
     ingestion_argv,
     list_documents,
     load_state,
     question_argv,
     save_state,
     search_argv,
+    verify_model,
 )
 from archiv.ui.runner import ConsoleRunner, console_executable_argv
 
@@ -107,11 +113,19 @@ class ProductApp:
 
     def _onboard(self) -> None:
         self._clear()
-        self._heading("Welcome to Archiv", "Choose where Archiv lives, then add your first folder.")
+        self._heading(
+            "Welcome to Archiv",
+            "Choose where Archiv keeps its library, your first document folder, and the AI "
+            "model on this computer that answers questions. Nothing leaves this computer.",
+        )
         home = tk.StringVar(value=str(self.state.home))
         folder = tk.StringVar()
         for label, variable, chooser in (
-            ("Archiv home", home, lambda: filedialog.askdirectory(title="Choose Archiv home")),
+            (
+                "Library folder (where Archiv keeps its copies and index)",
+                home,
+                lambda: filedialog.askdirectory(title="Choose library folder"),
+            ),
             ("First document folder", folder, lambda: filedialog.askdirectory(title="Add folder")),
         ):
             ttk.Label(self.body, text=label).pack(anchor=tk.W)
@@ -128,14 +142,7 @@ class ProductApp:
         for check in checks:
             mark = "Available" if check.available else "Action needed"
             ttk.Label(self.body, text=f"{check.name}: {mark}. {check.guidance}").pack(anchor=tk.W)
-        detected = detect_loopback_model()
-        use_model = tk.BooleanVar(value=detected is not None)
-        if detected is not None:
-            ttk.Checkbutton(
-                self.body,
-                text=f"Use detected loopback model ({detected[1]})",
-                variable=use_model,
-            ).pack(anchor=tk.W, pady=8)
+        chosen_model = self._model_picker(None)
 
         def finish() -> None:
             selected_home, selected_folder = (
@@ -147,10 +154,17 @@ class ProductApp:
                     "Folder required", "Choose an existing document folder.", parent=self.root
                 )
                 return
+            model = chosen_model()
+            if model is not None:
+                try:
+                    configure_model(selected_home, *model)
+                except ValueError as error:
+                    messagebox.showerror("Model not saved", str(error), parent=self.root)
+                    return
+                self._check_model(selected_home, warn=True)
             self.state = DesktopState(selected_home.resolve(), (selected_folder.resolve(),), ())
             save_state(self.state)
-            if detected is not None and use_model.get():
-                configure_detected_model(self.state.home, detected)
+            remember_home(self.state.home)  # so the next launch opens this library
             self._start(
                 ingestion_argv(selected_folder, self.state.home), "Adding your first folder"
             )
@@ -159,6 +173,104 @@ class ProductApp:
         ttk.Button(self.body, text="Create library and add folder", command=finish).pack(
             anchor=tk.W, pady=18
         )
+
+    def _check_model(self, home: Path, *, warn: bool) -> None:
+        """Ask the saved model one tiny question off the window thread; report the result."""
+
+        result: list[tuple[bool, str]] = []
+        self.status.set("Checking that the model answers…")
+        threading.Thread(target=lambda: result.append(verify_model(home)), daemon=True).start()
+
+        def poll() -> None:
+            if not result:
+                self.root.after(_POLL_MS, poll)
+                return
+            ok, message = result[0]
+            self.status.set(
+                ("Model ready: " if ok else "Model saved, but not answering: ") + message
+            )
+            if warn and not ok:
+                messagebox.showwarning(
+                    "Model saved, but not answering",
+                    f"{message}\n\nStart the model server, then choose it again in Settings.",
+                    parent=self.root,
+                )
+
+        self.root.after(_POLL_MS, poll)
+
+    def _model_picker(self, home: Path | None) -> Callable[[], tuple[str, str] | None]:
+        """Pack a model chooser into the body; the returned function reads the choice.
+
+        With ``home``, the model already saved there is shown and selected, so saving
+        without touching the chooser never swaps it for whichever model was found first.
+        """
+
+        ttk.Label(self.body, text="AI model", font=self.section_font).pack(anchor=tk.W, pady=(8, 0))
+        frame = ttk.Frame(self.body)
+        frame.pack(fill=tk.X, anchor=tk.W)
+        skip = "None for now (search still works)"
+        manual = "Enter a server address by hand"
+        choice = tk.StringVar()
+        endpoint = tk.StringVar(value="http://127.0.0.1:11434")
+        name = tk.StringVar()
+        found: list[tuple[str, str, str]] = []
+        combo = ttk.Combobox(frame, textvariable=choice, state="readonly", width=60)
+        combo.pack(side=tk.LEFT)
+        manual_row = ttk.Frame(self.body)
+        for label, variable in (("Server address", endpoint), ("Model name", name)):
+            ttk.Label(manual_row, text=label).pack(side=tk.LEFT)
+            ttk.Entry(manual_row, textvariable=variable, width=28).pack(side=tk.LEFT, padx=4)
+
+        saved = load_model_config(home) if home is not None else None
+        current: tuple[str, str, str] | None = None
+        if saved is not None and saved.adapter == "openai-compatible-loopback":
+            current = (saved.endpoint or "", "saved", saved.model or "")
+        if saved is not None:
+            text = f"Current: {saved.model} at {saved.endpoint}" if saved.model else "Current: none"
+            ttk.Label(self.body, text=text).pack(anchor=tk.W, before=frame)
+
+        def labels() -> list[str]:
+            return [f"{model} ({server})" for _endpoint, server, model in found]
+
+        def refresh() -> None:
+            detected = detect_loopback_models()
+            if current is not None:  # the saved model first, under its own label
+                key = (current[0], current[2])
+                detected = (current, *(i for i in detected if (i[0], i[2]) != key))
+            found[:] = detected
+            combo["values"] = [*labels(), manual, skip]
+            choice.set(labels()[0] if found else skip)
+            on_choice()
+
+        def on_choice(_event: object = None) -> None:
+            if choice.get() == manual:
+                manual_row.pack(anchor=tk.W, pady=4, after=frame)
+            else:
+                manual_row.pack_forget()
+
+        def model_file() -> None:
+            selected = filedialog.askopenfilename(
+                title="Choose a model file", filetypes=[("GGUF model", "*.gguf"), ("All", "*")]
+            )
+            if selected:
+                messagebox.showinfo(
+                    "Serving a model file", gguf_hint(Path(selected)), parent=self.root
+                )
+
+        combo.bind("<<ComboboxSelected>>", on_choice)
+        ttk.Button(frame, text="Look again", command=refresh).pack(side=tk.LEFT, padx=4)
+        ttk.Button(frame, text="I have a model file…", command=model_file).pack(side=tk.LEFT)
+        refresh()
+
+        def read() -> tuple[str, str] | None:
+            if choice.get() == manual:
+                return endpoint.get(), name.get()
+            if choice.get() in labels():
+                hit = found[labels().index(choice.get())]
+                return hit[0], hit[2]
+            return None
+
+        return read
 
     def _show(self, view: str) -> None:
         self._clear()
@@ -274,6 +386,23 @@ class ProductApp:
                 ).pack(anchor=tk.W, pady=2)
             ttk.Button(self.body, text="Add folder…", command=self._add_folder).pack(
                 anchor=tk.W, pady=12
+            )
+            chosen_model = self._model_picker(self.state.home)
+
+            def save_model() -> None:
+                model = chosen_model()
+                if model is None:
+                    self.status.set("No model chosen.")
+                    return
+                try:
+                    configure_model(self.state.home, *model)
+                except ValueError as error:
+                    messagebox.showerror("Model not saved", str(error), parent=self.root)
+                    return
+                self._check_model(self.state.home, warn=False)
+
+            ttk.Button(self.body, text="Use this model", command=save_model).pack(
+                anchor=tk.W, pady=4
             )
             ttk.Button(self.body, text="Export diagnostics…", command=self._diagnostics).pack(
                 anchor=tk.W, pady=4
@@ -423,6 +552,11 @@ def launch_product(*, home: Path | None = None) -> int:
             file=sys.stderr,
         )
         return 1
-    ProductApp(root, home=home)
+    try:
+        ProductApp(root, home=home)
+    except MissingLibraryError as error:
+        messagebox.showerror("Archiv library not found", str(error), parent=root)
+        root.destroy()
+        return 1
     root.mainloop()
     return 0
